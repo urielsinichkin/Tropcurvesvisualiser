@@ -62,9 +62,18 @@ parametrized tropical curves**.
   refining the vertex; count grows, and realizability/crossing structure with
   the plane slopes must be handled).
 
-## Open items to revisit
+## Propagation (see interview §5)
 
-- Propagation semantics (interview §5): granularity, cascade, structural-edit
-  re-derivation, invalidation. (Being discussed.)
-- Platform / UX (interview §6). (Being discussed.)
-- Persistence, naming, image export (interview §7). (Being discussed.)
+- v1: a single per-type `follow_parent` flag = **all-or-nothing** transitive
+  propagation.
+- **Deferred:** selective propagation (per-element / per-attribute follow
+  choices). The engine is built as a per-element/per-attribute rule set that
+  currently resolves to all-or-nothing, so this can be enabled without rework.
+
+## Platform / persistence (see interview §6, §7)
+
+- v1: **Pyodide static site** (Python core in the browser, no server) with
+  **browser autosave** (localStorage/IndexedDB) + JSON export/import.
+- **Deferred:** cross-device cloud sync / backend; a hosted server option.
+- **Deferred:** image (PNG/SVG) export of individual figures (JSON export is in
+  v1; figure export can come later).
