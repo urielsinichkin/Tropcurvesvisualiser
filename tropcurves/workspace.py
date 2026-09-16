@@ -88,6 +88,49 @@ class Workspace:
         src = self._get(node_id)
         return self.add_root(src.curve.copy(), name=name or self._fresh_node_name(src.name))
 
+    def descendants(self, node_id: str) -> List[str]:
+        """Every type derived from this one, transitively."""
+        out: List[str] = []
+        stack = list(self._get(node_id).children)
+        while stack:
+            nid = stack.pop()
+            node = self.nodes.get(nid)
+            if node is None:
+                continue
+            out.append(nid)
+            stack.extend(node.children)
+        return out
+
+    def delete(self, node_id: str, cascade: bool = False) -> List[str]:
+        """Remove a type; returns the ids actually removed.
+
+        With ``cascade=True`` the whole derived subtree goes too. Otherwise only
+        this type is removed and its children are **detached into independent
+        roots**: a child's recorded operation is defined relative to its
+        parent's curve, so once the parent is gone it can never be replayed --
+        but the child's own curve is still a perfectly good combinatorial type,
+        so it is kept rather than silently discarded.
+        """
+        node = self._get(node_id)
+        if cascade:
+            removed = [node_id] + self.descendants(node_id)
+        else:
+            removed = [node_id]
+            for cid in node.children:
+                child = self.nodes.get(cid)
+                if child is None:
+                    continue
+                child.parent_id = None
+                child.operation = None
+                child.follow_parent = True
+                child.status = STATUS_OK
+        parent = self.nodes.get(node.parent_id) if node.parent_id else None
+        if parent is not None:
+            parent.children = [c for c in parent.children if c != node_id]
+        for nid in removed:
+            self.nodes.pop(nid, None)
+        return removed
+
     def _fresh_node_name(self, base: str) -> str:
         used = {n.name for n in self.nodes.values()}
         cand = f"{base} copy"

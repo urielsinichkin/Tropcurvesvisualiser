@@ -147,6 +147,15 @@ class Session:
         node = self.ws.duplicate(node_id, name=name)
         return self.node_summary(node.id)
 
+    def descendants(self, node_id: str) -> List[str]:
+        """Ids of every type derived from this one, transitively."""
+        return self.ws.descendants(node_id)
+
+    def delete(self, node_id: str, cascade: bool = False) -> Dict[str, Any]:
+        """Delete a type (see ``Workspace.delete``); returns what was removed."""
+        removed = self.ws.delete(node_id, cascade=cascade)
+        return {"removed": removed, "remaining": [n for n in self.ws.nodes]}
+
     # --- structural operations -----------------------------------------
     def contract(self, node_id: str, edge_id: str, name: Optional[str] = None) -> Dict[str, Any]:
         child = self.ws.contract(node_id, edge_id, name=name)

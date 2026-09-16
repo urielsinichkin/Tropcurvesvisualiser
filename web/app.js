@@ -8,9 +8,10 @@ const PKG_FILES = [
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
   "schema.py", "builders.py", "api.py", "__init__.py",
 ];
-// Bump together with the ?v= query on the <script>/<link> tags in index.html.
-// Shown in the top bar so a stale cached app.js is obvious at a glance.
-const APP_VERSION = "5";
+// Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
+// at a glance. (index.html fetches this file with a time-based token, so no
+// ?v= bump is needed here -- only styles.css still uses a manual one.)
+const APP_VERSION = "6";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -646,7 +647,12 @@ function renderControls() {
         refreshAll(); selectNode(copy.id); autosave();
       } catch (e) { alert(e.message); }
     };
-    wrap.appendChild(row([dup]));
+    const del = document.createElement("button");
+    del.className = "small danger";
+    del.textContent = "Delete…";
+    del.title = "Remove this type from the workspace";
+    del.onclick = openDeleteDialog;
+    wrap.appendChild(row([dup, del]));
     return wrap;
   }));
 
@@ -734,6 +740,68 @@ function errBox() {
 function showModalError(msg) {
   const el = document.getElementById("modal-err");
   if (el) el.textContent = msg; else alert(msg);
+}
+
+function clearViews() {
+  document.getElementById("curve-name").textContent = "";
+  const st = document.getElementById("curve-status");
+  st.textContent = ""; st.className = "status";
+  clearSvg("curve-svg");
+  clearSvg("sub-svg");
+  document.getElementById("sub-note").textContent = "";
+  setSubDebug(null);
+  document.getElementById("controls-body").innerHTML =
+    `<p class="muted">No types yet — use “New” to create one.</p>`;
+}
+
+function openDeleteDialog() {
+  const summ = api("list_nodes").find(n => n.id === selectedId);
+  if (!summ) return;
+  const kids = api("descendants", selectedId);
+  const body = dialogHead("Delete this type",
+    `<strong>${escapeHtml(summ.name)}</strong> will be removed from the workspace. ` +
+    `This cannot be undone.`);
+
+  const doDelete = (cascade) => {
+    const parentId = summ.parent_id;
+    try {
+      api("delete", selectedId, cascade);
+    } catch (e) { showModalError(e.message); return; }
+    closeModal();
+    const remaining = api("list_nodes");
+    let next = null;
+    if (parentId && remaining.some(n => n.id === parentId)) next = parentId;
+    else if (remaining.length) next = remaining[0].id;
+    refreshAll();
+    if (next) selectNode(next);
+    else { selectedId = null; renderTypeList(); clearViews(); }
+    autosave();
+  };
+
+  const list = document.createElement("div"); list.className = "reslist";
+  if (kids.length) {
+    body.insertAdjacentHTML("beforeend",
+      `<p class="muted">It has ${kids.length} derived type(s). A derived type's
+       operation only makes sense relative to this one, so choose what happens
+       to them:</p>`);
+    const keep = document.createElement("button");
+    keep.textContent = `Delete only this type — keep the ${kids.length} derived one(s) as independent roots`;
+    keep.onclick = () => doDelete(false);
+    const all = document.createElement("button");
+    all.className = "danger";
+    all.textContent = `Delete this type and all ${kids.length} derived type(s)`;
+    all.onclick = () => doDelete(true);
+    list.append(keep, all);
+  } else {
+    const b = document.createElement("button");
+    b.className = "danger";
+    b.textContent = "Delete";
+    b.onclick = () => doDelete(false);
+    list.appendChild(b);
+  }
+  body.appendChild(list);
+  body.appendChild(errBox());
+  openModal();
 }
 
 function openSlopeDialog() {
