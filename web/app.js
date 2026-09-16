@@ -10,7 +10,7 @@ const PKG_FILES = [
 ];
 // Bump together with the ?v= query on the <script>/<link> tags in index.html.
 // Shown in the top bar so a stale cached app.js is obvious at a glance.
-const APP_VERSION = "4";
+const APP_VERSION = "5";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
