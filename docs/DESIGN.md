@@ -137,10 +137,12 @@ contracted edge; or parent plus new resolution edge(s)).
 
 ## 6. Architecture
 
-- **Core (pure Python, `numpy` only)** — no SageMath. Lattice geometry
-  (primitive vectors/gcd, hulls, mixed subdivisions), the curve model, the
-  balancing solver, operations, propagation, layout, subdivision, and the JSON
-  schema. Fully unit-tested headless.
+- **Core (pure Python, exact integer arithmetic)** — no SageMath, and no
+  `numpy` in the combinatorial/lattice core: lattice vectors are pairs of
+  `int`, so gcd/primitive/balancing/Newton-polygon carry no floating-point
+  error. Covers lattice geometry, the curve model, the balancing solver,
+  operations, propagation, subdivision, and the JSON schema. `numpy` is reserved
+  for the later float-based **layout** pass only. Fully unit-tested headless.
 - **Runtime: Pyodide** — the same Python core runs in the browser; no server.
 - **Frontend: HTML + JS + SVG**, responsive for phone / iPad / PC, visually
   polished. SVG for crisp scaling; a thin JS layer for interaction (menus, the
@@ -168,7 +170,7 @@ docs/                       # DESIGN.md, POSTPONED.md
 ## 8. Phased roadmap
 
 - **P1 — Core model + balancing** (headless, tested): curve data model, geometry,
-  the two-ends slope solver, Newton polygon, JSON schema.
+  the two-ends slope solver, Newton polygon, JSON schema. **[done — 44 tests]**
 - **P2 — Subdivision + layout**: readable layout, generic-chamber mixed
   subdivision, subdivision import.
 - **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
