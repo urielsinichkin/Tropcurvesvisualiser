@@ -129,6 +129,55 @@ def test_duplicate_names_avoid_collisions():
     assert explicit.name == "my variant"
 
 
+def test_delete_leaf_removes_it_and_unlinks_from_parent():
+    ws, root, child = _root_and_contracted()
+    removed = ws.delete(child.id)
+    assert removed == [child.id]
+    assert child.id not in ws.nodes
+    assert child.id not in root.children
+    assert root.id in ws.nodes
+
+
+def test_delete_detaches_children_into_roots_by_default():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    before = {e.id: e.vec for e in child.curve.bounded}
+
+    removed = ws.delete(root.id)
+
+    assert removed == [root.id]
+    assert root.id not in ws.nodes
+    # the derived types survive, promoted to independent roots
+    assert child.id in ws.nodes and grand.id in ws.nodes
+    assert child.parent_id is None
+    assert child.operation is None      # can't be replayed without its parent
+    assert child.status == STATUS_OK
+    assert {e.id: e.vec for e in child.curve.bounded} == before  # curve intact
+    # the grandchild still hangs off the child, which is untouched
+    assert grand.parent_id == child.id
+    assert grand.id in child.children
+
+
+def test_delete_cascade_removes_the_whole_subtree():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+
+    removed = ws.delete(root.id, cascade=True)
+
+    assert set(removed) == {root.id, child.id, grand.id}
+    assert ws.nodes == {}
+
+
+def test_descendants_are_transitive():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    assert set(ws.descendants(root.id)) == {child.id, grand.id}
+    assert ws.descendants(grand.id) == []
+
+
 def test_needs_attention_when_resolve_no_longer_applies():
     ws, root, child = _root_and_contracted()
     v = child.curve.vertices[0]
