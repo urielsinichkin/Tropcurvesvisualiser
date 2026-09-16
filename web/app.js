@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "6";
+const APP_VERSION = "7";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -506,7 +506,55 @@ function fitTransform(points) {
   const spanx = Math.max(maxx - minx, 1e-9), spany = Math.max(maxy - miny, 1e-9);
   const s = Math.min((VBW - 2 * PAD) / spanx, (VBH - 2 * PAD) / spany);
   const ox = (VBW - s * spanx) / 2, oy = (VBH - s * spany) / 2;
-  return ([x, y]) => [ox + (x - minx) * s, VBH - (oy + (y - miny) * s)]; // flip y
+  const T = ([x, y]) => [ox + (x - minx) * s, VBH - (oy + (y - miny) * s)]; // flip y
+  // expose the mapping so callers can invert it (e.g. to find which lattice
+  // coordinates are actually on screen)
+  T.params = { s, minx, miny, ox, oy };
+  return T;
+}
+
+// Draw the integer lattice as graph paper behind a subdivision: faint grid
+// lines with a dot at each lattice point. Covers the whole viewBox (not just
+// the polygon's bounding box) so the panel reads as a lattice, and makes edge
+// lattice lengths and interior lattice points easy to judge.
+function drawLattice(svg, T) {
+  const p = T.params;
+  if (!p || !isFinite(p.s) || p.s <= 0) return;
+  // invert the transform at the viewBox corners
+  const xLo = p.minx + (0 - p.ox) / p.s;
+  const xHi = p.minx + (VBW - p.ox) / p.s;
+  const yLo = p.miny + (0 - p.oy) / p.s;
+  const yHi = p.miny + (VBH - p.oy) / p.s;
+  const x0 = Math.ceil(xLo), x1 = Math.floor(xHi);
+  const y0 = Math.ceil(yLo), y1 = Math.floor(yHi);
+  // a very dense lattice is unreadable (and slow), so skip it instead
+  const MAX_LINES = 80;
+  if (x1 - x0 > MAX_LINES || y1 - y0 > MAX_LINES) return;
+
+  const g = svgEl("g", { "class": "lattice" });
+  for (let x = x0; x <= x1; x++) {
+    const a = T([x, yLo]), b = T([x, yHi]);
+    g.appendChild(svgEl("line", {
+      x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+      stroke: "var(--line)", "stroke-width": 1,
+    }));
+  }
+  for (let y = y0; y <= y1; y++) {
+    const a = T([xLo, y]), b = T([xHi, y]);
+    g.appendChild(svgEl("line", {
+      x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+      stroke: "var(--line)", "stroke-width": 1,
+    }));
+  }
+  for (let x = x0; x <= x1; x++) {
+    for (let y = y0; y <= y1; y++) {
+      const q = T([x, y]);
+      g.appendChild(svgEl("circle", {
+        cx: q[0], cy: q[1], r: 1.4, fill: "var(--muted)", opacity: 0.55,
+      }));
+    }
+  }
+  svg.appendChild(g);
 }
 
 function svgEl(tag, attrs) {
@@ -568,6 +616,7 @@ function drawSubdivision(data) {
   cells.forEach(cell => cell.forEach(v => pts.push(v)));
   if (data.newton) data.newton.forEach(v => pts.push(v));
   const T = fitTransform(pts);
+  drawLattice(svg, T); // behind the cells
   cells.forEach(cell => {
     const isPar = cell.length === 4 && sameSum(cell);
     const d = cell.map(v => T(v));
