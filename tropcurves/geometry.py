@@ -151,6 +151,16 @@ def polygon_from_edge_vectors(edge_vectors: Sequence[Vec2]) -> List[Vec2]:
     return verts
 
 
+def polygon_area2(verts: Sequence[Vec2]) -> int:
+    """Twice the absolute (lattice) area of a simple polygon (shoelace)."""
+    s = 0
+    n = len(verts)
+    for i in range(n):
+        a, b = verts[i], verts[(i + 1) % n]
+        s += a.x * b.y - b.x * a.y
+    return abs(s)
+
+
 def convex_hull(points: Sequence[Vec2]) -> List[Vec2]:
     """Convex hull (counter-clockwise) of lattice points via monotone chain.
 

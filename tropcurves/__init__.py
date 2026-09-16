@@ -4,7 +4,7 @@ Pure-Python, exact-integer core for rational (genus 0) plane parametrized
 tropical curves. See ``docs/DESIGN.md``.
 """
 
-from .geometry import Vec2, primitive, rot90, cross, dot, convex_hull
+from .geometry import Vec2, primitive, rot90, cross, dot, convex_hull, polygon_area2
 from .curve import Curve, Edge, EdgeKind
 from .balancing import (
     SlopeSolveError,
@@ -13,6 +13,8 @@ from .balancing import (
     apply_two_ends_edit,
 )
 from .newton import newton_polygon
+from .layout import embed, readable_lengths, generic_lengths
+from .subdivision import build_subdivision, Subdivision, SubdivisionCell, SubdivisionError
 from . import schema
 
 __all__ = [
@@ -22,6 +24,7 @@ __all__ = [
     "cross",
     "dot",
     "convex_hull",
+    "polygon_area2",
     "Curve",
     "Edge",
     "EdgeKind",
@@ -30,6 +33,13 @@ __all__ = [
     "resolve_slopes",
     "apply_two_ends_edit",
     "newton_polygon",
+    "embed",
+    "readable_lengths",
+    "generic_lengths",
+    "build_subdivision",
+    "Subdivision",
+    "SubdivisionCell",
+    "SubdivisionError",
     "schema",
 ]
 

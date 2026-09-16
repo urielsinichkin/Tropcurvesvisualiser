@@ -172,7 +172,9 @@ docs/                       # DESIGN.md, POSTPONED.md
 - **P1 — Core model + balancing** (headless, tested): curve data model, geometry,
   the two-ends slope solver, Newton polygon, JSON schema. **[done — 44 tests]**
 - **P2 — Subdivision + layout**: readable layout, generic-chamber mixed
-  subdivision, subdivision import.
+  subdivision, subdivision import. **[in progress: exact-rational embedding +
+  generic-chamber mixed subdivision (triangles + parallelograms) done and
+  tested; subdivision *import* still to do]**
 - **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
   rename/color; the derivation forest and transitive propagation.
 - **P4 — Web GUI**: Pyodide bootstrap, SVG rendering of curve + subdivision,
