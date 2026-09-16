@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tropical Curves Visualiser</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header id="topbar">
+  <h1>Tropical Curves</h1>
+  <div class="actions">
+    <button id="btn-new">New</button>
+    <button id="btn-save">Export</button>
+    <button id="btn-load">Import</button>
+    <span id="autosave" class="muted" title="Saved in this browser"></span>
+  </div>
+</header>
+
+<div id="boot" class="boot">
+  <div class="spinner"></div>
+  <div id="boot-msg">Loading Python runtime…</div>
+</div>
+
+<main id="app" hidden>
+  <section id="types">
+    <div class="section-head">
+      <h2>Types</h2>
+    </div>
+    <ul id="type-list"></ul>
+  </section>
+
+  <section id="views">
+    <div class="view">
+      <h2>Curve <span id="curve-name" class="muted"></span></h2>
+      <div id="curve-status" class="status"></div>
+      <svg id="curve-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <div class="view">
+      <h2>Dual subdivision</h2>
+      <div id="sub-note" class="muted"></div>
+      <svg id="sub-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </section>
+
+  <section id="controls">
+    <div class="section-head"><h2>Edit</h2></div>
+    <div id="controls-body">
+      <p class="muted">Select a type to edit it.</p>
+    </div>
+  </section>
+</main>
+
+<!-- modal host -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-card">
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<input id="file-input" type="file" accept="application/json" hidden />
+<a id="download-anchor" hidden></a>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

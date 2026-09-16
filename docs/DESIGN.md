@@ -180,8 +180,16 @@ docs/                       # DESIGN.md, POSTPONED.md
   operations + Workspace forest with transitive all-or-nothing propagation and
   needs-attention flagging; 65 tests total]**
 - **P4 — Web GUI**: Pyodide bootstrap, SVG rendering of curve + subdivision,
-  responsive layout, the resolution-picker menu and edit controls.
-- **P5 — Persistence**: continuous browser autosave, export/import.
+  responsive layout, the resolution-picker menu and edit controls. **[done —
+  `web/` static site; JSON `Session` facade; SVG curve + mixed-subdivision
+  rendering (parallelograms highlighted); contract/resolve/slope/marking/
+  rename/color controls; UI verified headless in Chromium against a mocked
+  backend. Live Pyodide load requires CDN access (blocked in the build sandbox
+  but fine in a normal browser).]**
+- **P5 — Persistence**: continuous browser autosave, export/import. **[done —
+  localStorage autosave after every edit + JSON export/import in `app.js`.]**
 - **P6 — Polish**: aesthetics, mobile/tablet interaction, accessibility.
+  **[remaining: readable-length layout optimizer (currently unit lengths),
+  richer curve input (custom / from subdivision), aesthetic and a11y passes.]**
 
 Each phase keeps the core independently testable before the GUI depends on it.

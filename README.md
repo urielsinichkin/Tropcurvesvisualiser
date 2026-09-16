@@ -27,6 +27,24 @@ print(newton_polygon(c))            # the unit square, CCW from the origin
 apply_two_ends_edit(c, "a", Vec2(-2, -1), dependent_end_id="c")
 ```
 
+## Web app
+
+A browser UI lives in `web/` and runs the Python core in your browser via
+Pyodide (no server, no install). Run it locally by serving the **repository
+root** and opening the `web/` page:
+
+```bash
+python3 -m http.server 8000        # from the repo root
+# then open http://localhost:8000/web/index.html
+```
+
+It loads the Pyodide runtime from a CDN on first visit, then reads the
+`tropcurves` package straight from this repo. Your workspace autosaves in the
+browser (localStorage); use **Export/Import** to move it between devices.
+
+To publish it, enable GitHub Pages for this repository (served from the repo
+root); the app is then at `…/web/index.html`.
+
 ## Development
 
 ```bash
