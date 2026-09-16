@@ -76,6 +76,28 @@ class Workspace:
         self.nodes[nid] = node
         return node
 
+    def duplicate(self, node_id: str, name: Optional[str] = None) -> TypeNode:
+        """Copy a type into a new, independent **root**.
+
+        The copy carries the same graph, slopes, markings, names and colors, but
+        gets no parent, no derivation operation and none of the original's
+        children. That keeps it genuinely independent: editing either one leaves
+        the other alone, and no propagation can overwrite the copy. (A copy that
+        still followed the original's parent would just be re-derived away.)
+        """
+        src = self._get(node_id)
+        return self.add_root(src.curve.copy(), name=name or self._fresh_node_name(src.name))
+
+    def _fresh_node_name(self, base: str) -> str:
+        used = {n.name for n in self.nodes.values()}
+        cand = f"{base} copy"
+        if cand not in used:
+            return cand
+        for i in itertools.count(2):
+            numbered = f"{base} copy {i}"
+            if numbered not in used:
+                return numbered
+
     def contract(self, node_id: str, edge_id: str, name: Optional[str] = None) -> TypeNode:
         parent = self._get(node_id)
         result = contract_edge(parent.curve, edge_id)

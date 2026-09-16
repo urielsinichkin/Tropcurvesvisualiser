@@ -10,7 +10,7 @@ const PKG_FILES = [
 ];
 // Bump together with the ?v= query on the <script>/<link> tags in index.html.
 // Shown in the top bar so a stale cached app.js is obvious at a glance.
-const APP_VERSION = "3";
+const APP_VERSION = "4";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -636,6 +636,17 @@ function renderControls() {
       cb.appendChild(box); cb.appendChild(document.createTextNode(" follow parent (propagate edits)"));
       wrap.appendChild(cb);
     }
+    const dup = document.createElement("button");
+    dup.className = "small";
+    dup.textContent = "Duplicate";
+    dup.title = "Make an independent copy of this type as a new root";
+    dup.onclick = () => {
+      try {
+        const copy = api("duplicate", selectedId, null);
+        refreshAll(); selectNode(copy.id); autosave();
+      } catch (e) { alert(e.message); }
+    };
+    wrap.appendChild(row([dup]));
     return wrap;
   }));
 
