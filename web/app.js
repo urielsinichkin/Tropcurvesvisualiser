@@ -9,6 +9,7 @@ const PKG_FILES = [
   "schema.py", "builders.py", "api.py", "__init__.py",
 ];
 const STORAGE_KEY = "tropcurves.workspace.v1";
+const SETTINGS_KEY = "tropcurves.settings.v1";
 
 let pyodide = null;
 let callFn = null;
@@ -85,10 +86,48 @@ function markSaved() {
 }
 
 // ---------------------------------------------------------------------------
+// display settings: the default color used for any edge/end/marking that has
+// not been given its own color. Stored separately from the workspace (it's a
+// display preference, not curve data). With no override it tracks the current
+// theme (var(--ink)) so curves stay readable in light and dark automatically.
+// ---------------------------------------------------------------------------
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); }
+  catch (e) { return {}; }
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+}
+function isHex6(v) { return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v); }
+
+function themeInkHex() {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim();
+    if (isHex6(v)) return v;
+  } catch (e) { /* ignore */ }
+  return "#1c1c1e";
+}
+
+// For an SVG attribute value: a literal CSS var() stays correct even if the
+// theme changes after this page loaded, so prefer it over a resolved hex.
+function defaultColorForRender() {
+  const s = loadSettings();
+  return isHex6(s.defaultColor) ? s.defaultColor : "var(--ink)";
+}
+// For an <input type=color>, which requires a concrete "#rrggbb" (no var()).
+function defaultColorHex() {
+  const s = loadSettings();
+  return isHex6(s.defaultColor) ? s.defaultColor : themeInkHex();
+}
+// The color to actually draw for an edge/end/marking ("" means "use default").
+function renderColor(c) { return c || defaultColorForRender(); }
+
+// ---------------------------------------------------------------------------
 // top-level actions
 // ---------------------------------------------------------------------------
 function wireGlobalButtons() {
   document.getElementById("btn-new").onclick = openNewDialog;
+  document.getElementById("btn-settings").onclick = openSettingsDialog;
   document.getElementById("btn-save").onclick = exportJSON;
   document.getElementById("btn-load").onclick = () => document.getElementById("file-input").click();
   document.getElementById("file-input").onchange = importJSON;
@@ -159,6 +198,42 @@ function openNewDialog() {
       const summ = api("add_from_subdivision", cells, null);
       closeModal(); refreshAll(); selectNode(summ.id); autosave();
     } catch (e) { errEl.textContent = e.message; }
+  };
+  openModal();
+}
+
+function openSettingsDialog() {
+  const s = loadSettings();
+  const hasOverride = isHex6(s.defaultColor);
+  const body = document.getElementById("modal-body");
+  body.innerHTML = `<h2>Display settings</h2>
+    <div class="ctrl-group">
+      <label>Default edge / end / marking color
+        <input id="set-default-color" type="color" value="${defaultColorHex()}">
+      </label>
+      <p class="muted" id="set-default-note" style="margin:4px 0 0"></p>
+      <div class="row" style="margin-top:8px">
+        <button id="set-default-auto" class="small">Use automatic (theme-based)</button>
+      </div>
+    </div>`;
+  const note = document.getElementById("set-default-note");
+  const setNote = () => {
+    const s2 = loadSettings();
+    note.textContent = isHex6(s2.defaultColor)
+      ? "Applies to any edge, end, or marking left at its default color."
+      : "Automatic: follows your light/dark theme. Applies to any edge, end, or marking left at its default color.";
+  };
+  setNote();
+  document.getElementById("set-default-color").oninput = (ev) => {
+    const s2 = loadSettings(); s2.defaultColor = ev.target.value; saveSettings(s2);
+    setNote();
+    if (selectedId) renderSelected();
+  };
+  document.getElementById("set-default-auto").onclick = () => {
+    const s2 = loadSettings(); delete s2.defaultColor; saveSettings(s2);
+    document.getElementById("set-default-color").value = defaultColorHex();
+    setNote();
+    if (selectedId) renderSelected();
   };
   openModal();
 }
@@ -386,6 +461,8 @@ function renderTypeList() {
 
 function selectNode(id) {
   selectedId = id;
+  const details = document.getElementById("sub-details");
+  if (details) details.open = false; // each curve's subdivision starts collapsed
   renderTypeList();
   renderSelected();
 }
@@ -440,14 +517,15 @@ function drawCurve(data) {
 
   c.edges.forEach(e => {
     const a = T(e.from), b = T(e.to);
+    const col = renderColor(e.color);
     svg.appendChild(svgEl("line", {
       x1: a[0], y1: a[1], x2: b[0], y2: b[1],
-      stroke: e.color || "#333", "stroke-width": e.kind === "bounded" ? 3 : 2,
+      stroke: col, "stroke-width": e.kind === "bounded" ? 3 : 2,
       "stroke-dasharray": e.kind === "end" ? "" : "",
     }));
     const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
-    svg.appendChild(text(mx, my - 4, lbl, e.color || "#333"));
+    svg.appendChild(text(mx, my - 4, lbl, col));
   });
   c.vertices.forEach(v => {
     const p = T([v.x, v.y]);
@@ -455,8 +533,9 @@ function drawCurve(data) {
   });
   c.markings.forEach(m => {
     const p = T(m.at);
-    svg.appendChild(svgEl("circle", { cx: p[0] + 8, cy: p[1] - 8, r: 5, fill: m.color || "#c33", stroke: "var(--panel)", "stroke-width": 1.5 }));
-    svg.appendChild(text(p[0] + 14, p[1] - 8, m.name, m.color || "#c33"));
+    const col = renderColor(m.color);
+    svg.appendChild(svgEl("circle", { cx: p[0] + 8, cy: p[1] - 8, r: 5, fill: col, stroke: "var(--panel)", "stroke-width": 1.5 }));
+    svg.appendChild(text(p[0] + 14, p[1] - 8, m.name, col));
   });
 }
 
@@ -604,7 +683,7 @@ function renderControls() {
     const g = document.createElement("div"); g.className = "ctrl-group";
     c.markings.forEach(m => {
       const rr = document.createElement("div"); rr.className = "edge-row";
-      rr.appendChild(colorInput(m.color, col => { api("set_color", selectedId, m.id, col); refreshAll(); autosave(); }));
+      rr.appendChild(colorControl(m.color, col => { api("set_color", selectedId, m.id, col); refreshAll(); autosave(); }));
       rr.appendChild(nameSpanInput(m.name, val => { api("rename_edge", selectedId, m.id, val); refreshAll(); autosave(); }));
       const del = document.createElement("button"); del.textContent = "✕"; del.className = "small danger";
       del.onclick = () => { api("remove_marking", selectedId, m.id); refreshAll(); autosave(); };
@@ -613,7 +692,7 @@ function renderControls() {
     });
     const vsel = selectOf(c.vertices.map(v => [v.id, v.id]));
     const add = document.createElement("button"); add.textContent = "+ marking"; add.className = "small";
-    add.onclick = () => { api("add_marking", selectedId, vsel.value, "", "#cc3333"); refreshAll(); autosave(); };
+    add.onclick = () => { api("add_marking", selectedId, vsel.value, "", ""); refreshAll(); autosave(); };
     g.append(row([labeled("at vertex", vsel), add]));
     return g;
   }));
@@ -623,7 +702,7 @@ function renderControls() {
     const g = document.createElement("div"); g.className = "ctrl-group";
     c.edges.forEach(e => {
       const rr = document.createElement("div"); rr.className = "edge-row";
-      rr.appendChild(colorInput(e.color, col => { api("set_color", selectedId, e.id, col); refreshAll(); autosave(); }));
+      rr.appendChild(colorControl(e.color, col => { api("set_color", selectedId, e.id, col); refreshAll(); autosave(); }));
       const inp = nameSpanInput(e.name, val => { api("rename_edge", selectedId, e.id, val); refreshAll(); autosave(); });
       rr.appendChild(inp);
       const tag = document.createElement("span"); tag.className = "muted"; tag.style.fontSize = "12px";
@@ -686,10 +765,26 @@ function nameSpanInput(val, onchange) {
   return i;
 }
 function colorInput(val, onchange) {
-  const i = document.createElement("input"); i.type = "color"; i.value = toHex(val);
+  const i = document.createElement("input"); i.type = "color";
+  i.value = isHex6(val) ? val : defaultColorHex();
+  i.title = val ? "" : "Using the default color";
   i.oninput = () => onchange(i.value); return i;
 }
-function toHex(c) { return (c && c[0] === "#" && c.length === 7) ? c : "#333333"; }
+// A color picker plus a "reset to default" button, shown only once an edge/
+// marking has an explicit color of its own (an empty color means "inherit").
+function colorControl(val, onSet) {
+  const wrap = document.createElement("span"); wrap.className = "edge-row";
+  wrap.style.gap = "4px";
+  wrap.appendChild(colorInput(val, onSet));
+  if (val) {
+    const reset = document.createElement("button");
+    reset.type = "button"; reset.className = "small ghost"; reset.textContent = "⟲";
+    reset.title = "Reset to default color";
+    reset.onclick = () => onSet("");
+    wrap.appendChild(reset);
+  }
+  return wrap;
+}
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
 
 boot().catch(err => {

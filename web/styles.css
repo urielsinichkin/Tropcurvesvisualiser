@@ -93,6 +93,10 @@ svg { width: 100%; height: 320px; background: transparent; border: 1px solid var
 .status { font-size: 13px; min-height: 18px; margin-bottom: 6px; }
 .status.warn { color: var(--warn); }
 
+#sub-details summary { cursor: pointer; list-style: revert; margin-bottom: 8px; }
+#sub-details summary h2 { display: inline; margin: 0; }
+#sub-details summary::marker { color: var(--muted); }
+
 #controls-body { display: grid; gap: 14px; }
 .ctrl-group { display: grid; gap: 8px; }
 .ctrl-group h3 { font-size: 13px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }

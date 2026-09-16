@@ -11,6 +11,7 @@
   <h1>Tropical Curves</h1>
   <div class="actions">
     <button id="btn-new">New</button>
+    <button id="btn-settings" title="Display settings">🎨 Colors</button>
     <button id="btn-save">Export</button>
     <button id="btn-load">Import</button>
     <span id="autosave" class="muted" title="Saved in this browser"></span>
@@ -37,10 +38,12 @@
       <svg id="curve-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <div class="view">
-      <h2>Dual subdivision</h2>
-      <div id="sub-note" class="muted"></div>
-      <svg id="sub-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
-      <details class="dbg" id="sub-debug"></details>
+      <details id="sub-details">
+        <summary><h2>Dual subdivision</h2></summary>
+        <div id="sub-note" class="muted"></div>
+        <svg id="sub-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+        <details class="dbg" id="sub-debug"></details>
+      </details>
     </div>
   </section>
 

@@ -65,13 +65,13 @@ class Session:
         for e in spec.get("bounded", []):
             vec = Vec2.from_iterable(e["vec"]) if e.get("vec") else Vec2(0, 0)
             c.add_bounded(e["id"], e["tail"], e["head"], vec,
-                          name=e.get("name", ""), color=e.get("color", "#000000"))
+                          name=e.get("name", ""), color=e.get("color", ""))
         for e in spec.get("ends", []):
             c.add_end(e["id"], e["tail"], Vec2.from_iterable(e["vec"]),
-                      name=e.get("name", ""), color=e.get("color", "#000000"))
+                      name=e.get("name", ""), color=e.get("color", ""))
         for e in spec.get("markings", []):
             c.add_marking(e["id"], e["tail"],
-                          name=e.get("name", ""), color=e.get("color", "#000000"))
+                          name=e.get("name", ""), color=e.get("color", ""))
         # solve any unspecified bounded slopes
         if any(b.get("vec") is None for b in spec.get("bounded", [])):
             resolve_slopes(c)
@@ -118,7 +118,7 @@ class Session:
         return self.node_summary(node_id)
 
     def add_marking(self, node_id: str, vertex: str, name: str = "",
-                    color: str = "#000000") -> Dict[str, Any]:
+                    color: str = "") -> Dict[str, Any]:
         mid = self.ws.add_marking(node_id, vertex, name=name or None, color=color)
         return {"marking_id": mid, **self.node_summary(node_id)}
 

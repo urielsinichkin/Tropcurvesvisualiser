@@ -112,7 +112,7 @@ class Workspace:
         self._propagate(node_id)
 
     def add_marking(self, node_id: str, vertex: str, *, id: Optional[str] = None,
-                    name: Optional[str] = None, color: str = "#000000") -> str:
+                    name: Optional[str] = None, color: str = "") -> str:
         node = self._get(node_id)
         mid = id or self._fresh_marking_id(node.curve)
         node.curve.add_marking(mid, vertex, name=name or "", color=color)
