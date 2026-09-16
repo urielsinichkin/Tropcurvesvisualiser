@@ -17,6 +17,7 @@ from .layout import embed, readable_lengths, generic_lengths
 from .subdivision import build_subdivision, Subdivision, SubdivisionCell, SubdivisionError
 from .operations import contract_edge, resolutions, apply_resolution, Resolution
 from .workspace import Workspace, TypeNode, Operation
+from .api import Session
 from . import schema
 
 __all__ = [
@@ -49,6 +50,7 @@ __all__ = [
     "Workspace",
     "TypeNode",
     "Operation",
+    "Session",
     "schema",
 ]
 
