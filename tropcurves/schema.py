@@ -38,7 +38,7 @@ def edge_from_dict(d: Dict[str, Any]) -> Edge:
         head=d.get("head"),
         vec=Vec2.from_iterable(d["vec"]),
         name=d.get("name", ""),
-        color=d.get("color", "#000000"),
+        color=d.get("color", ""),
     )
 
 

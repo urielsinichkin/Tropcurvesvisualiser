@@ -38,7 +38,7 @@ class Edge:
     head: Optional[str] = None  # vertex id for BOUNDED, else None
     vec: Vec2 = ZERO  # direction tail->head (BOUNDED) or outward (END); ZERO for MARKING
     name: str = ""
-    color: str = "#000000"
+    color: str = ""  # "" means "use the display default" (theme-adaptive in the GUI)
 
     def __post_init__(self) -> None:
         if self.kind is EdgeKind.BOUNDED:

@@ -192,8 +192,12 @@ docs/                       # DESIGN.md, POSTPONED.md
   localStorage autosave after every edit + JSON export/import in `app.js`.]**
 - **P6 — Polish**: aesthetics, mobile/tablet interaction, accessibility.
   **[done: visual click-to-draw subdivision editor (parallelograms auto-detected
-  and shown as crossings) + subdivision text output for debug. Remaining:
-  readable-length layout optimizer (currently unit lengths), custom (graph/ends)
-  curve entry, aesthetic and a11y passes.]**
+  and shown as crossings) + subdivision text output for debug; theme-adaptive
+  default edge/end/marking color (an unset color now renders as `var(--ink)`,
+  fixing dark-background readability) with a Colors settings dialog to override
+  the default and a per-element reset-to-default control; the dual-subdivision
+  panel is collapsed by default per curve. Remaining: readable-length layout
+  optimizer (currently unit lengths), custom (graph/ends) curve entry, further
+  aesthetic and a11y passes.]**
 
 Each phase keeps the core independently testable before the GUI depends on it.
