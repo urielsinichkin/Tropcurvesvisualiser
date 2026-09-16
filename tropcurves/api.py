@@ -212,6 +212,7 @@ class Session:
             edges.append({
                 "id": e.id, "name": e.name, "color": e.color, "kind": "bounded",
                 "weight": e.weight, "from": list(a), "to": list(b),
+                "vec": e.vec.to_list(), "tail": e.tail, "head": e.head,
             })
         for e in c.ends:
             a = fpos[e.tail]
@@ -221,9 +222,11 @@ class Session:
             edges.append({
                 "id": e.id, "name": e.name, "color": e.color, "kind": "end",
                 "weight": w, "from": list(a), "to": list(b), "dir": [u.x, u.y],
+                "vec": e.vec.to_list(), "tail": e.tail,
             })
         markings = [
-            {"id": e.id, "name": e.name, "color": e.color, "at": list(fpos[e.tail])}
+            {"id": e.id, "name": e.name, "color": e.color, "at": list(fpos[e.tail]),
+             "tail": e.tail}
             for e in c.markings
         ]
         return {"vertices": vertices, "edges": edges, "markings": markings}
