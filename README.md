@@ -47,17 +47,24 @@ root); the app is then at `…/web/index.html`.
 
 ### Deploying a change to the web app
 
-Browsers cache `app.js`/`styles.css` aggressively, and a stale script paired
-with a fresh `index.html` silently breaks newly added controls. So when you
-change anything under `web/`, bump the cache buster in **three** places:
+Browsers cache these files aggressively, and a stale script paired with a fresh
+`index.html` silently breaks newly added controls.
 
-- the `?v=N` on the `<link rel="stylesheet">` tag in `web/index.html`,
-- the `?v=N` on the `<script src="app.js">` tag in `web/index.html`,
-- `APP_VERSION` at the top of `web/app.js`.
+`app.js` handles itself: `index.html` loads it with a time-based token
+(`app.js?t=<minute>`), so it can never be more than a minute stale — **even if
+`index.html` itself was served from cache**. That matters because a fixed
+`?v=N` lives *inside* `index.html`, so a cached page would keep asking for the
+old script forever and never learn a new version exists.
 
-The loaded version is shown in the top bar (e.g. `v2`). If that label is blank
-or shows an older number than expected, the browser is running a cached
-`app.js` — clear the site's cache or load the page with a `?v=` query appended.
+When you deploy a change under `web/`, bump:
+
+- `APP_VERSION` at the top of `web/app.js` (shown in the top bar, so you can
+  confirm what's loaded), and
+- the `?v=N` on the `<link rel="stylesheet">` tag, if you changed `styles.css`.
+
+If the top-bar version is lower than expected, the browser is still on a cached
+`index.html`; it will refresh on its own shortly, or you can force it by loading
+the page with a throwaway query such as `?x=1`.
 
 ## Development
 

@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Tropical Curves Visualiser</title>
-<!-- ?v= is a cache buster: bump it in BOTH tags below on every deploy so a
-     stale app.js can never be paired with a fresh index.html (see README). -->
-<link rel="stylesheet" href="styles.css?v=4" />
+<!-- Bump ?v= on each deploy that changes styles.css. app.js does not need a
+     manual bump: it is loaded with a time-based token at the end of <body>. -->
+<link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
 <header id="topbar">
@@ -72,6 +72,21 @@
 <a id="download-anchor" hidden></a>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
-<script src="app.js?v=4"></script>
+<script>
+// Load app.js with a time-based freshness token rather than a fixed ?v=N.
+// A fixed token lives inside this file, so a CACHED copy of this page keeps
+// requesting the old app.js forever and never learns a new version exists.
+// Bucketing by the minute keeps normal reloads cache-friendly while
+// guaranteeing the script can never be more than a minute stale.
+(function () {
+  var s = document.createElement("script");
+  s.src = "app.js?t=" + Math.floor(Date.now() / 60000);
+  s.onerror = function () {
+    var m = document.getElementById("boot-msg");
+    if (m) m.textContent = "Failed to load app.js";
+  };
+  document.body.appendChild(s);
+})();
+</script>
 </body>
 </html>
