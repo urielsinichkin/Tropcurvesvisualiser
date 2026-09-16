@@ -191,7 +191,9 @@ docs/                       # DESIGN.md, POSTPONED.md
 - **P5 — Persistence**: continuous browser autosave, export/import. **[done —
   localStorage autosave after every edit + JSON export/import in `app.js`.]**
 - **P6 — Polish**: aesthetics, mobile/tablet interaction, accessibility.
-  **[remaining: readable-length layout optimizer (currently unit lengths),
-  richer curve input (custom / from subdivision), aesthetic and a11y passes.]**
+  **[done: visual click-to-draw subdivision editor (parallelograms auto-detected
+  and shown as crossings) + subdivision text output for debug. Remaining:
+  readable-length layout optimizer (currently unit lengths), custom (graph/ends)
+  curve entry, aesthetic and a11y passes.]**
 
 Each phase keeps the core independently testable before the GUI depends on it.

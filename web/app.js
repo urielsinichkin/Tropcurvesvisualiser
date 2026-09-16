@@ -131,18 +131,23 @@ function openNewDialog() {
       <button data-preset="caterpillar_square">4-ended curve (unit square)</button>
     </div>
     <h3 style="margin-top:16px">From a subdivision</h3>
-    <p class="muted">One line per cell, each a list of lattice points, e.g.
-      <code>[[0,0],[1,0],[0,1]]</code>. Parallelograms become crossings.</p>
-    <textarea id="subdiv-input" rows="6" style="width:100%;font-family:monospace;font-size:13px"
-      placeholder="[[0,0],[1,0],[0,1]]\n[[1,0],[1,1],[0,1]]"></textarea>
-    <div id="subdiv-err" class="err"></div>
-    <div style="margin-top:8px"><button id="subdiv-create" class="primary">Create from subdivision</button></div>`;
+    <div class="reslist"><button id="open-editor" class="primary">Draw a subdivision…</button></div>
+    <details class="dbg" style="margin-top:10px">
+      <summary>or paste as text</summary>
+      <p class="muted">One cell per line, each a list of lattice points, e.g.
+        <code>[[0,0],[1,0],[0,1]]</code>. Parallelograms become crossings.</p>
+      <textarea id="subdiv-input" rows="5" class="dbg-text"
+        placeholder="[[0,0],[1,0],[0,1]]&#10;[[1,0],[1,1],[0,1]]"></textarea>
+      <div id="subdiv-err" class="err"></div>
+      <div style="margin-top:6px"><button id="subdiv-create">Create from text</button></div>
+    </details>`;
   body.querySelectorAll("button[data-preset]").forEach(b => {
     b.onclick = () => {
       const summ = api("add_preset", b.dataset.preset);
       closeModal(); refreshAll(); selectNode(summ.id); autosave();
     };
   });
+  document.getElementById("open-editor").onclick = openSubdivisionEditor;
   document.getElementById("subdiv-create").onclick = () => {
     const errEl = document.getElementById("subdiv-err");
     errEl.textContent = "";
@@ -173,7 +178,179 @@ function parseSubdivision(text) {
 }
 
 function openModal() { document.getElementById("modal").hidden = false; }
-function closeModal() { document.getElementById("modal").hidden = true; }
+function closeModal() {
+  const m = document.getElementById("modal");
+  m.hidden = true;
+  const card = m.querySelector(".modal-card");
+  if (card) card.classList.remove("wide");
+  ED = null;
+}
+
+// ---------------------------------------------------------------------------
+// visual subdivision editor
+// ---------------------------------------------------------------------------
+const ED_VBW = 680, ED_VBH = 440, ED_PAD = 28;
+let ED = null;
+
+function openSubdivisionEditor() {
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+  ED = { xmin: 0, xmax: 5, ymin: 0, ymax: 5, cells: [], current: [] };
+  const body = document.getElementById("modal-body");
+  body.innerHTML = `
+    <h2>Draw a subdivision</h2>
+    <p class="muted">Click lattice points to trace each cell; click the first point again (or “Finish cell”) to close it.
+      Parallelograms are detected automatically and become crossings.</p>
+    <div class="editor-toolbar">
+      <label>x <input id="ed-xmin" type="number" value="0"> to <input id="ed-xmax" type="number" value="5"></label>
+      <label>y <input id="ed-ymin" type="number" value="0"> to <input id="ed-ymax" type="number" value="5"></label>
+      <button id="ed-resize" class="small">Resize grid</button>
+      <span style="flex:1"></span>
+      <button id="ed-finish" class="small">Finish cell</button>
+      <button id="ed-undo" class="small">Undo point</button>
+      <button id="ed-delcell" class="small">Delete last cell</button>
+      <button id="ed-clear" class="small danger">Clear</button>
+    </div>
+    <svg id="editor-svg" viewBox="0 0 ${ED_VBW} ${ED_VBH}"></svg>
+    <div class="editor-status" id="ed-status"></div>
+    <div id="ed-err" class="err"></div>
+    <div class="copy-row">
+      <button id="ed-create" class="primary">Create curve</button>
+      <button id="ed-text" class="small">Show text</button>
+    </div>
+    <details class="dbg" id="ed-textwrap">
+      <summary style="display:none"></summary>
+      <textarea id="ed-textarea" class="dbg-text" rows="4" readonly></textarea>
+      <div class="copy-row"><button id="ed-copy" class="small">Copy</button></div>
+    </details>`;
+  const v = id => document.getElementById(id).value;
+  document.getElementById("ed-resize").onclick = () => {
+    ED.xmin = Math.round(+v("ed-xmin")); ED.xmax = Math.round(+v("ed-xmax"));
+    ED.ymin = Math.round(+v("ed-ymin")); ED.ymax = Math.round(+v("ed-ymax"));
+    if (ED.xmax <= ED.xmin) ED.xmax = ED.xmin + 1;
+    if (ED.ymax <= ED.ymin) ED.ymax = ED.ymin + 1;
+    renderEditor();
+  };
+  document.getElementById("ed-finish").onclick = edFinish;
+  document.getElementById("ed-undo").onclick = () => { ED.current.pop(); renderEditor(); };
+  document.getElementById("ed-delcell").onclick = () => { ED.cells.pop(); renderEditor(); };
+  document.getElementById("ed-clear").onclick = () => { ED.cells = []; ED.current = []; document.getElementById("ed-err").textContent = ""; renderEditor(); };
+  document.getElementById("ed-create").onclick = edCreate;
+  document.getElementById("ed-text").onclick = () => {
+    const w = document.getElementById("ed-textwrap");
+    w.open = !w.open;
+    document.getElementById("ed-textarea").value = edCellsText();
+  };
+  document.getElementById("ed-copy").onclick = () => {
+    const ta = document.getElementById("ed-textarea");
+    ta.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(ta.value);
+  };
+  renderEditor();
+  openModal();
+}
+
+function edGridToScreen() {
+  const { xmin, xmax, ymin, ymax } = ED;
+  const spanx = Math.max(xmax - xmin, 1), spany = Math.max(ymax - ymin, 1);
+  const s = Math.min((ED_VBW - 2 * ED_PAD) / spanx, (ED_VBH - 2 * ED_PAD) / spany);
+  const ox = (ED_VBW - s * spanx) / 2, oy = (ED_VBH - s * spany) / 2;
+  return (x, y) => [ox + (x - xmin) * s, ED_VBH - (oy + (y - ymin) * s)];
+}
+
+function renderEditor() {
+  const svg = document.getElementById("editor-svg");
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const T = edGridToScreen();
+
+  ED.cells.forEach(cell => {
+    const isPar = jsIsParallelogram(cell);
+    const d = cell.map(([x, y]) => T(x, y));
+    svg.appendChild(svgEl("polygon", {
+      points: d.map(p => p.join(",")).join(" "),
+      fill: isPar ? "color-mix(in srgb, var(--warn) 30%, transparent)"
+                  : "color-mix(in srgb, var(--accent) 18%, transparent)",
+      stroke: "var(--ink)", "stroke-width": 1.5, "stroke-linejoin": "round",
+    }));
+    if (isPar) {
+      const cx = d.reduce((a, p) => a + p[0], 0) / d.length;
+      const cy = d.reduce((a, p) => a + p[1], 0) / d.length;
+      svg.appendChild(text(cx, cy + 5, "×", "var(--warn)"));
+    }
+  });
+
+  if (ED.current.length) {
+    const d = ED.current.map(([x, y]) => T(x, y));
+    if (d.length >= 2) svg.appendChild(svgEl("polyline", {
+      points: d.map(p => p.join(",")).join(" "),
+      fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-dasharray": "5 4",
+    }));
+    d.forEach(p => svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: 4, fill: "var(--accent)" })));
+  }
+
+  for (let x = ED.xmin; x <= ED.xmax; x++) {
+    for (let y = ED.ymin; y <= ED.ymax; y++) {
+      const p = T(x, y);
+      svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: 2.5, fill: "var(--muted)" }));
+      const hit = svgEl("circle", { cx: p[0], cy: p[1], r: 12, fill: "transparent", class: "dot-hit" });
+      hit.addEventListener("click", () => edClick(x, y));
+      svg.appendChild(hit);
+    }
+  }
+
+  const k = ED.cells.filter(jsIsParallelogram).length;
+  document.getElementById("ed-status").textContent =
+    `${ED.cells.length} cell(s), ${k} parallelogram(s) → crossings; ${ED.current.length} point(s) in current cell`;
+  const tw = document.getElementById("ed-textwrap");
+  if (tw && tw.open) document.getElementById("ed-textarea").value = edCellsText();
+}
+
+function edClick(x, y) {
+  const cur = ED.current;
+  if (cur.length >= 3 && x === cur[0][0] && y === cur[0][1]) { edFinish(); return; }
+  if (cur.length && x === cur[cur.length - 1][0] && y === cur[cur.length - 1][1]) return;
+  document.getElementById("ed-err").textContent = "";
+  cur.push([x, y]);
+  renderEditor();
+}
+
+function edFinish() {
+  if (ED.current.length >= 3) { ED.cells.push(ED.current); ED.current = []; }
+  else if (ED.current.length) document.getElementById("ed-err").textContent = "a cell needs at least 3 points";
+  renderEditor();
+}
+
+function edCellsText() { return ED.cells.map(c => JSON.stringify(c)).join("\n"); }
+
+function edCreate() {
+  const err = document.getElementById("ed-err");
+  err.textContent = "";
+  if (ED.current.length) { err.textContent = "finish or clear the current cell first"; return; }
+  if (!ED.cells.length) { err.textContent = "draw at least one cell"; return; }
+  try {
+    const summ = api("add_from_subdivision", ED.cells, null);
+    closeModal(); refreshAll(); selectNode(summ.id); autosave();
+  } catch (e) { err.textContent = e.message; }
+}
+
+function jsHull(pts) {
+  const uniq = [...new Map(pts.map(p => [p[0] + "," + p[1], p])).values()];
+  uniq.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (uniq.length < 3) return uniq;
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [];
+  for (const p of uniq) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  const up = [];
+  for (let i = uniq.length - 1; i >= 0; i--) { const p = uniq[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+
+function jsIsParallelogram(cell) {
+  const h = jsHull(cell);
+  if (h.length !== 4) return false;
+  return (h[0][0] + h[2][0] === h[1][0] + h[3][0]) &&
+         (h[0][1] + h[2][1] === h[1][1] + h[3][1]);
+}
 
 // ---------------------------------------------------------------------------
 // rendering: type list
@@ -288,9 +465,11 @@ function drawSubdivision(data) {
   const note = document.getElementById("sub-note");
   if (!data.subdivision) {
     note.textContent = data.subdivision_error || "no subdivision";
+    setSubDebug(null);
     return;
   }
   note.textContent = "";
+  setSubDebug(data.subdivision.cells);
   const cells = data.subdivision.cells;
   const pts = [];
   cells.forEach(cell => cell.forEach(v => pts.push(v)));
@@ -319,6 +498,21 @@ function drawSubdivision(data) {
 function sameSum(cell) {
   return cell[0][0] + cell[2][0] === cell[1][0] + cell[3][0] &&
          cell[0][1] + cell[2][1] === cell[1][1] + cell[3][1];
+}
+
+function setSubDebug(cells) {
+  const dbg = document.getElementById("sub-debug");
+  if (!cells) { dbg.innerHTML = ""; dbg.hidden = true; return; }
+  dbg.hidden = false;
+  const body = cells.map(c => JSON.stringify(c)).join("\n");
+  dbg.innerHTML = `<summary>subdivision text (debug)</summary>
+    <textarea class="dbg-text" rows="4" readonly>${escapeHtml(body)}</textarea>
+    <div class="copy-row"><button class="small" id="sub-copy">Copy</button></div>`;
+  dbg.querySelector("#sub-copy").onclick = () => {
+    const ta = dbg.querySelector("textarea");
+    ta.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(ta.value);
+  };
 }
 
 function text(x, y, s, color) {
