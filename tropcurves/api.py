@@ -19,6 +19,7 @@ from .newton import newton_polygon
 from .layout import embed, readable_lengths
 from .subdivision import build_subdivision, SubdivisionError
 from .operations import resolutions
+from .subdivision_import import import_subdivision
 from .workspace import Workspace
 from . import schema, builders
 
@@ -75,6 +76,17 @@ class Session:
         if any(b.get("vec") is None for b in spec.get("bounded", [])):
             resolve_slopes(c)
         c.validate()
+        node = self.ws.add_root(c, name=name)
+        return self.node_summary(node.id)
+
+    def add_from_subdivision(self, cells: List[List[List[int]]],
+                             name: Optional[str] = None) -> Dict[str, Any]:
+        """Create a root type from a subdivision (a list of lattice cells).
+
+        Each cell is a list of ``[x, y]`` lattice points. No markings are
+        created; the parametrizing curve must be a connected genus-0 tree.
+        """
+        c = import_subdivision(cells)
         node = self.ws.add_root(c, name=name)
         return self.node_summary(node.id)
 

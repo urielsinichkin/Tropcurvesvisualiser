@@ -78,6 +78,11 @@ def rot90(v: Vec2) -> Vec2:
     return Vec2(-v.y, v.x)
 
 
+def rot_minus90(v: Vec2) -> Vec2:
+    """Rotate ``v`` by -90 degrees (clockwise): (x, y) -> (y, -x)."""
+    return Vec2(v.y, -v.x)
+
+
 def primitive(v: Vec2) -> Tuple[Vec2, int]:
     """Split ``v`` into ``(u, w)`` with ``v == w * u``.
 

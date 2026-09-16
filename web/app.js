@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 const PKG_FILES = [
   "geometry.py", "curve.py", "balancing.py", "newton.py", "layout.py",
-  "subdivision.py", "operations.py", "workspace.py", "schema.py",
-  "builders.py", "api.py", "__init__.py",
+  "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
+  "schema.py", "builders.py", "api.py", "__init__.py",
 ];
 const STORAGE_KEY = "tropcurves.workspace.v1";
 
@@ -125,18 +125,51 @@ function importJSON(ev) {
 function openNewDialog() {
   const body = document.getElementById("modal-body");
   body.innerHTML = `<h2>New type</h2>
-    <p class="muted">Start from a preset (custom input coming soon).</p>
+    <p class="muted">Start from a preset:</p>
     <div class="reslist">
       <button data-preset="line">Tropical line (unit triangle)</button>
       <button data-preset="caterpillar_square">4-ended curve (unit square)</button>
-    </div>`;
+    </div>
+    <h3 style="margin-top:16px">From a subdivision</h3>
+    <p class="muted">One line per cell, each a list of lattice points, e.g.
+      <code>[[0,0],[1,0],[0,1]]</code>. Parallelograms become crossings.</p>
+    <textarea id="subdiv-input" rows="6" style="width:100%;font-family:monospace;font-size:13px"
+      placeholder="[[0,0],[1,0],[0,1]]\n[[1,0],[1,1],[0,1]]"></textarea>
+    <div id="subdiv-err" class="err"></div>
+    <div style="margin-top:8px"><button id="subdiv-create" class="primary">Create from subdivision</button></div>`;
   body.querySelectorAll("button[data-preset]").forEach(b => {
     b.onclick = () => {
       const summ = api("add_preset", b.dataset.preset);
       closeModal(); refreshAll(); selectNode(summ.id); autosave();
     };
   });
+  document.getElementById("subdiv-create").onclick = () => {
+    const errEl = document.getElementById("subdiv-err");
+    errEl.textContent = "";
+    let cells;
+    try {
+      cells = parseSubdivision(document.getElementById("subdiv-input").value);
+    } catch (e) { errEl.textContent = "Could not parse: " + e.message; return; }
+    try {
+      const summ = api("add_from_subdivision", cells, null);
+      closeModal(); refreshAll(); selectNode(summ.id); autosave();
+    } catch (e) { errEl.textContent = e.message; }
+  };
   openModal();
+}
+
+function parseSubdivision(text) {
+  // Accept a JSON array of cells, or one cell per non-empty line.
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("empty");
+  try {
+    const asJson = JSON.parse(trimmed);
+    if (Array.isArray(asJson) && asJson.length && Array.isArray(asJson[0]) &&
+        asJson[0].length && Array.isArray(asJson[0][0])) {
+      return asJson; // already a list of cells
+    }
+  } catch (e) { /* fall through to line mode */ }
+  return trimmed.split("\n").map(l => l.trim()).filter(Boolean).map(l => JSON.parse(l));
 }
 
 function openModal() { document.getElementById("modal").hidden = false; }
