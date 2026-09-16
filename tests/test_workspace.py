@@ -85,6 +85,50 @@ def test_resolve_new_edge_presentation_preserved_on_replay():
     assert grand.curve.edges[grand.operation.new_edge_id].color == "#777777"
 
 
+def test_duplicate_copies_curve_as_independent_root():
+    ws, root, child = _root_and_contracted()
+    ws.set_color(root.id, "a", "#ff0000")
+    ws.add_marking(root.id, "v0", name="p1")
+
+    dup = ws.duplicate(root.id)
+
+    # an independent root: no parent, no operation, none of root's children
+    assert dup.parent_id is None
+    assert dup.operation is None
+    assert dup.children == []
+    assert dup.id != root.id
+    # same content
+    assert set(dup.curve.edges) == set(root.curve.edges)
+    assert dup.curve.edges["a"].color == "#ff0000"
+    assert dup.curve.edges["a"].vec == root.curve.edges["a"].vec
+    assert [e.name for e in dup.curve.markings] == ["p1"]
+    assert dup.curve.is_balanced() and dup.curve.is_tree()
+
+
+def test_duplicate_is_isolated_from_the_original():
+    ws, root, child = _root_and_contracted()
+    dup = ws.duplicate(root.id)
+
+    # editing the original must not touch the copy...
+    ws.set_color(root.id, "a", "#111111")
+    assert dup.curve.edges["a"].color != "#111111"
+    # ...and the copy's own edits must not touch the original
+    ws.set_color(dup.id, "a", "#222222")
+    assert root.curve.edges["a"].color == "#111111"
+    # the original's child still follows the original only
+    assert child.curve.edges["a"].color == "#111111"
+
+
+def test_duplicate_names_avoid_collisions():
+    ws, root, child = _root_and_contracted()
+    first = ws.duplicate(root.id)
+    second = ws.duplicate(root.id)
+    assert first.name == "root copy"
+    assert second.name == "root copy 2"
+    explicit = ws.duplicate(root.id, name="my variant")
+    assert explicit.name == "my variant"
+
+
 def test_needs_attention_when_resolve_no_longer_applies():
     ws, root, child = _root_and_contracted()
     v = child.curve.vertices[0]

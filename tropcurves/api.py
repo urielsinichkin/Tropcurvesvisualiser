@@ -142,6 +142,11 @@ class Session:
         self.ws.rename_node(node_id, name)
         return self.node_summary(node_id)
 
+    def duplicate(self, node_id: str, name: Optional[str] = None) -> Dict[str, Any]:
+        """Copy a type into a new independent root (see ``Workspace.duplicate``)."""
+        node = self.ws.duplicate(node_id, name=name)
+        return self.node_summary(node.id)
+
     # --- structural operations -----------------------------------------
     def contract(self, node_id: str, edge_id: str, name: Optional[str] = None) -> Dict[str, Any]:
         child = self.ws.contract(node_id, edge_id, name=name)
