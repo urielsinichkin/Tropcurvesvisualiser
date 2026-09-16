@@ -8,6 +8,9 @@ const PKG_FILES = [
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
   "schema.py", "builders.py", "api.py", "__init__.py",
 ];
+// Bump together with the ?v= query on the <script>/<link> tags in index.html.
+// Shown in the top bar so a stale cached app.js is obvious at a glance.
+const APP_VERSION = "2";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -26,6 +29,8 @@ async function fetchPkgFile(name) {
 }
 
 async function boot() {
+  const ver = document.getElementById("app-version");
+  if (ver) ver.textContent = "v" + APP_VERSION;
   const msg = document.getElementById("boot-msg");
   msg.textContent = "Loading Python runtime…";
   pyodide = await loadPyodide();
@@ -125,13 +130,21 @@ function renderColor(c) { return c || defaultColorForRender(); }
 // ---------------------------------------------------------------------------
 // top-level actions
 // ---------------------------------------------------------------------------
+// Bind defensively: if index.html is an older cached copy that lacks an
+// element, skip it instead of throwing and taking the whole app down with it.
+function bind(id, prop, handler) {
+  const el = document.getElementById(id);
+  if (el) el[prop] = handler;
+  else console.warn("missing element (stale index.html?):", id);
+}
+
 function wireGlobalButtons() {
-  document.getElementById("btn-new").onclick = openNewDialog;
-  document.getElementById("btn-settings").onclick = openSettingsDialog;
-  document.getElementById("btn-save").onclick = exportJSON;
-  document.getElementById("btn-load").onclick = () => document.getElementById("file-input").click();
-  document.getElementById("file-input").onchange = importJSON;
-  document.getElementById("modal-cancel").onclick = closeModal;
+  bind("btn-new", "onclick", openNewDialog);
+  bind("btn-settings", "onclick", openSettingsDialog);
+  bind("btn-save", "onclick", exportJSON);
+  bind("btn-load", "onclick", () => document.getElementById("file-input").click());
+  bind("file-input", "onchange", importJSON);
+  bind("modal-cancel", "onclick", closeModal);
 }
 
 function exportJSON() {

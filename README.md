@@ -45,6 +45,20 @@ browser (localStorage); use **Export/Import** to move it between devices.
 To publish it, enable GitHub Pages for this repository (served from the repo
 root); the app is then at `…/web/index.html`.
 
+### Deploying a change to the web app
+
+Browsers cache `app.js`/`styles.css` aggressively, and a stale script paired
+with a fresh `index.html` silently breaks newly added controls. So when you
+change anything under `web/`, bump the cache buster in **three** places:
+
+- the `?v=N` on the `<link rel="stylesheet">` tag in `web/index.html`,
+- the `?v=N` on the `<script src="app.js">` tag in `web/index.html`,
+- `APP_VERSION` at the top of `web/app.js`.
+
+The loaded version is shown in the top bar (e.g. `v2`). If that label is blank
+or shows an older number than expected, the browser is running a cached
+`app.js` — clear the site's cache or load the page with a `?v=` query appended.
+
 ## Development
 
 ```bash
