@@ -176,7 +176,9 @@ docs/                       # DESIGN.md, POSTPONED.md
   generic-chamber mixed subdivision (triangles + parallelograms) done and
   tested; subdivision *import* still to do]**
 - **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
-  rename/color; the derivation forest and transitive propagation.
+  rename/color; the derivation forest and transitive propagation. **[done —
+  operations + Workspace forest with transitive all-or-nothing propagation and
+  needs-attention flagging; 65 tests total]**
 - **P4 — Web GUI**: Pyodide bootstrap, SVG rendering of curve + subdivision,
   responsive layout, the resolution-picker menu and edit controls.
 - **P5 — Persistence**: continuous browser autosave, export/import.

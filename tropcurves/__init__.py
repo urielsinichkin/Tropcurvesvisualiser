@@ -15,6 +15,8 @@ from .balancing import (
 from .newton import newton_polygon
 from .layout import embed, readable_lengths, generic_lengths
 from .subdivision import build_subdivision, Subdivision, SubdivisionCell, SubdivisionError
+from .operations import contract_edge, resolutions, apply_resolution, Resolution
+from .workspace import Workspace, TypeNode, Operation
 from . import schema
 
 __all__ = [
@@ -40,6 +42,13 @@ __all__ = [
     "Subdivision",
     "SubdivisionCell",
     "SubdivisionError",
+    "contract_edge",
+    "resolutions",
+    "apply_resolution",
+    "Resolution",
+    "Workspace",
+    "TypeNode",
+    "Operation",
     "schema",
 ]
 
