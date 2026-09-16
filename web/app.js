@@ -10,7 +10,7 @@ const PKG_FILES = [
 ];
 // Bump together with the ?v= query on the <script>/<link> tags in index.html.
 // Shown in the top bar so a stale cached app.js is obvious at a glance.
-const APP_VERSION = "2";
+const APP_VERSION = "3";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -639,57 +639,32 @@ function renderControls() {
     return wrap;
   }));
 
-  // change slopes (ends)
+  // actions: each opens a dedicated dialog
   const ends = c.edges.filter(e => e.kind === "end");
-  if (ends.length >= 2) {
-    body.appendChild(group("Change end slope", () => {
-      const g = document.createElement("div"); g.className = "ctrl-group";
-      const editSel = selectOf(ends.map(e => [e.id, e.name]));
-      const depSel = selectOf(ends.map(e => [e.id, e.name]));
-      if (ends.length > 1) depSel.selectedIndex = 1;
-      const xin = numInput(); const yin = numInput();
-      const r1 = row([labeled("edit end", editSel), labeled("dependent", depSel)]);
-      const r2 = row([labeled("new x", xin), labeled("new y", yin)]);
-      const btn = document.createElement("button"); btn.textContent = "Apply"; btn.className = "primary small";
-      btn.onclick = () => {
-        try {
-          api("edit_slopes", selectedId, editSel.value, [parseInt(xin.value || "0"), parseInt(yin.value || "0")], depSel.value);
-          refreshAll(); autosave();
-        } catch (e) { alert(e.message); }
-      };
-      g.append(r1, r2, btn);
-      return g;
-    }));
-  }
-
-  // contract
   const bounded = c.edges.filter(e => e.kind === "bounded");
-  if (bounded.length) {
-    body.appendChild(group("Contract edge", () => {
-      const g = document.createElement("div"); g.className = "ctrl-group";
-      const sel = selectOf(bounded.map(e => [e.id, e.name]));
-      const btn = document.createElement("button"); btn.textContent = "Contract"; btn.className = "small";
-      btn.onclick = () => {
-        const child = api("contract", selectedId, sel.value);
-        refreshAll(); selectNode(child.id); autosave();
-      };
-      g.append(row([labeled("edge", sel), btn]));
-      return g;
-    }));
-  }
-
-  // resolve (valence-4 vertices)
   const v4 = Object.entries(summ.valences).filter(([v, k]) => k === 4).map(([v]) => v);
-  if (v4.length) {
-    body.appendChild(group("Resolve 4-valent vertex", () => {
-      const g = document.createElement("div"); g.className = "ctrl-group";
-      const sel = selectOf(v4.map(v => [v, v]));
-      const btn = document.createElement("button"); btn.textContent = "Show resolutions"; btn.className = "small";
-      btn.onclick = () => openResolveDialog(sel.value);
-      g.append(row([labeled("vertex", sel), btn]));
-      return g;
-    }));
-  }
+  body.appendChild(group("Actions", () => {
+    const g = document.createElement("div"); g.className = "ctrl-group";
+    const mk = (label, enabled, why, onclick) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (enabled) b.onclick = onclick;
+      else { b.disabled = true; b.title = why; }
+      return b;
+    };
+    g.appendChild(row([
+      mk("Edit end slope…", ends.length >= 2,
+         "needs at least two ends (one to edit, one to absorb the change)",
+         openSlopeDialog),
+      mk("Add marking…", c.vertices.length >= 1,
+         "this type has no vertices", openMarkingDialog),
+      mk("Contract edge…", bounded.length >= 1,
+         "this type has no bounded edges to contract", openContractDialog),
+      mk("Resolve vertex…", v4.length >= 1,
+         "this type has no 4-valent vertex to resolve", openResolveDialog),
+    ]));
+    return g;
+  }));
 
   // markings
   body.appendChild(group("Markings", () => {
@@ -703,10 +678,12 @@ function renderControls() {
       rr.appendChild(del);
       g.appendChild(rr);
     });
-    const vsel = selectOf(c.vertices.map(v => [v.id, v.id]));
-    const add = document.createElement("button"); add.textContent = "+ marking"; add.className = "small";
-    add.onclick = () => { api("add_marking", selectedId, vsel.value, "", ""); refreshAll(); autosave(); };
-    g.append(row([labeled("at vertex", vsel), add]));
+    if (!c.markings.length) {
+      const p = document.createElement("p");
+      p.className = "muted"; p.style.margin = "0";
+      p.textContent = "None yet — use “Add marking…” above.";
+      g.appendChild(p);
+    }
     return g;
   }));
 
@@ -727,25 +704,174 @@ function renderControls() {
   }));
 }
 
-function openResolveDialog(vertex) {
-  let list;
-  try { list = api("list_resolutions", selectedId, vertex); }
-  catch (e) { alert(e.message); return; }
+// ---------------------------------------------------------------------------
+// action dialogs
+// ---------------------------------------------------------------------------
+function fmtVec(v) { return v ? `(${v[0]}, ${v[1]})` : ""; }
+
+function dialogHead(title, blurb) {
   const body = document.getElementById("modal-body");
-  body.innerHTML = `<h2>Resolutions of ${vertex}</h2>
-    <p class="muted">Pick a trivalent resolution. Crossing pairings realize as a parallelogram and cannot become a bounded edge.</p>`;
-  const wrap = document.createElement("div"); wrap.className = "reslist";
-  list.forEach(r => {
+  body.innerHTML = `<h2>${escapeHtml(title)}</h2>
+    <p class="muted">${blurb}</p>`;
+  return body;
+}
+function errBox() {
+  const d = document.createElement("div");
+  d.className = "err"; d.id = "modal-err";
+  return d;
+}
+function showModalError(msg) {
+  const el = document.getElementById("modal-err");
+  if (el) el.textContent = msg; else alert(msg);
+}
+
+function openSlopeDialog() {
+  const data = api("render", selectedId);
+  const ends = data.curve.edges.filter(e => e.kind === "end");
+  const body = dialogHead("Edit an end's slope",
+    "Changing one end alone would break global balancing, so a second " +
+    "<em>dependent</em> end absorbs the change; every bounded edge is then " +
+    "re-derived. All other ends stay fixed.");
+  if (ends.length < 2) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This type needs at least two ends.</p>`);
+    openModal(); return;
+  }
+  const opts = ends.map(e => [e.id, `${e.name}  ${fmtVec(e.vec)}`]);
+  const editSel = selectOf(opts);
+  const depSel = selectOf(opts);
+  depSel.selectedIndex = 1;
+  const xin = numInput(), yin = numInput();
+  const syncFromEdit = () => {
+    const e = ends.find(x => x.id === editSel.value);
+    if (e && e.vec) { xin.value = e.vec[0]; yin.value = e.vec[1]; }
+    if (depSel.value === editSel.value) {
+      depSel.selectedIndex = (editSel.selectedIndex + 1) % ends.length;
+    }
+  };
+  editSel.onchange = syncFromEdit;
+  depSel.onchange = () => {
+    if (depSel.value === editSel.value) {
+      depSel.selectedIndex = (editSel.selectedIndex + 1) % ends.length;
+      showModalError("the edited end and the dependent end must be different");
+    } else showModalError("");
+  };
+  syncFromEdit();
+  const apply = document.createElement("button");
+  apply.className = "primary"; apply.textContent = "Apply";
+  apply.onclick = () => {
+    showModalError("");
+    try {
+      api("edit_slopes", selectedId, editSel.value,
+          [parseInt(xin.value || "0", 10), parseInt(yin.value || "0", 10)], depSel.value);
+      closeModal(); refreshAll(); autosave();
+    } catch (e) { showModalError(e.message); }
+  };
+  body.appendChild(row([labeled("end to edit", editSel), labeled("dependent end", depSel)]));
+  body.appendChild(row([labeled("new x", xin), labeled("new y", yin)]));
+  body.appendChild(errBox());
+  body.appendChild(row([apply]));
+  openModal();
+}
+
+function openMarkingDialog() {
+  const data = api("render", selectedId);
+  const summ = api("list_nodes").find(n => n.id === selectedId) || {};
+  const val = summ.valences || {};
+  const body = dialogHead("Add a marking",
+    "A marking is a contracted end (direction 0) attached at a vertex. " +
+    "Pick the vertex to attach it to.");
+  body.insertAdjacentHTML("beforeend",
+    `<label>Name (optional) <input id="mk-name" type="text" placeholder="auto"></label>`);
+  const list = document.createElement("div");
+  list.className = "reslist"; list.style.marginTop = "10px";
+  data.curve.vertices.forEach(v => {
     const b = document.createElement("button");
-    b.textContent = r.label;
-    b.disabled = r.is_crossing;
+    b.textContent = `at ${v.id}` + (val[v.id] ? `  (valence ${val[v.id]})` : "");
     b.onclick = () => {
-      const child = api("resolve", selectedId, vertex, r.index);
-      closeModal(); refreshAll(); selectNode(child.id); autosave();
+      const nm = (document.getElementById("mk-name").value || "").trim();
+      try {
+        api("add_marking", selectedId, v.id, nm, "");
+        closeModal(); refreshAll(); autosave();
+      } catch (e) { showModalError(e.message); }
     };
-    wrap.appendChild(b);
+    list.appendChild(b);
   });
-  body.appendChild(wrap);
+  body.appendChild(list);
+  body.appendChild(errBox());
+  openModal();
+}
+
+function openContractDialog() {
+  const data = api("render", selectedId);
+  const bounded = data.curve.edges.filter(e => e.kind === "bounded");
+  const body = dialogHead("Contract an edge",
+    "Contracting merges the edge's two endpoints into a single vertex, " +
+    "creating a derived type that follows this one. Only bounded edges " +
+    "can be contracted.");
+  if (!bounded.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no bounded edges.</p>`);
+    openModal(); return;
+  }
+  const list = document.createElement("div"); list.className = "reslist";
+  bounded.forEach(e => {
+    const b = document.createElement("button");
+    b.textContent = `${e.name}   direction ${fmtVec(e.vec)}` +
+      (e.weight > 1 ? `, weight ${e.weight}` : "");
+    b.onclick = () => {
+      try {
+        const child = api("contract", selectedId, e.id);
+        closeModal(); refreshAll(); selectNode(child.id); autosave();
+      } catch (err) { showModalError(err.message); }
+    };
+    list.appendChild(b);
+  });
+  body.appendChild(list);
+  body.appendChild(errBox());
+  openModal();
+}
+
+function openResolveDialog() {
+  const summ = api("list_nodes").find(n => n.id === selectedId) || {};
+  const v4 = Object.entries(summ.valences || {}).filter(([, k]) => k === 4).map(([v]) => v);
+  const body = dialogHead("Resolve a 4-valent vertex",
+    "Each resolution is an adjacent maximal cell of the tropical moduli space. " +
+    "A crossing pairing realizes as a parallelogram, so it cannot become a " +
+    "bounded edge and is offered only for reference.");
+  if (!v4.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no 4-valent vertex.</p>`);
+    openModal(); return;
+  }
+  let sel = null;
+  if (v4.length > 1) {
+    sel = selectOf(v4.map(v => [v, v]));
+    body.appendChild(labeled("vertex", sel));
+  }
+  const listWrap = document.createElement("div");
+  listWrap.className = "reslist"; listWrap.style.marginTop = "10px";
+  body.appendChild(listWrap);
+  body.appendChild(errBox());
+  const fill = () => {
+    const vertex = sel ? sel.value : v4[0];
+    listWrap.innerHTML = "";
+    let list;
+    try { list = api("list_resolutions", selectedId, vertex); }
+    catch (e) { showModalError(e.message); return; }
+    list.forEach(r => {
+      const b = document.createElement("button");
+      b.textContent = r.label;
+      b.disabled = r.is_crossing;
+      if (r.is_crossing) b.title = "crossing pairing — realizes as a parallelogram";
+      b.onclick = () => {
+        try {
+          const child = api("resolve", selectedId, vertex, r.index);
+          closeModal(); refreshAll(); selectNode(child.id); autosave();
+        } catch (err) { showModalError(err.message); }
+      };
+      listWrap.appendChild(b);
+    });
+  };
+  if (sel) sel.onchange = fill;
+  fill();
   openModal();
 }
 
