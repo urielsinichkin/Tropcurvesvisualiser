@@ -1,0 +1,217 @@
+"""JSON-friendly session facade over the core.
+
+This is the single seam the browser/Pyodide frontend talks to: every method
+takes and returns plain JSON-able Python (dicts, lists, numbers, strings), so
+the UI never touches core objects directly. It also computes *render data* (an
+embedding of the curve plus its dual subdivision) for drawing.
+"""
+
+from __future__ import annotations
+
+from fractions import Fraction
+from math import hypot
+from typing import Any, Dict, List, Optional
+
+from .curve import Curve, EdgeKind
+from .geometry import Vec2, primitive
+from .balancing import resolve_slopes
+from .newton import newton_polygon
+from .layout import embed, readable_lengths
+from .subdivision import build_subdivision, SubdivisionError
+from .operations import resolutions
+from .workspace import Workspace
+from . import schema, builders
+
+
+class Session:
+    """Holds one workspace and exposes JSON operations for the UI."""
+
+    def __init__(self) -> None:
+        self.ws = Workspace()
+
+    # --- persistence ----------------------------------------------------
+    def save(self) -> str:
+        return schema.dumps_workspace(self.ws)
+
+    def load(self, text: str) -> None:
+        self.ws = schema.loads_workspace(text)
+
+    # --- creating types -------------------------------------------------
+    def add_preset(self, name: str) -> Dict[str, Any]:
+        presets = {
+            "line": builders.standard_line,
+            "caterpillar_square": builders.caterpillar_square,
+        }
+        if name not in presets:
+            raise ValueError(f"unknown preset {name!r}")
+        node = self.ws.add_root(presets[name](), name=name)
+        return self.node_summary(node.id)
+
+    def add_curve(self, spec: Dict[str, Any], name: Optional[str] = None) -> Dict[str, Any]:
+        """Create a root type from a spec.
+
+        spec = {
+          "vertices": ["v0", ...],
+          "bounded":  [{"id","tail","head", "vec"?:[x,y], "name"?, "color"?}, ...],
+          "ends":     [{"id","tail","vec":[x,y], "name"?, "color"?}, ...],
+          "markings": [{"id","tail", "name"?, "color"?}, ...],
+        }
+        Bounded edges without a ``vec`` are solved by balancing.
+        """
+        c = Curve()
+        for v in spec.get("vertices", []):
+            c.add_vertex(v)
+        for e in spec.get("bounded", []):
+            vec = Vec2.from_iterable(e["vec"]) if e.get("vec") else Vec2(0, 0)
+            c.add_bounded(e["id"], e["tail"], e["head"], vec,
+                          name=e.get("name", ""), color=e.get("color", "#000000"))
+        for e in spec.get("ends", []):
+            c.add_end(e["id"], e["tail"], Vec2.from_iterable(e["vec"]),
+                      name=e.get("name", ""), color=e.get("color", "#000000"))
+        for e in spec.get("markings", []):
+            c.add_marking(e["id"], e["tail"],
+                          name=e.get("name", ""), color=e.get("color", "#000000"))
+        # solve any unspecified bounded slopes
+        if any(b.get("vec") is None for b in spec.get("bounded", [])):
+            resolve_slopes(c)
+        c.validate()
+        node = self.ws.add_root(c, name=name)
+        return self.node_summary(node.id)
+
+    # --- listing --------------------------------------------------------
+    def list_nodes(self) -> List[Dict[str, Any]]:
+        return [self.node_summary(nid) for nid in self.ws.nodes]
+
+    def node_summary(self, node_id: str) -> Dict[str, Any]:
+        n = self.ws.nodes[node_id]
+        c = n.curve
+        return {
+            "id": n.id,
+            "name": n.name,
+            "parent_id": n.parent_id,
+            "children": list(n.children),
+            "follow_parent": n.follow_parent,
+            "status": n.status,
+            "genus": c.genus,
+            "num_ends": len(c.ends),
+            "num_markings": len(c.markings),
+            "num_bounded": len(c.bounded),
+            "valences": {v: c.valence(v) for v in c.vertices},
+        }
+
+    # --- editing (all propagate) ---------------------------------------
+    def edit_slopes(self, node_id: str, edit_end_id: str, new_vec: List[int],
+                    dependent_end_id: str) -> Dict[str, Any]:
+        self.ws.edit_slopes(node_id, edit_end_id, Vec2.from_iterable(new_vec), dependent_end_id)
+        return self.node_summary(node_id)
+
+    def add_marking(self, node_id: str, vertex: str, name: str = "",
+                    color: str = "#000000") -> Dict[str, Any]:
+        mid = self.ws.add_marking(node_id, vertex, name=name or None, color=color)
+        return {"marking_id": mid, **self.node_summary(node_id)}
+
+    def remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
+        self.ws.remove_marking(node_id, marking_id)
+        return self.node_summary(node_id)
+
+    def rename_edge(self, node_id: str, edge_id: str, new_name: str) -> Dict[str, Any]:
+        self.ws.rename_edge(node_id, edge_id, new_name)
+        return self.node_summary(node_id)
+
+    def set_color(self, node_id: str, edge_id: str, color: str) -> Dict[str, Any]:
+        self.ws.set_color(node_id, edge_id, color)
+        return self.node_summary(node_id)
+
+    def set_follow(self, node_id: str, follow: bool) -> Dict[str, Any]:
+        self.ws.set_follow(node_id, follow)
+        return self.node_summary(node_id)
+
+    def rename_node(self, node_id: str, name: str) -> Dict[str, Any]:
+        self.ws.rename_node(node_id, name)
+        return self.node_summary(node_id)
+
+    # --- structural operations -----------------------------------------
+    def contract(self, node_id: str, edge_id: str, name: Optional[str] = None) -> Dict[str, Any]:
+        child = self.ws.contract(node_id, edge_id, name=name)
+        return self.node_summary(child.id)
+
+    def list_resolutions(self, node_id: str, vertex: str) -> List[Dict[str, Any]]:
+        c = self.ws.nodes[node_id].curve
+        out = []
+        for i, r in enumerate(resolutions(c, vertex, include_crossings=True)):
+            out.append({
+                "index": i,
+                "label": r.label(c),
+                "is_crossing": r.is_crossing,
+                "new_edge_vec": r.new_edge_vec.to_list(),
+                "side_a": list(r.side_a),
+                "side_b": list(r.side_b),
+            })
+        return out
+
+    def resolve(self, node_id: str, vertex: str, index: int,
+                name: Optional[str] = None) -> Dict[str, Any]:
+        c = self.ws.nodes[node_id].curve
+        res = resolutions(c, vertex, include_crossings=True)[index]
+        if res.is_crossing:
+            raise ValueError("that pairing is a crossing, not a trivalent resolution")
+        child = self.ws.resolve(node_id, res, name=name)
+        return self.node_summary(child.id)
+
+    # --- render data ----------------------------------------------------
+    def render(self, node_id: str) -> Dict[str, Any]:
+        n = self.ws.nodes[node_id]
+        c = n.curve
+        out: Dict[str, Any] = {
+            "id": n.id,
+            "name": n.name,
+            "status": n.status,
+            "curve": self._render_curve(c),
+        }
+        try:
+            out["newton"] = [v.to_list() for v in newton_polygon(c)]
+        except Exception as exc:  # no ends etc.
+            out["newton"] = None
+            out["newton_error"] = str(exc)
+        try:
+            sub = build_subdivision(c)
+            out["subdivision"] = {
+                "cells": [[v.to_list() for v in cell.vertices] for cell in sub.cells],
+            }
+            out["subdivision_error"] = None
+        except SubdivisionError as exc:
+            out["subdivision"] = None
+            out["subdivision_error"] = str(exc)
+        return out
+
+    def _render_curve(self, c: Curve) -> Dict[str, Any]:
+        pos = embed(c, readable_lengths(c))
+        fpos = {v: (float(x), float(y)) for v, (x, y) in pos.items()}
+        xs = [p[0] for p in fpos.values()]
+        ys = [p[1] for p in fpos.values()]
+        span = max((max(xs) - min(xs)) if xs else 1.0, (max(ys) - min(ys)) if ys else 1.0, 1.0)
+        ray_len = span * 0.6 + 1.0
+
+        vertices = [{"id": v, "x": fpos[v][0], "y": fpos[v][1]} for v in c.vertices]
+        edges = []
+        for e in c.bounded:
+            a = fpos[e.tail]
+            b = fpos[e.head]  # type: ignore[index]
+            edges.append({
+                "id": e.id, "name": e.name, "color": e.color, "kind": "bounded",
+                "weight": e.weight, "from": list(a), "to": list(b),
+            })
+        for e in c.ends:
+            a = fpos[e.tail]
+            u, w = primitive(e.vec)
+            norm = hypot(u.x, u.y) or 1.0
+            b = (a[0] + ray_len * u.x / norm, a[1] + ray_len * u.y / norm)
+            edges.append({
+                "id": e.id, "name": e.name, "color": e.color, "kind": "end",
+                "weight": w, "from": list(a), "to": list(b), "dir": [u.x, u.y],
+            })
+        markings = [
+            {"id": e.id, "name": e.name, "color": e.color, "at": list(fpos[e.tail])}
+            for e in c.markings
+        ]
+        return {"vertices": vertices, "edges": edges, "markings": markings}
