@@ -107,8 +107,21 @@ select, input[type=text], input[type=number] {
 input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
 
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 20; padding: 16px; }
-.modal-card { background: var(--panel); border-radius: 14px; padding: 18px; width: min(460px, 100%); box-shadow: var(--shadow); max-height: 85vh; overflow: auto; }
+.modal-card { background: var(--panel); border-radius: 14px; padding: 18px; width: min(460px, 100%); box-shadow: var(--shadow); max-height: 88vh; overflow: auto; }
+.modal-card.wide { width: min(760px, 100%); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .reslist { display: grid; gap: 8px; }
 .reslist button { text-align: left; }
-.err { color: var(--danger); font-size: 13px; }
+.err { color: var(--danger); font-size: 13px; min-height: 16px; }
+
+/* subdivision editor */
+.editor-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 8px 0; }
+.editor-toolbar label { font-size: 12px; }
+.editor-toolbar input[type=number] { width: 60px; }
+#editor-svg { width: 100%; height: min(56vh, 420px); border: 1px solid var(--line); border-radius: 8px; background: var(--bg); touch-action: manipulation; }
+.editor-status { font-size: 13px; color: var(--muted); margin: 6px 0; }
+.dot-hit { cursor: pointer; }
+.dbg-text { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); padding: 6px; }
+details.dbg { margin-top: 8px; }
+details.dbg summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.copy-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
