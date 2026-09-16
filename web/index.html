@@ -4,7 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Tropical Curves Visualiser</title>
-<link rel="stylesheet" href="styles.css" />
+<!-- ?v= is a cache buster: bump it in BOTH tags below on every deploy so a
+     stale app.js can never be paired with a fresh index.html (see README). -->
+<link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
 <header id="topbar">
@@ -15,6 +17,7 @@
     <button id="btn-save">Export</button>
     <button id="btn-load">Import</button>
     <span id="autosave" class="muted" title="Saved in this browser"></span>
+    <span id="app-version" class="muted" title="Loaded app version (blank means a stale cached app.js)"></span>
   </div>
 </header>
 
@@ -69,6 +72,6 @@
 <a id="download-anchor" hidden></a>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
