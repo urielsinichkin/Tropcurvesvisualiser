@@ -172,9 +172,11 @@ docs/                       # DESIGN.md, POSTPONED.md
 - **P1 — Core model + balancing** (headless, tested): curve data model, geometry,
   the two-ends slope solver, Newton polygon, JSON schema. **[done — 44 tests]**
 - **P2 — Subdivision + layout**: readable layout, generic-chamber mixed
-  subdivision, subdivision import. **[in progress: exact-rational embedding +
-  generic-chamber mixed subdivision (triangles + parallelograms) done and
-  tested; subdivision *import* still to do]**
+  subdivision, subdivision import. **[done: exact-rational embedding +
+  generic-chamber mixed subdivision (triangles + parallelograms); subdivision
+  *import* (`subdivision_import.py`) dualizes cells, opens parallelograms as
+  crossings, validates a genus-0 tree, and is wired into the API/GUI (New → From
+  subdivision). Remaining: readable-length layout optimizer.]**
 - **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
   rename/color; the derivation forest and transitive propagation. **[done —
   operations + Workspace forest with transitive all-or-nothing propagation and

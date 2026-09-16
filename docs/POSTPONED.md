@@ -38,8 +38,14 @@ parametrized tropical curves**.
   subdivision). Deferred: canonical chamber selection, enumerating/among all
   chambers, or letting the user pick a chamber.
 - **Regularity / coherence check** of an imported subdivision: deferred
-  (optional). v1 builds the dual graph and validates the parametrizing curve is
-  a tree, without checking the subdivision is regular.
+  (optional). Import (`subdivision_import.py`) builds the dual graph, opens
+  parallelograms as crossings, and validates the parametrizing curve is a
+  connected genus-0 tree, without checking the subdivision is regular.
+- **Import limitations (v1):** the subdivision must be **edge-to-edge**, and
+  each cell is read as its convex hull, so a genuine subdivision vertex lying in
+  the interior of a cell's edge (e.g. one that splits two parallel ends) is
+  dropped. Non-edge-to-edge subdivisions and preserving such split vertices are
+  deferred.
 - **Higher / multi-edge crossings** (three or more edge-images through one point,
   higher-weight edges crossing -> larger parallelograms / mixed cells): support
   the general mixed-subdivision data model, but rich handling deferred.
