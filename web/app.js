@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "9";
+const APP_VERSION = "10";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -130,25 +130,24 @@ function defaultColorHex() {
 function renderColor(c) { return c || defaultColorForRender(); }
 
 // ---------------------------------------------------------------------------
-// background theme: ONE chosen background color, everything else derived
+// background theme: ONE chosen color, everything else derived
 //
-// Asking for a background, a panel, a border and a text color separately is a
-// lot of decisions and easy to make ugly. Instead the whole palette is
-// computed from the single background: text goes to near-black or near-white
-// depending on the background's luminance (keeping a hint of its hue so it
-// reads as designed), panels step slightly lighter, and borders/muted text are
-// blends between background and text. That stays coherent for ANY background,
-// and the curve panel is derived from the same color, so page and curve
-// backgrounds always match.
+// The color the user picks is the background *behind the curve* (the panel) --
+// that is the one they actually want to control, e.g. to match the paper of
+// another app they paste into. The page background, borders, text and muted
+// text are then derived from it: text goes near-black or near-white by the
+// panel's relative luminance (keeping a hint of its hue so it reads as
+// designed), and the page takes a small step away from the panel so panels
+// still read as raised. That stays coherent for ANY chosen color.
 // ---------------------------------------------------------------------------
 const BG_PRESETS = [
+  ["#ffffff", "White"],
   ["#f7f7f5", "Paper"],
   ["#fdf6e3", "Cream"],
   ["#eef2f7", "Cool grey"],
   ["#e9f0ea", "Sage"],
-  ["#17181a", "Charcoal"],
+  ["#202225", "Charcoal"],
   ["#1b2430", "Slate"],
-  ["#241f2e", "Aubergine"],
   ["#102620", "Forest"],
 ];
 
@@ -168,19 +167,25 @@ function mixRgb(a, b, t) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-function deriveTheme(bgHex) {
-  const bg = hexToRgb(bgHex);
-  const dark = relLum(bg) < 0.4;
+function deriveTheme(panelHex) {
+  const panel = hexToRgb(panelHex);
+  const lum = relLum(panel);
+  const dark = lum < 0.4;
   const toward = dark ? [255, 255, 255] : [0, 0, 0];
-  const ink = mixRgb(bg, toward, dark ? 0.93 : 0.9);
+  const ink = mixRgb(panel, toward, dark ? 0.93 : 0.9);
+  // The page sits a step away from the panel so panels read as raised. Darker
+  // normally; but an (almost) black panel has no room below it, so there we
+  // lift the page instead of leaving the two indistinguishable.
+  const page = lum < 0.01
+    ? mixRgb(panel, [255, 255, 255], 0.13)
+    : mixRgb(panel, [0, 0, 0], dark ? 0.35 : 0.05);
   return {
     dark,
-    bg: rgbToHex(bg),
-    // panels sit a touch lighter than the page in both light and dark
-    panel: rgbToHex(mixRgb(bg, [255, 255, 255], dark ? 0.07 : 0.5)),
+    bg: rgbToHex(page),
+    panel: rgbToHex(panel),
     ink: rgbToHex(ink),
-    muted: rgbToHex(mixRgb(bg, ink, 0.55)),
-    line: rgbToHex(mixRgb(bg, ink, 0.18)),
+    muted: rgbToHex(mixRgb(panel, ink, 0.55)),
+    line: rgbToHex(mixRgb(panel, ink, 0.18)),
     accent: dark ? "#4fae7f" : "#2f6f4f",
     accentInk: dark ? "#10130f" : "#ffffff",
     danger: dark ? "#e06a6a" : "#b23b3b",
@@ -213,14 +218,15 @@ function applyBackgroundTheme(bgHex) {
   st.setProperty("color-scheme", t.dark ? "dark" : "light"); // native controls follow
 }
 
+// The chosen color IS the curve/panel background, so report that one.
 function currentBgHex() {
   const s = loadSettings();
   if (isHex6(s.bgColor)) return s.bgColor;
   try {
-    const v = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--panel").trim();
     if (isHex6(v)) return v;
   } catch (e) { /* ignore */ }
-  return "#f7f7f5";
+  return "#ffffff";
 }
 
 function resolvedVar(name, fallback) {
@@ -424,9 +430,10 @@ function openSettingsDialog() {
       </div>
     </div>
     <h3 style="margin-top:18px">Background</h3>
-    <p class="muted" style="margin:4px 0 8px">Pick one color; panels, borders and
-      text are derived from it, so the page and the curve panel always match.</p>
-    <label>Background color</label>
+    <p class="muted" style="margin:4px 0 8px">This is the background behind the
+      curve — match it to wherever you paste. The page, borders and text are
+      derived from it.</p>
+    <label>Curve background</label>
     <div id="set-bg-slot"></div>
     <div class="swatches" id="bg-swatches"></div>
     <div class="row" style="margin-top:8px">
