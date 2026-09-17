@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "8";
+const APP_VERSION = "9";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -416,34 +416,52 @@ function openSettingsDialog() {
   const body = document.getElementById("modal-body");
   body.innerHTML = `<h2>Display settings</h2>
     <div class="ctrl-group">
-      <label>Default edge / end / marking color
-        <input id="set-default-color" type="color" value="${defaultColorHex()}">
-      </label>
+      <label for="" id="set-default-label">Default edge / end / marking color</label>
+      <div id="set-default-slot"></div>
       <p class="muted" id="set-default-note" style="margin:4px 0 0"></p>
       <div class="row" style="margin-top:8px">
         <button id="set-default-auto" class="small">Use automatic (theme-based)</button>
       </div>
-    </div>`;
-  // --- background: one color, whole palette derived from it ---
-  body.insertAdjacentHTML("beforeend", `
+    </div>
     <h3 style="margin-top:18px">Background</h3>
     <p class="muted" style="margin:4px 0 8px">Pick one color; panels, borders and
       text are derived from it, so the page and the curve panel always match.</p>
-    <label>Background color <input id="set-bg-color" type="color" value="${currentBgHex()}"></label>
+    <label>Background color</label>
+    <div id="set-bg-slot"></div>
     <div class="swatches" id="bg-swatches"></div>
     <div class="row" style="margin-top:8px">
       <button id="set-bg-auto" class="small">Use automatic (system light/dark)</button>
-    </div>`);
-  const setBackground = (hex) => {
+    </div>`;
+
+  const note = document.getElementById("set-default-note");
+  const setNote = () => {
+    note.textContent = isHex6(loadSettings().defaultColor)
+      ? "Applies to any edge, end, or marking left at its default color."
+      : "Automatic: follows your light/dark theme. Applies to any edge, end, or marking left at its default color.";
+  };
+  setNote();
+
+  const defaultField = colorField(s.defaultColor, (hex) => {
+    const s2 = loadSettings(); s2.defaultColor = hex; saveSettings(s2);
+    setNote();
+    if (selectedId) renderSelected();
+  }, { live: true, fallback: defaultColorHex });
+  document.getElementById("set-default-slot").appendChild(defaultField);
+
+  const bgField = colorField(loadSettings().bgColor, (hex) => setBackground(hex),
+    { live: true, fallback: currentBgHex });
+  document.getElementById("set-bg-slot").appendChild(bgField);
+
+  function setBackground(hex) {
     const s2 = loadSettings();
     if (hex) s2.bgColor = hex; else delete s2.bgColor;
     saveSettings(s2);
     applyBackgroundTheme(hex);
-    document.getElementById("set-bg-color").value = currentBgHex();
+    bgField.setValue(hex || null);
     // the default curve color follows the theme when not overridden
-    document.getElementById("set-default-color").value = defaultColorHex();
+    if (!isHex6(loadSettings().defaultColor)) defaultField.setValue(null);
     if (selectedId) renderSelected();
-  };
+  }
   const swatches = document.getElementById("bg-swatches");
   BG_PRESETS.forEach(([hex, label]) => {
     const b = document.createElement("button");
@@ -454,25 +472,10 @@ function openSettingsDialog() {
     b.onclick = () => setBackground(hex);
     swatches.appendChild(b);
   });
-  document.getElementById("set-bg-color").oninput = ev => setBackground(ev.target.value);
   document.getElementById("set-bg-auto").onclick = () => setBackground(null);
-
-  const note = document.getElementById("set-default-note");
-  const setNote = () => {
-    const s2 = loadSettings();
-    note.textContent = isHex6(s2.defaultColor)
-      ? "Applies to any edge, end, or marking left at its default color."
-      : "Automatic: follows your light/dark theme. Applies to any edge, end, or marking left at its default color.";
-  };
-  setNote();
-  document.getElementById("set-default-color").oninput = (ev) => {
-    const s2 = loadSettings(); s2.defaultColor = ev.target.value; saveSettings(s2);
-    setNote();
-    if (selectedId) renderSelected();
-  };
   document.getElementById("set-default-auto").onclick = () => {
     const s2 = loadSettings(); delete s2.defaultColor; saveSettings(s2);
-    document.getElementById("set-default-color").value = defaultColorHex();
+    defaultField.setValue(null);
     setNote();
     if (selectedId) renderSelected();
   };
@@ -1258,18 +1261,72 @@ function nameSpanInput(val, onchange) {
   i.onchange = () => { try { onchange(i.value); } catch (e) { alert(e.message); i.value = val; } };
   return i;
 }
-function colorInput(val, onchange) {
-  const i = document.createElement("input"); i.type = "color";
-  i.value = isHex6(val) ? val : defaultColorHex();
-  i.title = val ? "" : "Using the default color";
-  i.oninput = () => onchange(i.value); return i;
+// Accepts "#rrggbb", "rrggbb", "#rgb" or "rgb"; returns a normalized
+// "#rrggbb", or null if it isn't a colour code.
+function normalizeHex(v) {
+  if (typeof v !== "string") return null;
+  let s = v.trim().replace(/^#/, "");
+  if (/^[0-9a-fA-F]{3}$/.test(s)) s = s.split("").map(c => c + c).join("");
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+  return "#" + s.toLowerCase();
+}
+
+// A colour swatch paired with a hex-code box, kept in sync, so a colour can be
+// picked visually OR typed/pasted exactly (e.g. to match another app).
+// `live`: commit on every valid keystroke (good for dialogs that preview
+// instantly) vs only on Enter/blur (needed where committing rebuilds the
+// surrounding DOM and would yank the field out from under the typist).
+function colorField(value, onSet, { live = true, fallback = defaultColorHex } = {}) {
+  const wrap = document.createElement("span");
+  wrap.className = "color-field";
+  const sw = document.createElement("input");
+  sw.type = "color";
+  sw.value = isHex6(value) ? value : fallback();
+  if (!value) sw.title = "Using the default color";
+  const hex = document.createElement("input");
+  hex.type = "text";
+  hex.className = "hexfield";
+  hex.spellcheck = false;
+  hex.autocapitalize = "off";
+  hex.autocomplete = "off";
+  hex.placeholder = isHex6(value) ? "#rrggbb" : fallback();
+  hex.value = isHex6(value) ? value : "";
+  hex.setAttribute("aria-label", "colour code");
+
+  const apply = (h) => { sw.value = h; hex.classList.remove("bad"); onSet(h); };
+  sw.oninput = () => { hex.value = sw.value; apply(sw.value); };
+  hex.oninput = () => {
+    const n = normalizeHex(hex.value);
+    if (n) { sw.value = n; hex.classList.remove("bad"); if (live) onSet(n); }
+    else hex.classList.add("bad");
+  };
+  const commit = () => {
+    const n = normalizeHex(hex.value);
+    if (n) { hex.value = n; apply(n); }
+    else if (!hex.value.trim()) hex.classList.remove("bad"); // left blank: keep as is
+    else hex.classList.add("bad");
+  };
+  hex.onchange = commit;
+  hex.onblur = commit;
+  hex.onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); commit(); hex.blur(); } };
+
+  wrap.append(sw, hex);
+  wrap.setValue = (h) => {
+    sw.value = isHex6(h) ? h : fallback();
+    hex.value = isHex6(h) ? h : "";
+    hex.placeholder = isHex6(h) ? "#rrggbb" : fallback();
+    hex.classList.remove("bad");
+  };
+  return wrap;
 }
 // A color picker plus a "reset to default" button, shown only once an edge/
 // marking has an explicit color of its own (an empty color means "inherit").
 function colorControl(val, onSet) {
   const wrap = document.createElement("span"); wrap.className = "edge-row";
   wrap.style.gap = "4px";
-  wrap.appendChild(colorInput(val, onSet));
+  // not live: each commit re-renders the controls panel, which would destroy
+  // the field mid-typing
+  wrap.appendChild(colorField(val, onSet, { live: false }));
   if (val) {
     const reset = document.createElement("button");
     reset.type = "button"; reset.className = "small ghost"; reset.textContent = "⟲";

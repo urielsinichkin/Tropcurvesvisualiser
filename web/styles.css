@@ -118,9 +118,17 @@ select, input[type=text], input[type=number] {
   background: var(--bg); color: var(--ink);
 }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
-.edge-row { display: flex; align-items: center; gap: 8px; }
+.edge-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .edge-row .en { flex: 1; min-width: 0; }
 input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+
+/* colour swatch + typable hex code */
+.color-field { display: inline-flex; align-items: center; gap: 6px; }
+.hexfield {
+  width: 86px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px; padding: 5px 6px;
+}
+.hexfield.bad { border-color: var(--danger); }
 
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 20; padding: 16px; }
 .modal-card { background: var(--panel); border-radius: 14px; padding: 18px; width: min(460px, 100%); box-shadow: var(--shadow); max-height: 88vh; overflow: auto; }
