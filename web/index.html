@@ -36,14 +36,20 @@
 
   <section id="views">
     <div class="view">
-      <h2>Curve <span id="curve-name" class="muted"></span></h2>
+      <div class="view-head">
+        <h2>Curve <span id="curve-name" class="muted"></span></h2>
+        <button id="copy-curve" class="small" title="Copy as a PNG with a transparent background">Copy</button>
+      </div>
       <div id="curve-status" class="status"></div>
       <svg id="curve-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
     <div class="view">
       <details id="sub-details">
         <summary><h2>Dual subdivision</h2></summary>
-        <div id="sub-note" class="muted"></div>
+        <div class="view-head">
+          <div id="sub-note" class="muted"></div>
+          <button id="copy-sub" class="small" title="Copy as a PNG including the background">Copy</button>
+        </div>
         <svg id="sub-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
         <details class="dbg" id="sub-debug"></details>
       </details>

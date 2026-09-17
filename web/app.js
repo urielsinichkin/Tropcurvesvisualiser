@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "7";
+const APP_VERSION = "8";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -32,6 +32,7 @@ async function fetchPkgFile(name) {
 async function boot() {
   const ver = document.getElementById("app-version");
   if (ver) ver.textContent = "v" + APP_VERSION;
+  applyBackgroundTheme(loadSettings().bgColor); // before anything is painted
   const msg = document.getElementById("boot-msg");
   msg.textContent = "Loading Python runtime…";
   pyodide = await loadPyodide();
@@ -129,6 +130,108 @@ function defaultColorHex() {
 function renderColor(c) { return c || defaultColorForRender(); }
 
 // ---------------------------------------------------------------------------
+// background theme: ONE chosen background color, everything else derived
+//
+// Asking for a background, a panel, a border and a text color separately is a
+// lot of decisions and easy to make ugly. Instead the whole palette is
+// computed from the single background: text goes to near-black or near-white
+// depending on the background's luminance (keeping a hint of its hue so it
+// reads as designed), panels step slightly lighter, and borders/muted text are
+// blends between background and text. That stays coherent for ANY background,
+// and the curve panel is derived from the same color, so page and curve
+// backgrounds always match.
+// ---------------------------------------------------------------------------
+const BG_PRESETS = [
+  ["#f7f7f5", "Paper"],
+  ["#fdf6e3", "Cream"],
+  ["#eef2f7", "Cool grey"],
+  ["#e9f0ea", "Sage"],
+  ["#17181a", "Charcoal"],
+  ["#1b2430", "Slate"],
+  ["#241f2e", "Aubergine"],
+  ["#102620", "Forest"],
+];
+
+function hexToRgb(h) {
+  const s = String(h).replace("#", "");
+  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+}
+function rgbToHex(c) {
+  const f = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  return "#" + f(c[0]) + f(c[1]) + f(c[2]);
+}
+function relLum(rgb) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
+}
+function mixRgb(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function deriveTheme(bgHex) {
+  const bg = hexToRgb(bgHex);
+  const dark = relLum(bg) < 0.4;
+  const toward = dark ? [255, 255, 255] : [0, 0, 0];
+  const ink = mixRgb(bg, toward, dark ? 0.93 : 0.9);
+  return {
+    dark,
+    bg: rgbToHex(bg),
+    // panels sit a touch lighter than the page in both light and dark
+    panel: rgbToHex(mixRgb(bg, [255, 255, 255], dark ? 0.07 : 0.5)),
+    ink: rgbToHex(ink),
+    muted: rgbToHex(mixRgb(bg, ink, 0.55)),
+    line: rgbToHex(mixRgb(bg, ink, 0.18)),
+    accent: dark ? "#4fae7f" : "#2f6f4f",
+    accentInk: dark ? "#10130f" : "#ffffff",
+    danger: dark ? "#e06a6a" : "#b23b3b",
+    warn: dark ? "#d8a63a" : "#b8860b",
+    shadow: dark ? "0 1px 3px rgba(0,0,0,.4)"
+                 : "0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.05)",
+  };
+}
+
+// Inline custom properties on :root win over the stylesheet's light/dark
+// blocks, so setting them overrides the system theme; removing them restores it.
+function applyBackgroundTheme(bgHex) {
+  const st = document.documentElement.style;
+  if (!isHex6(bgHex)) {
+    ["--bg", "--panel", "--ink", "--muted", "--line", "--accent", "--accent-ink",
+     "--danger", "--warn", "--shadow", "color-scheme"].forEach(p => st.removeProperty(p));
+    return;
+  }
+  const t = deriveTheme(bgHex);
+  st.setProperty("--bg", t.bg);
+  st.setProperty("--panel", t.panel);
+  st.setProperty("--ink", t.ink);
+  st.setProperty("--muted", t.muted);
+  st.setProperty("--line", t.line);
+  st.setProperty("--accent", t.accent);
+  st.setProperty("--accent-ink", t.accentInk);
+  st.setProperty("--danger", t.danger);
+  st.setProperty("--warn", t.warn);
+  st.setProperty("--shadow", t.shadow);
+  st.setProperty("color-scheme", t.dark ? "dark" : "light"); // native controls follow
+}
+
+function currentBgHex() {
+  const s = loadSettings();
+  if (isHex6(s.bgColor)) return s.bgColor;
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    if (isHex6(v)) return v;
+  } catch (e) { /* ignore */ }
+  return "#f7f7f5";
+}
+
+function resolvedVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (v) return v;
+  } catch (e) { /* ignore */ }
+  return fallback;
+}
+
+// ---------------------------------------------------------------------------
 // top-level actions
 // ---------------------------------------------------------------------------
 // Bind defensively: if index.html is an older cached copy that lacks an
@@ -146,6 +249,97 @@ function wireGlobalButtons() {
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("file-input", "onchange", importJSON);
   bind("modal-cancel", "onclick", closeModal);
+  // the curve copies transparent (drop it on any background); the subdivision
+  // copies with its panel background, since its cells are translucent fills
+  bind("copy-curve", "onclick", ev => copyPanelPng("curve-svg", null, ev.target, "curve.png"));
+  bind("copy-sub", "onclick", ev =>
+    copyPanelPng("sub-svg", resolvedVar("--panel", "#ffffff"), ev.target, "subdivision.png"));
+}
+
+// ---------------------------------------------------------------------------
+// copying a panel as a PNG
+// ---------------------------------------------------------------------------
+// The live SVG paints with CSS custom properties (var(--ink), color-mix(...)),
+// which mean nothing once the markup is detached from the document. So the
+// clone gets every paint property resolved to a literal value first, otherwise
+// the exported image comes out black or blank.
+const COPY_SCALE = 2;
+const PAINT_PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray",
+  "stroke-linejoin", "stroke-linecap", "opacity", "fill-opacity", "stroke-opacity",
+  "font-size", "font-family", "font-weight", "text-anchor"];
+
+async function svgToPngBlob(svgId, background) {
+  const live = document.getElementById(svgId);
+  if (!live) throw new Error("nothing to copy");
+  const clone = live.cloneNode(true);
+  clone.setAttribute("xmlns", SVGNS);
+
+  const liveNodes = live.querySelectorAll("*");
+  const cloneNodes = clone.querySelectorAll("*");
+  for (let i = 0; i < liveNodes.length; i++) {
+    const cs = getComputedStyle(liveNodes[i]);
+    for (const p of PAINT_PROPS) {
+      const v = cs.getPropertyValue(p);
+      if (v) cloneNodes[i].setAttribute(p, v.trim());
+    }
+  }
+
+  const vb = (clone.getAttribute("viewBox") || `0 0 ${VBW} ${VBH}`).split(/[\s,]+/).map(Number);
+  const [vx, vy, w, h] = vb;
+  clone.setAttribute("width", w);
+  clone.setAttribute("height", h);
+  if (background) {
+    const rect = document.createElementNS(SVGNS, "rect");
+    rect.setAttribute("x", vx); rect.setAttribute("y", vy);
+    rect.setAttribute("width", w); rect.setAttribute("height", h);
+    rect.setAttribute("fill", background);
+    clone.insertBefore(rect, clone.firstChild);
+  }
+
+  const xml = new XMLSerializer().serializeToString(clone);
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error("could not rasterize the drawing"));
+    img.src = url;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = w * COPY_SCALE;
+  canvas.height = h * COPY_SCALE;
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  return await new Promise((resolve, reject) =>
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error("could not encode the image")), "image/png"));
+}
+
+function flashButton(btn, text) {
+  if (!btn) return;
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = btn.dataset.label; }, 1500);
+}
+
+async function copyPanelPng(svgId, background, btn, filename) {
+  let blob;
+  try {
+    blob = await svgToPngBlob(svgId, background);
+  } catch (e) { flashButton(btn, "Failed"); return; }
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) throw new Error("no clipboard");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    flashButton(btn, "Copied ✓");
+  } catch (e) {
+    // Not every browser allows writing images to the clipboard; still hand the
+    // image over rather than just failing.
+    try {
+      const a = document.getElementById("download-anchor");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      flashButton(btn, "Saved ↓");
+    } catch (e2) { flashButton(btn, "Failed"); }
+  }
 }
 
 function exportJSON() {
@@ -230,6 +424,39 @@ function openSettingsDialog() {
         <button id="set-default-auto" class="small">Use automatic (theme-based)</button>
       </div>
     </div>`;
+  // --- background: one color, whole palette derived from it ---
+  body.insertAdjacentHTML("beforeend", `
+    <h3 style="margin-top:18px">Background</h3>
+    <p class="muted" style="margin:4px 0 8px">Pick one color; panels, borders and
+      text are derived from it, so the page and the curve panel always match.</p>
+    <label>Background color <input id="set-bg-color" type="color" value="${currentBgHex()}"></label>
+    <div class="swatches" id="bg-swatches"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="set-bg-auto" class="small">Use automatic (system light/dark)</button>
+    </div>`);
+  const setBackground = (hex) => {
+    const s2 = loadSettings();
+    if (hex) s2.bgColor = hex; else delete s2.bgColor;
+    saveSettings(s2);
+    applyBackgroundTheme(hex);
+    document.getElementById("set-bg-color").value = currentBgHex();
+    // the default curve color follows the theme when not overridden
+    document.getElementById("set-default-color").value = defaultColorHex();
+    if (selectedId) renderSelected();
+  };
+  const swatches = document.getElementById("bg-swatches");
+  BG_PRESETS.forEach(([hex, label]) => {
+    const b = document.createElement("button");
+    b.className = "swatch";
+    b.style.background = hex;
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.onclick = () => setBackground(hex);
+    swatches.appendChild(b);
+  });
+  document.getElementById("set-bg-color").oninput = ev => setBackground(ev.target.value);
+  document.getElementById("set-bg-auto").onclick = () => setBackground(null);
+
   const note = document.getElementById("set-default-note");
   const setNote = () => {
     const s2 = loadSettings();
