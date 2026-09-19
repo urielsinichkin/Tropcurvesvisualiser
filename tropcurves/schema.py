@@ -107,6 +107,18 @@ def _operation_from_dict(d: Optional[Dict[str, Any]]):
     )
 
 
+def _operations_from_dict(nd: Dict[str, Any]):
+    """The node's derivation steps, in order.
+
+    ``operations`` is a list. Files written before a type could inherit a
+    deleted type's steps carry a single ``operation`` instead, so read that too.
+    """
+    if "operations" in nd:
+        return [_operation_from_dict(d) for d in nd["operations"]]
+    one = _operation_from_dict(nd.get("operation"))
+    return [one] if one is not None else []
+
+
 def workspace_to_dict(ws) -> Dict[str, Any]:
     return {
         "schema": SCHEMA_VERSION,
@@ -116,7 +128,7 @@ def workspace_to_dict(ws) -> Dict[str, Any]:
                 "id": n.id,
                 "name": n.name,
                 "parent_id": n.parent_id,
-                "operation": _operation_to_dict(n.operation),
+                "operations": [_operation_to_dict(op) for op in n.operations],
                 "follow_parent": n.follow_parent,
                 "children": list(n.children),
                 "status": n.status,
@@ -143,7 +155,7 @@ def workspace_from_dict(d: Dict[str, Any]):
             curve=curve_from_dict(nd["curve"]),
             name=nd.get("name", nd["id"]),
             parent_id=nd.get("parent_id"),
-            operation=_operation_from_dict(nd.get("operation")),
+            operations=_operations_from_dict(nd),
             follow_parent=nd.get("follow_parent", True),
             children=list(nd.get("children", [])),
             status=nd.get("status", "ok"),

@@ -1,11 +1,17 @@
 """Workspace: a forest of combinatorial types with edit propagation.
 
 Types (nodes) are derived from one another by contraction/resolution, forming a
-forest. Each node has a ``follow_parent`` flag (default True). Editing a node
-propagates **transitively** to every following descendant by *replaying* that
-descendant's operation on the updated parent, so parent slopes/markings/names/
-colors flow down. A descendant whose ``follow_parent`` is False (and its whole
-subtree) is left untouched.
+forest. Each node records the steps that derive it from its parent -- usually
+one, more once a type in between has been deleted -- and has a
+``follow_parent`` flag (default True). Editing a node propagates
+**transitively** to every following descendant by *replaying* those steps on
+the updated parent, so parent slopes/markings/names/colors flow down. A
+descendant whose ``follow_parent`` is False (and its whole subtree) is left
+untouched.
+
+Deleting a type never removes anything else: its children move up to its
+parent, carrying its steps in front of their own, so each stays the same
+derivation expressed from one type further up.
 
 v1 propagation is all-or-nothing per node. The replay machinery is deliberately
 per-node so that selective (per-element/per-attribute) propagation can be added
@@ -64,7 +70,13 @@ class TypeNode:
     curve: Curve
     name: str
     parent_id: Optional[str] = None
-    operation: Optional[Operation] = None
+    operations: List[Operation] = field(default_factory=list)
+    """How this type is derived from its parent, in order.
+
+    Usually one step. It grows when the type in between is deleted: the
+    deleted type's steps are prepended, so this type is still exactly what it
+    was, now expressed from further up. A root has none.
+    """
     follow_parent: bool = True
     children: List[str] = field(default_factory=list)
     status: str = STATUS_OK
@@ -114,35 +126,44 @@ class Workspace:
             stack.extend(node.children)
         return out
 
-    def delete(self, node_id: str, cascade: bool = False) -> List[str]:
-        """Remove a type; returns the ids actually removed.
+    def delete(self, node_id: str) -> str:
+        """Remove one type. Nothing else is ever removed with it.
 
-        With ``cascade=True`` the whole derived subtree goes too. Otherwise only
-        this type is removed and its children are **detached into independent
-        roots**: a child's recorded operation is defined relative to its
-        parent's curve, so once the parent is gone it can never be replayed --
-        but the child's own curve is still a perfectly good combinatorial type,
-        so it is kept rather than silently discarded.
+        Its derived types take its place rather than being cut loose: each one
+        moves up to the deleted type's parent, with the deleted type's steps
+        prepended to its own, so it is still exactly the same derivation --
+        contract this, then resolve that -- just expressed from one type
+        further up. Deleting a root leaves its children as independent roots,
+        since there is nothing left to derive them from.
+
+        Edits made *directly* to the deleted type (a marking added on it, a
+        recolor) are not part of any recorded step, so they go with it: a
+        later re-derivation rebuilds its children without them. Nothing is
+        re-derived now, though -- deleting one type does not redraw another.
         """
         node = self._get(node_id)
-        if cascade:
-            removed = [node_id] + self.descendants(node_id)
-        else:
-            removed = [node_id]
-            for cid in node.children:
-                child = self.nodes.get(cid)
-                if child is None:
-                    continue
+        parent = self.nodes.get(node.parent_id) if node.parent_id else None
+        for cid in node.children:
+            child = self.nodes.get(cid)
+            if child is None:
+                continue
+            if parent is None:
                 child.parent_id = None
-                child.operation = None
+                child.operations = []
                 child.follow_parent = True
                 child.status = STATUS_OK
-        parent = self.nodes.get(node.parent_id) if node.parent_id else None
+            else:
+                child.parent_id = parent.id
+                child.operations = [*node.operations, *child.operations]
+                # a type that was not following stays not following: the break
+                # was put there on purpose, and merging must not undo it
+                child.follow_parent = child.follow_parent and node.follow_parent
         if parent is not None:
-            parent.children = [c for c in parent.children if c != node_id]
-        for nid in removed:
-            self.nodes.pop(nid, None)
-        return removed
+            # keep the deleted type's place in the parent's list
+            at = parent.children.index(node_id)
+            parent.children[at:at + 1] = node.children
+        self.nodes.pop(node_id, None)
+        return node_id
 
     def _fresh_node_name(self, base: str) -> str:
         used = {n.name for n in self.nodes.values()}
@@ -177,7 +198,7 @@ class Workspace:
                    name: Optional[str]) -> TypeNode:
         nid = self._new_id()
         node = TypeNode(id=nid, curve=curve, name=name or nid,
-                        parent_id=parent.id, operation=op)
+                        parent_id=parent.id, operations=[op])
         self.nodes[nid] = node
         parent.children.append(nid)
         return node
@@ -220,8 +241,8 @@ class Workspace:
             n = self.nodes[nid]
             out.update(n.curve.vertices)
             out.update(n.curve.edges)
-            if n.operation is not None:
-                out.update(x for x in (n.operation.new_vertex_id, n.operation.new_edge_id) if x)
+            for op in n.operations:
+                out.update(x for x in (op.new_vertex_id, op.new_edge_id) if x)
         return out
 
     def _remap_after_split(self, node_id: str, res: EdgeMarkingResult) -> None:
@@ -236,14 +257,15 @@ class Workspace:
         -- instead of failing to replay or quietly degenerating something else.
         """
         for nid in self._following(node_id):
-            op = self.nodes[nid].operation
-            if op is None:
-                continue
-            if op.kind == "resolve" and op.vertex_id == res.moved_flag_vertex:
-                op.side_a = _subst(op.side_a, res.split_edge, res.new_edge)
-                op.side_b = _subst(op.side_b, res.split_edge, res.new_edge)
-            elif op.kind == "contract" and res.split_edge in [op.edge_id, *op.split_pieces]:
-                op.split_pieces = [*op.split_pieces, res.new_edge]
+            for op in self.nodes[nid].operations:
+                self._remap_operation(op, res)
+
+    def _remap_operation(self, op: Operation, res: EdgeMarkingResult) -> None:
+        if op.kind == "resolve" and op.vertex_id == res.moved_flag_vertex:
+            op.side_a = _subst(op.side_a, res.split_edge, res.new_edge)
+            op.side_b = _subst(op.side_b, res.split_edge, res.new_edge)
+        elif op.kind == "contract" and res.split_edge in [op.edge_id, *op.split_pieces]:
+            op.split_pieces = [*op.split_pieces, res.new_edge]
 
     def _following(self, node_id: str) -> List[str]:
         """Descendants reachable through types that follow their parent."""
@@ -294,21 +316,24 @@ class Workspace:
 
     def _rederive(self, node: TypeNode) -> None:
         parent = self.nodes[node.parent_id]  # type: ignore[index]
-        op = node.operation
-        assert op is not None
         try:
-            if op.kind == "contract":
-                curve = parent.curve
-                for eid in [op.edge_id, *op.split_pieces]:
-                    curve = contract_edge(curve, eid).curve  # type: ignore[arg-type]
-                node.curve = curve
-            elif op.kind == "resolve":
-                node.curve = self._replay_resolve(parent.curve, node, op)
-            else:
-                raise ValueError(f"unknown operation {op.kind!r}")
+            curve = parent.curve
+            for op in node.operations:
+                curve = self._replay(curve, node, op)
+            node.curve = curve
             node.status = STATUS_OK
         except Exception:
             node.status = STATUS_NEEDS_ATTENTION
+
+    def _replay(self, curve: Curve, node: TypeNode, op: Operation) -> Curve:
+        """One recorded step, applied to the curve the step before left."""
+        if op.kind == "contract":
+            for eid in [op.edge_id, *op.split_pieces]:
+                curve = contract_edge(curve, eid).curve  # type: ignore[arg-type]
+            return curve
+        if op.kind == "resolve":
+            return self._replay_resolve(curve, node, op)
+        raise ValueError(f"unknown operation {op.kind!r}")
 
     def _replay_resolve(self, parent_curve: Curve, node: TypeNode, op: Operation) -> Curve:
         want = {frozenset(op.side_a), frozenset(op.side_b)}  # type: ignore[arg-type]

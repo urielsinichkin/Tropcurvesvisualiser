@@ -38,13 +38,11 @@ def test_workspace_roundtrip():
             assert m.curve.edges[eid].vec == e.vec
             assert m.curve.edges[eid].color == e.color
             assert m.curve.edges[eid].name == e.name
-        # operation preserved
-        if n.operation is None:
-            assert m.operation is None
-        else:
-            assert m.operation.kind == n.operation.kind
-            assert m.operation.edge_id == n.operation.edge_id
-            assert m.operation.new_edge_id == n.operation.new_edge_id
+        # derivation preserved
+        assert [op.kind for op in m.operations] == [op.kind for op in n.operations]
+        for a, b in zip(m.operations, n.operations):
+            assert a.edge_id == b.edge_id
+            assert a.new_edge_id == b.new_edge_id
 
 
 def test_workspace_counter_continues_after_load():
@@ -71,11 +69,31 @@ def test_split_pieces_survive_a_round_trip():
     root = ws.add_root(builders.caterpillar_square())
     child = ws.contract(root.id, "e")
     ws.add_marking_on_edge(root.id, "e")
-    assert child.operation.split_pieces                    # the edge is in pieces
+    assert child.operations[0].split_pieces                # the edge is in pieces
 
     ws2 = schema.loads_workspace(schema.dumps_workspace(ws))
-    assert ws2.nodes[child.id].operation.split_pieces == child.operation.split_pieces
+    assert (ws2.nodes[child.id].operations[0].split_pieces
+            == child.operations[0].split_pieces)
     # and the reloaded workspace still contracts every piece
     ws2.set_color(root.id, "a", "#123456")
     assert len(ws2.nodes[child.id].curve.vertices) == 1
     assert ws2.nodes[child.id].status == "ok"
+
+
+def test_a_file_written_before_chains_still_loads():
+    # nodes used to record a single "operation"; those files must keep working
+    ws, root, child, grand = _build_workspace()
+    d = schema.workspace_to_dict(ws)
+    for nd in d["nodes"]:
+        ops = nd.pop("operations")
+        if ops:
+            assert len(ops) == 1
+            nd["operation"] = ops[0]
+
+    ws2 = schema.workspace_from_dict(d)
+
+    assert [op.kind for op in ws2.nodes[child.id].operations] == \
+           [op.kind for op in child.operations]
+    assert ws2.nodes[root.id].operations == []
+    ws2.set_color(root.id, "a", "#0000ff")     # and still propagates
+    assert ws2.nodes[child.id].curve.edges["a"].color == "#0000ff"
