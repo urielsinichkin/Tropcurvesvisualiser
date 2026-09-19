@@ -90,14 +90,35 @@ tree** (genus 0) — rather than rejecting interior vertices outright.
 ### 2.5 Layout (readability is a first-class goal)
 
 Slopes are fixed, so only **lengths** and a root position are free. The layout
-pass chooses positive lengths (and root) to make the drawing legible:
+pass chooses positive lengths (and root) to make the drawing legible.
 
-- spread vertices, avoid near-coincident vertices/edges and label collisions,
-- keep a pleasant aspect ratio and margins for the current viewport,
-- keep genuine crossings visually clear.
+The first requirement is that the picture not *invent* structure: a vertex must
+not sit on an edge it is not part of, and two vertices must not coincide. Unit
+lengths are exactly the kind of special point where that happens (about a fifth
+of random types put some vertex precisely on an unrelated edge), and it is
+always an artifact -- the bad length vectors form a measure-zero set -- so
+`readable_lengths` searches for a good one: score a candidate by
+`min_clearance` (nearest vertex to anything it is not part of, as a fraction of
+the picture's span) and take the first that clears the target, mild jitter
+first, wider lengths only if that is not enough. Ends are scored well past the
+length they are drawn at, so a gap cannot come from the ray being cut off; the
+score is scale-invariant, so scaling the drawing cannot fake one either.
 
-Implemented as a constrained optimization / heuristic over the length vector;
-this same embedding feeds the generic-chamber subdivision.
+Two things are deliberately **not** targets. Crossings between edges are real
+(they dualize to parallelograms) and no lengths remove them. And a type whose
+flags at a vertex share a direction has no clear picture at all -- the same
+degeneracy `build_subdivision` reports -- so there the search reports 0 rather
+than pretending.
+
+Still open: spreading vertices beyond mere clearance, label collisions, and
+tuning the aspect ratio to the viewport. This same embedding machinery feeds the
+generic-chamber subdivision.
+
+**Drawing.** Vertices are not drawn: where edges meet already shows them.
+Markings are drawn as discs exactly at their image, with radius proportional to
+`valence - 2` of the vertex they hang from -- one unit for a marking in the
+interior of an edge (internally a trivalent vertex), two for a marked trivalent
+vertex, and so on.
 
 ## 3. Operations
 
@@ -196,7 +217,8 @@ docs/                       # DESIGN.md, POSTPONED.md
   generic-chamber mixed subdivision (triangles + parallelograms); subdivision
   *import* (`subdivision_import.py`) dualizes cells, opens parallelograms as
   crossings, validates a genus-0 tree, and is wired into the API/GUI (New → From
-  subdivision). Remaining: readable-length layout optimizer.]**
+  subdivision); clearance-seeking length choice so no vertex is drawn on an edge
+  it does not meet.]**
 - **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
   rename/color; the derivation forest and transitive propagation. **[done —
   operations + Workspace forest with transitive all-or-nothing propagation and
@@ -216,8 +238,9 @@ docs/                       # DESIGN.md, POSTPONED.md
   default edge/end/marking color (an unset color now renders as `var(--ink)`,
   fixing dark-background readability) with a Colors settings dialog to override
   the default and a per-element reset-to-default control; the dual-subdivision
-  panel is collapsed by default per curve. Remaining: readable-length layout
-  optimizer (currently unit lengths), custom (graph/ends) curve entry, further
-  aesthetic and a11y passes.]**
+  panel is collapsed by default per curve; vertices undrawn and markings drawn
+  on their image, sized by valence; lengths chosen for clearance. Remaining:
+  spreading beyond clearance and label-collision avoidance, custom (graph/ends)
+  curve entry, further aesthetic and a11y passes.]**
 
 Each phase keeps the core independently testable before the GUI depends on it.
