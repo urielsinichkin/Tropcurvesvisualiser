@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "17";
+const APP_VERSION = "18";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -1121,9 +1121,9 @@ function renderControls() {
     };
     const del = document.createElement("button");
     del.className = "small danger";
-    del.textContent = "Delete";
+    del.textContent = "Delete…";
     del.title = "Remove this type; anything derived from it moves up to its parent";
-    del.onclick = deleteSelected;
+    del.onclick = openDeleteDialog;
     wrap.appendChild(row([dup, del]));
     return wrap;
   }));
@@ -1245,25 +1245,56 @@ function clearViews() {
     `<p class="muted">No types yet — use “New” to create one.</p>`;
 }
 
-// Deleting takes one click: nothing else goes with this type. Its derived
-// types move up to its parent, carrying its derivation steps in front of their
-// own, so each of them is still the same derivation expressed from one type
-// further up; the children of a root become roots.
-function deleteSelected() {
-  const summ = api("list_nodes").find(n => n.id === selectedId);
+// Deleting is one type only: nothing else goes with it. Its derived types move
+// up to its parent, carrying its derivation steps in front of their own, so
+// each stays the same derivation expressed from one type further up; the
+// children of a root become roots. There is no undo, so it asks first, and
+// says where the derived types will end up rather than just warning.
+function openDeleteDialog() {
+  const nodes = api("list_nodes");
+  const summ = nodes.find(n => n.id === selectedId);
   if (!summ) return;
-  const parentId = summ.parent_id;
-  try {
-    api("delete", selectedId);
-  } catch (e) { alert(e.message); return; }
-  const remaining = api("list_nodes");
-  let next = null;
-  if (parentId && remaining.some(n => n.id === parentId)) next = parentId;
-  else if (remaining.length) next = remaining[0].id;
-  refreshAll();
-  if (next) selectNode(next);
-  else { selectedId = null; renderTypeList(); clearViews(); }
-  autosave();
+  const kids = (summ.children || []).length;
+  const parent = summ.parent_id ? nodes.find(n => n.id === summ.parent_id) : null;
+
+  let fate = "";
+  if (kids) {
+    const many = kids > 1 ? "s" : "";
+    fate = parent
+      ? ` Its ${kids} derived type${many} will move up to
+         <strong>${escapeHtml(parent.name)}</strong>, keeping the same derivation.`
+      : ` Its ${kids} derived type${many} will become
+         ${kids > 1 ? "independent roots" : "an independent root"}, since nothing
+         would be left to derive ${kids > 1 ? "them" : "it"} from.`;
+  }
+  const body = dialogHead("Delete this type",
+    `<strong>${escapeHtml(summ.name)}</strong> will be removed from the workspace,
+     and nothing else.${fate} This cannot be undone.`);
+
+  const go = document.createElement("button");
+  go.className = "danger";
+  go.textContent = "Delete " + summ.name;
+  go.onclick = () => {
+    const parentId = summ.parent_id;
+    try {
+      api("delete", selectedId);
+    } catch (e) { showModalError(e.message); return; }
+    closeModal();
+    const remaining = api("list_nodes");
+    let next = null;
+    if (parentId && remaining.some(n => n.id === parentId)) next = parentId;
+    else if (remaining.length) next = remaining[0].id;
+    refreshAll();
+    if (next) selectNode(next);
+    else { selectedId = null; renderTypeList(); clearViews(); }
+    autosave();
+  };
+  const box = document.createElement("div");
+  box.className = "reslist"; box.style.marginTop = "10px";
+  box.appendChild(go);
+  body.appendChild(box);
+  body.appendChild(errBox());
+  openModal();
 }
 
 function openSlopeDialog() {
