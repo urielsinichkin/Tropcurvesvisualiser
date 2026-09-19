@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "10";
+const APP_VERSION = "11";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -1143,25 +1143,54 @@ function openMarkingDialog() {
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
   const val = summ.valences || {};
   const body = dialogHead("Add a marking",
-    "A marking is a contracted end (direction 0) attached at a vertex. " +
-    "Pick the vertex to attach it to.");
+    "A marking is a contracted end (direction 0). Attach it at an existing " +
+    "vertex, or part-way along an edge or end &mdash; that subdivides the edge, " +
+    "putting a new vertex between the two pieces and hanging the marking there.");
   body.insertAdjacentHTML("beforeend",
     `<label>Name (optional) <input id="mk-name" type="text" placeholder="auto"></label>`);
-  const list = document.createElement("div");
-  list.className = "reslist"; list.style.marginTop = "10px";
+
+  const mkName = () => (document.getElementById("mk-name").value || "").trim();
+  const run = (method, target) => {
+    try {
+      api(method, selectedId, target, mkName(), "");
+      closeModal(); refreshAll(); autosave();
+    } catch (e) { showModalError(e.message); }
+  };
+
+  const section = (title) => {
+    const h = document.createElement("h3");
+    h.textContent = title;
+    h.style.margin = "14px 0 6px";
+    h.style.fontSize = "14px";
+    body.appendChild(h);
+    const list = document.createElement("div");
+    list.className = "reslist";
+    body.appendChild(list);
+    return list;
+  };
+
+  const atVertex = section("At a vertex");
   data.curve.vertices.forEach(v => {
     const b = document.createElement("button");
     b.textContent = `at ${v.id}` + (val[v.id] ? `  (valence ${val[v.id]})` : "");
-    b.onclick = () => {
-      const nm = (document.getElementById("mk-name").value || "").trim();
-      try {
-        api("add_marking", selectedId, v.id, nm, "");
-        closeModal(); refreshAll(); autosave();
-      } catch (e) { showModalError(e.message); }
-    };
-    list.appendChild(b);
+    b.onclick = () => run("add_marking", v.id);
+    atVertex.appendChild(b);
   });
-  body.appendChild(list);
+
+  const onEdge = section("On an edge or end (subdivides it)");
+  data.curve.edges.forEach(e => {
+    const b = document.createElement("button");
+    b.textContent = `on ${e.name || e.id}  (${e.kind}, direction ${fmtVec(e.vec)})`;
+    b.onclick = () => run("add_marking_on_edge", e.id);
+    onEdge.appendChild(b);
+  });
+  if (!data.curve.edges.length) {
+    const p = document.createElement("p");
+    p.className = "muted"; p.style.margin = "0";
+    p.textContent = "This type has no edges or ends.";
+    onEdge.appendChild(p);
+  }
+
   body.appendChild(errBox());
   openModal();
 }

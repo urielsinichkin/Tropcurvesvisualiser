@@ -25,6 +25,7 @@ from .operations import (
     contract_edge,
     resolutions,
     apply_resolution,
+    add_marking_on_edge,
     Resolution,
 )
 
@@ -181,6 +182,14 @@ class Workspace:
         node = self._get(node_id)
         mid = id or self._fresh_marking_id(node.curve)
         node.curve.add_marking(mid, vertex, name=name or "", color=color)
+        self._propagate(node_id)
+        return mid
+
+    def add_marking_on_edge(self, node_id: str, edge_id: str, *,
+                            name: Optional[str] = None, color: str = "") -> str:
+        """Attach a marking part-way along an edge/end, subdividing it."""
+        node = self._get(node_id)
+        _, _, mid = add_marking_on_edge(node.curve, edge_id, name=name or "", color=color)
         self._propagate(node_id)
         return mid
 

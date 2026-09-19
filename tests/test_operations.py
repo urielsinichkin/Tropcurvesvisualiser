@@ -79,3 +79,64 @@ def test_resolution_crossing_pairing_flagged():
     assert crossing.new_edge_vec == Vec2(0, 0)
     with pytest.raises(ValueError):
         apply_resolution(c4, crossing)
+
+
+def test_marking_on_bounded_edge_subdivides_it():
+    c = builders.caterpillar_square()
+    before_newton = _newton_set(c)
+    v0, w_edge, mid = None, None, None
+    from tropcurves.operations import add_marking_on_edge
+    w, new_edge, mid = add_marking_on_edge(c, "e", name="p")
+    c.validate()  # connected genus-0 tree, balanced, no degenerate edges
+
+    assert len(c.vertices) == 3          # one new vertex on the edge
+    assert len(c.bounded) == 2           # the edge became two pieces
+    assert len(c.markings) == 1
+    # both pieces keep the edge's direction, so they leave w oppositely
+    assert c.edges["e"].vec == c.edges[new_edge].vec
+    assert c.edges["e"].outgoing(w) == -c.edges[new_edge].outgoing(w)
+    assert c.is_balanced() and c.is_tree()
+    assert c.edges[mid].tail == w
+    assert _newton_set(c) == before_newton   # markings are invisible in Delta
+
+
+def test_marking_on_end_keeps_the_end_identity():
+    c = builders.caterpillar_square()
+    before_newton = _newton_set(c)
+    before_vec = c.edges["a"].vec
+    from tropcurves.operations import add_marking_on_edge
+    w, new_edge, mid = add_marking_on_edge(c, "a")
+    c.validate()
+
+    # 'a' is still an end, with the same direction, now leaving the new vertex
+    assert c.edges["a"].kind is EdgeKind.END
+    assert c.edges["a"].vec == before_vec
+    assert c.edges["a"].tail == w
+    # the piece towards the original vertex is a new bounded edge
+    assert c.edges[new_edge].kind is EdgeKind.BOUNDED
+    assert c.edges[new_edge].head == w
+    assert len(c.ends) == 4              # still four ends
+    assert _newton_set(c) == before_newton
+    assert c.is_balanced() and c.is_tree()
+
+
+def test_marking_on_marking_rejected():
+    from tropcurves.operations import add_marking_on_edge
+    c = builders.caterpillar_square()
+    c.add_marking("m1", "v0")
+    with pytest.raises(ValueError):
+        add_marking_on_edge(c, "m1")
+
+
+def test_marking_on_edge_leaves_the_dual_subdivision_unchanged():
+    # a marking is invisible in the Newton polygon, and subdividing an edge
+    # into two collinear pieces must not change the dual subdivision either
+    from tropcurves.operations import add_marking_on_edge
+    from tropcurves.subdivision import build_subdivision
+    c = builders.caterpillar_square()
+    before = sorted(tuple(sorted((v.x, v.y) for v in cell.vertices))
+                    for cell in build_subdivision(c).cells)
+    add_marking_on_edge(c, "e")
+    after = sorted(tuple(sorted((v.x, v.y) for v in cell.vertices))
+                   for cell in build_subdivision(c).cells)
+    assert after == before
