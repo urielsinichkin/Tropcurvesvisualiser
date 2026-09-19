@@ -31,7 +31,12 @@ The object of record is **tree + slopes + markings**, plus presentation
 - **Ends** (unbounded edges): attached to one vertex, carry an integer
   direction vector (weight * primitive), pointing outward.
 - **Markings**: contracted ends (direction 0) attached at a vertex. Invisible
-  in the Newton polygon. Named, colored.
+  in the Newton polygon. Named, colored. A marking can also be placed *on* an
+  edge or end: the edge is subdivided at a new vertex, both pieces keeping the
+  original direction vector, and the marking hangs at that vertex. The new
+  vertex is then balanced automatically (the two pieces leave it in opposite
+  directions and the marking contributes zero), the curve stays a tree, and the
+  dual subdivision is unchanged.
 - **Presentation**: every end, marking, and edge has a **name** (unique within
   the type) and a **display color**.
 
@@ -105,7 +110,10 @@ this same embedding feeds the generic-chamber subdivision.
   a zero-vector edge is the crossing case. All valid pairings are shown, labeled
   embedded vs crossing. (>= 5-valent: deferred.)
 - **Edit slopes**: the two-ends mechanism (2.2).
-- **Add / remove markings**: contracted ends at a chosen vertex.
+- **Add / remove markings**: contracted ends at a chosen vertex, or on a
+  chosen edge/end (subdividing it as in 2.1). Subdividing an end keeps the
+  original id and name on the unbounded piece, so slope editing and the Newton
+  polygon are unaffected.
 - **Rename**: ends, markings, edges (uniqueness enforced within a type).
 - **Recolor**: any end, marking, or edge.
 

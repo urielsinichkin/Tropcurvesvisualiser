@@ -122,6 +122,12 @@ class Session:
         mid = self.ws.add_marking(node_id, vertex, name=name or None, color=color)
         return {"marking_id": mid, **self.node_summary(node_id)}
 
+    def add_marking_on_edge(self, node_id: str, edge_id: str, name: str = "",
+                            color: str = "") -> Dict[str, Any]:
+        """Attach a marking part-way along an edge/end, subdividing it."""
+        mid = self.ws.add_marking_on_edge(node_id, edge_id, name=name or None, color=color)
+        return {"marking_id": mid, **self.node_summary(node_id)}
+
     def remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
         self.ws.remove_marking(node_id, marking_id)
         return self.node_summary(node_id)
