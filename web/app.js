@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "13";
+const APP_VERSION = "14";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -128,6 +128,11 @@ function defaultColorHex() {
 }
 // The color to actually draw for an edge/end/marking ("" means "use default").
 function renderColor(c) { return c || defaultColorForRender(); }
+
+// Labels are shown unless turned off, so an older saved settings blob (which
+// has neither key) keeps the behaviour it had.
+function showEdgeLabels(s) { return (s || loadSettings()).edgeLabels !== false; }
+function showMarkingLabels(s) { return (s || loadSettings()).markingLabels !== false; }
 
 // ---------------------------------------------------------------------------
 // background theme: ONE chosen color, everything else derived
@@ -429,6 +434,11 @@ function openSettingsDialog() {
         <button id="set-default-auto" class="small">Use automatic (theme-based)</button>
       </div>
     </div>
+    <h3 style="margin-top:18px">Labels</h3>
+    <p class="muted" style="margin:4px 0 8px">Names drawn next to each element.
+      They are placed clear of the curve, so hiding them frees up room.</p>
+    <label class="check"><input type="checkbox" id="set-edge-labels"> Edge and end names</label>
+    <label class="check"><input type="checkbox" id="set-mark-labels"> Marking names</label>
     <h3 style="margin-top:18px">Background</h3>
     <p class="muted" style="margin:4px 0 8px">This is the background behind the
       curve — match it to wherever you paste. The page, borders and text are
@@ -454,6 +464,19 @@ function openSettingsDialog() {
     if (selectedId) renderSelected();
   }, { live: true, fallback: defaultColorHex });
   document.getElementById("set-default-slot").appendChild(defaultField);
+
+  const bindLabelToggle = (id, key) => {
+    const box = document.getElementById(id);
+    box.checked = loadSettings()[key] !== false;
+    box.onchange = () => {
+      const s2 = loadSettings();
+      if (box.checked) delete s2[key]; else s2[key] = false;
+      saveSettings(s2);
+      if (selectedId) renderSelected();
+    };
+  };
+  bindLabelToggle("set-edge-labels", "edgeLabels");
+  bindLabelToggle("set-mark-labels", "markingLabels");
 
   const bgField = colorField(loadSettings().bgColor, (hex) => setBackground(hex),
     { live: true, fallback: currentBgHex });
@@ -827,18 +850,28 @@ function drawCurve(data) {
   c.edges.forEach(e => { pts.push(e.from); pts.push(e.to); });
   c.vertices.forEach(v => pts.push([v.x, v.y]));
   const T = fitTransform(pts);
+  const settings = loadSettings();
+
+  // The picture is drawn first and the labels last, against everything already
+  // in it: a label sitting on an edge or on another label reads as part of the
+  // drawing rather than as a name for it.
+  const segments = [];   // drawn edges, as obstacles
+  const discs = [];      // drawn markings, as obstacles
+  const wanted = [];     // labels still to place
 
   c.edges.forEach(e => {
     const a = T(e.from), b = T(e.to);
     const col = renderColor(e.color);
+    const width = e.kind === "bounded" ? 3 : 2;
     svg.appendChild(svgEl("line", {
       x1: a[0], y1: a[1], x2: b[0], y2: b[1],
-      stroke: col, "stroke-width": e.kind === "bounded" ? 3 : 2,
-      "stroke-dasharray": e.kind === "end" ? "" : "",
+      stroke: col, "stroke-width": width,
     }));
-    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    segments.push({ a: a, b: b, half: width / 2 });
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
-    svg.appendChild(text(mx, my - 4, lbl, col));
+    if (showEdgeLabels(settings) && lbl) {
+      wanted.push({ text: lbl, color: col, kind: "edge", a: a, b: b });
+    }
   });
   // Vertices are not drawn: where edges meet already shows them, and a dot at
   // every one competes with the markings, which are the points that carry
@@ -854,8 +887,141 @@ function drawCurve(data) {
       cx: p[0], cy: p[1], r: r, fill: col,
       stroke: "var(--panel)", "stroke-width": 1.5,
     }));
-    svg.appendChild(text(p[0] + r + 6, p[1] - 4, m.name, col));
+    discs.push({ p: p, r: r });
+    if (showMarkingLabels(settings) && m.name) {
+      wanted.push({ text: m.name, color: col, kind: "mark", p: p, r: r });
+    }
   });
+
+  placeLabels(svg, wanted, segments, discs);
+}
+
+// ---------------------------------------------------------------------------
+// label placement
+//
+// Each label is tried at a series of spots near what it names, nearest first,
+// and takes the first that hits nothing: no edge, no marking, no label already
+// placed, and nothing over the panel's edge. A crowded picture can leave no
+// such spot, and then the least-bad one is used -- a label pushed somewhere
+// arbitrary would be worse than one slightly crowded.
+// ---------------------------------------------------------------------------
+const LBL_PAD = 2;      // breathing room around a label's box
+const LBL_EDGE = 3;     // keep labels off the very edge of the panel
+
+function placeLabels(svg, wanted, segments, discs) {
+  const placed = [];
+  wanted.forEach(req => {
+    const el = text(0, 0, req.text, req.color);
+    el.setAttribute("dominant-baseline", "middle");
+    svg.appendChild(el);
+    const box = measureLabel(el, req.text);
+    const candidates = req.kind === "edge"
+      ? edgeLabelSpots(req, box)
+      : markLabelSpots(req, box);
+
+    let best = null, bestScore = Infinity;
+    for (let i = 0; i < candidates.length; i++) {
+      const rect = labelRect(candidates[i], box);
+      const score = labelPenalty(rect, segments, discs, placed);
+      if (score < bestScore) { bestScore = score; best = { at: candidates[i], rect: rect }; }
+      if (score === 0) break;
+    }
+    el.setAttribute("x", best.at[0]);
+    el.setAttribute("y", best.at[1]);
+    placed.push(best.rect);
+  });
+}
+
+function labelRect(at, box) {
+  return {
+    x: at[0] - box.w / 2 - LBL_PAD, y: at[1] - box.h / 2 - LBL_PAD,
+    w: box.w + 2 * LBL_PAD, h: box.h + 2 * LBL_PAD,
+  };
+}
+
+// getBBox needs the element in a rendered document; fall back to an estimate
+// when it is not (a hidden panel, a detached clone).
+function measureLabel(el, s) {
+  try {
+    const b = el.getBBox();
+    if (b.width > 0 && b.height > 0) return { w: b.width, h: b.height };
+  } catch (e) { /* not rendered */ }
+  return { w: 0.58 * 13 * s.length, h: 13 };
+}
+
+function labelPenalty(rect, segments, discs, placed) {
+  let n = 0;
+  if (!insideCanvas(rect)) n++;
+  for (const s of segments) if (rectHitsSegment(rect, s)) n++;
+  for (const d of discs) if (rectHitsDisc(rect, d)) n++;
+  for (const p of placed) if (rectsOverlap(rect, p)) n++;
+  return n;
+}
+
+// Spots along an edge, close in and near the middle first, on both sides.
+function edgeLabelSpots(req, box) {
+  const ax = req.a[0], ay = req.a[1];
+  const dx = req.b[0] - ax, dy = req.b[1] - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;      // unit normal
+  const out = [];
+  for (const gap of [5, 13, 22, 32]) {
+    const off = box.h / 2 + gap;
+    for (const t of [0.5, 0.38, 0.62, 0.26, 0.74, 0.14, 0.86]) {
+      for (const side of [1, -1]) {
+        out.push([ax + dx * t + nx * off * side, ay + dy * t + ny * off * side]);
+      }
+    }
+  }
+  return out;
+}
+
+// Spots around a marking's disc, closest ring first.
+function markLabelSpots(req, box) {
+  const dirs = [[1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1]];
+  const out = [];
+  for (const gap of [6, 14, 24, 36]) {
+    for (const d of dirs) {
+      const n = Math.hypot(d[0], d[1]) || 1;
+      const ux = d[0] / n, uy = d[1] / n;
+      const reach = req.r + gap + (Math.abs(ux) * box.w + Math.abs(uy) * box.h) / 2;
+      out.push([req.p[0] + ux * reach, req.p[1] + uy * reach]);
+    }
+  }
+  return out;
+}
+
+function insideCanvas(r) {
+  return r.x >= LBL_EDGE && r.y >= LBL_EDGE &&
+         r.x + r.w <= VBW - LBL_EDGE && r.y + r.h <= VBH - LBL_EDGE;
+}
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+function rectHitsDisc(r, d) {
+  const nx = Math.max(r.x, Math.min(d.p[0], r.x + r.w));
+  const ny = Math.max(r.y, Math.min(d.p[1], r.y + r.h));
+  const dx = d.p[0] - nx, dy = d.p[1] - ny;
+  return dx * dx + dy * dy < (d.r + 1) * (d.r + 1);
+}
+function rectHitsSegment(r, seg) {
+  const pad = seg.half + 1;   // the stroke has width, so grow the box by it
+  const R = { x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad };
+  const x2 = R.x + R.w, y2 = R.y + R.h;
+  if (pointInRect(seg.a, R) || pointInRect(seg.b, R)) return true;
+  return segsCross(seg.a, seg.b, [R.x, R.y], [x2, R.y]) ||
+         segsCross(seg.a, seg.b, [x2, R.y], [x2, y2]) ||
+         segsCross(seg.a, seg.b, [x2, y2], [R.x, y2]) ||
+         segsCross(seg.a, seg.b, [R.x, y2], [R.x, R.y]);
+}
+function pointInRect(p, r) {
+  return p[0] >= r.x && p[0] <= r.x + r.w && p[1] >= r.y && p[1] <= r.y + r.h;
+}
+function segsCross(p1, p2, q1, q2) {
+  const side = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = side(q1, q2, p1), d2 = side(q1, q2, p2);
+  const d3 = side(p1, p2, q1), d4 = side(p1, p2, q2);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
 }
 
 function drawSubdivision(data) {

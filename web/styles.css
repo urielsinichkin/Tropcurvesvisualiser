@@ -113,6 +113,7 @@ svg { width: 100%; height: 320px; background: transparent; border: 1px solid var
 .ctrl-group { display: grid; gap: 8px; }
 .ctrl-group h3 { font-size: 13px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 label { font-size: 13px; display: grid; gap: 3px; }
+label.check { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; margin: 2px 0; }
 select, input[type=text], input[type=number] {
   font: inherit; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line);
   background: var(--bg); color: var(--ink);

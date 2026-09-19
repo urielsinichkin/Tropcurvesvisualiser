@@ -120,6 +120,16 @@ Markings are drawn as discs exactly at their image, with radius proportional to
 interior of an edge (internally a trivalent vertex), two for a marked trivalent
 vertex, and so on.
 
+**Labels.** Names are drawn last, against everything already in the picture. A
+label that lands on an edge, a marking or another label reads as part of the
+drawing rather than as a name for it, so each one is tried at a series of spots
+near what it names -- along its edge on both sides, or around its disc --
+nearest first, and takes the first that hits nothing and stays inside the panel.
+A picture crowded enough to have no clear spot falls back to the least-bad one
+rather than flinging the label somewhere unattached. Edge names and marking
+names can each be turned off in Display settings (stored per browser, like the
+colors).
+
 ## 3. Operations
 
 - **Contract edge** (bounded edges only): merge the two endpoints; dually erase
