@@ -36,6 +36,9 @@ class Session:
 
     def load(self, text: str) -> None:
         self.ws = schema.loads_workspace(text)
+        # A replay that failed when the file was written may well succeed now,
+        # so give every type marked needs_attention one chance to heal.
+        self.ws.retry_failed()
 
     # --- creating types -------------------------------------------------
     def add_preset(self, name: str) -> Dict[str, Any]:
@@ -142,6 +145,11 @@ class Session:
 
     def set_follow(self, node_id: str, follow: bool) -> Dict[str, Any]:
         self.ws.set_follow(node_id, follow)
+        return self.node_summary(node_id)
+
+    def retry(self, node_id: str) -> Dict[str, Any]:
+        """Re-derive a type from its parent (for one marked needs_attention)."""
+        self.ws.retry(node_id)
         return self.node_summary(node_id)
 
     def rename_node(self, node_id: str, name: str) -> Dict[str, Any]:

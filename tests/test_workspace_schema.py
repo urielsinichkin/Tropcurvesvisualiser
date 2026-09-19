@@ -62,3 +62,20 @@ def test_loaded_workspace_still_propagates():
     assert ws2.nodes[child.id].curve.edges["b"].color == "#00ff00"
     # grand had follow_parent = False -> unchanged
     assert ws2.nodes[grand.id].curve.edges["b"].color != "#00ff00"
+
+
+def test_split_pieces_survive_a_round_trip():
+    from tropcurves.workspace import Workspace
+
+    ws = Workspace()
+    root = ws.add_root(builders.caterpillar_square())
+    child = ws.contract(root.id, "e")
+    ws.add_marking_on_edge(root.id, "e")
+    assert child.operation.split_pieces                    # the edge is in pieces
+
+    ws2 = schema.loads_workspace(schema.dumps_workspace(ws))
+    assert ws2.nodes[child.id].operation.split_pieces == child.operation.split_pieces
+    # and the reloaded workspace still contracts every piece
+    ws2.set_color(root.id, "a", "#123456")
+    assert len(ws2.nodes[child.id].curve.vertices) == 1
+    assert ws2.nodes[child.id].status == "ok"

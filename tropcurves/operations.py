@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .curve import Curve, Edge, EdgeKind
 from .geometry import Vec2, ZERO
@@ -156,8 +156,28 @@ def apply_resolution(curve: Curve, res: Resolution,
     return ResolveResult(curve=new, vertex_a=va, vertex_b=vb, new_edge=eid_new, vertex_map=vmap)
 
 
+@dataclass
+class EdgeMarkingResult:
+    """What :func:`add_marking_on_edge` did -- an element map for propagation.
+
+    ``split_edge`` kept the subdivided edge's id and ``new_edge`` is the piece
+    that was cut off it. At ``moved_flag_vertex`` -- the endpoint that ended up
+    on the far side of the new vertex -- the flag that used to be ``split_edge``
+    is now ``new_edge``; every other flag in the curve is untouched. Derived
+    types record their operations by flag id, so this is what they need in
+    order to keep meaning the same thing (see ``Workspace._remap_after_split``).
+    """
+
+    vertex: str               # the new vertex, carrying the marking
+    new_edge: str             # the bounded piece cut off the original edge
+    marking: str
+    split_edge: str           # the piece that kept the original id
+    moved_flag_vertex: str
+
+
 def add_marking_on_edge(curve: Curve, edge_id: str, *, marking_id: Optional[str] = None,
-                        name: str = "", color: str = "") -> Tuple[str, str, str]:
+                        name: str = "", color: str = "",
+                        reserved: Iterable[str] = ()) -> EdgeMarkingResult:
     """Attach a marking part-way along an edge or end. Mutates ``curve``.
 
     The edge is subdivided: a new vertex is introduced on it and both pieces
@@ -171,7 +191,9 @@ def add_marking_on_edge(curve: Curve, edge_id: str, *, marking_id: Optional[str]
     are what slope editing refers to -- and the new bounded piece gets a fresh
     id. For a bounded edge the original id stays on the tail-side piece.
 
-    Returns ``(new_vertex_id, new_edge_id, marking_id)``.
+    ``reserved`` names ids that must not be handed out even though they are
+    free in this curve; the workspace passes the ids its derived types have
+    already claimed, so a subdivision here cannot collide with them there.
     """
     e = curve.edges.get(edge_id)
     if e is None:
@@ -179,40 +201,47 @@ def add_marking_on_edge(curve: Curve, edge_id: str, *, marking_id: Optional[str]
     if e.kind is EdgeKind.MARKING:
         raise ValueError("a marking cannot carry another marking")
 
-    w = _fresh_vertex_id(curve, e.tail)
+    reserved = frozenset(reserved)
+    w = _fresh_vertex_id(curve, e.tail, reserved)
     curve.add_vertex(w)
-    new_edge_id = _fresh_edge_id(curve)
+    new_edge_id = _fresh_edge_id(curve, reserved)
 
     if e.kind is EdgeKind.BOUNDED:
         head = e.head
         e.head = w                                      # tail --e--> w
         curve.add_bounded(new_edge_id, w, head, e.vec)  # w --new--> head
+        moved = head
     else:
         tail = e.tail
         curve.add_bounded(new_edge_id, tail, w, e.vec)  # tail --new--> w
         e.tail = w                                      # the end now leaves w
+        moved = tail
 
-    mid = marking_id or _fresh_marking_id(curve)
+    mid = marking_id or _fresh_marking_id(curve, reserved)
     curve.add_marking(mid, w, name=name, color=color)
-    return w, new_edge_id, mid
+    return EdgeMarkingResult(vertex=w, new_edge=new_edge_id, marking=mid,
+                             split_edge=edge_id, moved_flag_vertex=moved)  # type: ignore[arg-type]
 
 
-def _fresh_marking_id(curve: Curve) -> str:
+def _fresh_marking_id(curve: Curve, reserved: Iterable[str] = ()) -> str:
+    taken = set(curve.edges) | set(reserved)
     for i in itertools.count(1):
         cand = f"m{i}"
-        if cand not in curve.edges:
+        if cand not in taken:
             return cand
 
 
-def _fresh_vertex_id(curve: Curve, base: str) -> str:
+def _fresh_vertex_id(curve: Curve, base: str, reserved: Iterable[str] = ()) -> str:
+    taken = set(curve._vset) | set(reserved)
     for i in itertools.count(1):
         cand = f"{base}_{i}"
-        if cand not in curve._vset:
+        if cand not in taken:
             return cand
 
 
-def _fresh_edge_id(curve: Curve) -> str:
+def _fresh_edge_id(curve: Curve, reserved: Iterable[str] = ()) -> str:
+    taken = set(curve.edges) | set(reserved)
     for i in itertools.count(1):
         cand = f"edge_{i}"
-        if cand not in curve.edges:
+        if cand not in taken:
             return cand
