@@ -77,12 +77,13 @@ def test_resolve_new_edge_presentation_preserved_on_replay():
     v = child.curve.vertices[0]
     res = resolutions(child.curve, v)[0]
     grand = ws.resolve(child.id, res)
-    ws.rename_edge(grand.id, grand.operation.new_edge_id, "middle")
-    ws.set_color(grand.id, grand.operation.new_edge_id, "#777777")
+    inserted = grand.operations[0].new_edge_id
+    ws.rename_edge(grand.id, inserted, "middle")
+    ws.set_color(grand.id, inserted, "#777777")
     # editing the root re-derives grand; the inserted edge keeps its name/color
     ws.set_color(root.id, "a", "#010101")
-    assert grand.curve.edges[grand.operation.new_edge_id].name == "middle"
-    assert grand.curve.edges[grand.operation.new_edge_id].color == "#777777"
+    assert grand.curve.edges[inserted].name == "middle"
+    assert grand.curve.edges[inserted].color == "#777777"
 
 
 def test_duplicate_copies_curve_as_independent_root():
@@ -92,9 +93,9 @@ def test_duplicate_copies_curve_as_independent_root():
 
     dup = ws.duplicate(root.id)
 
-    # an independent root: no parent, no operation, none of root's children
+    # an independent root: no parent, no derivation, none of root's children
     assert dup.parent_id is None
-    assert dup.operation is None
+    assert dup.operations == []
     assert dup.children == []
     assert dup.id != root.id
     # same content
@@ -131,27 +132,25 @@ def test_duplicate_names_avoid_collisions():
 
 def test_delete_leaf_removes_it_and_unlinks_from_parent():
     ws, root, child = _root_and_contracted()
-    removed = ws.delete(child.id)
-    assert removed == [child.id]
+    assert ws.delete(child.id) == child.id
     assert child.id not in ws.nodes
     assert child.id not in root.children
     assert root.id in ws.nodes
 
 
-def test_delete_detaches_children_into_roots_by_default():
+def test_deleting_a_root_leaves_its_children_as_roots():
     ws, root, child = _root_and_contracted()
     v = child.curve.vertices[0]
     grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
     before = {e.id: e.vec for e in child.curve.bounded}
 
-    removed = ws.delete(root.id)
+    assert ws.delete(root.id) == root.id
 
-    assert removed == [root.id]
     assert root.id not in ws.nodes
-    # the derived types survive, promoted to independent roots
+    # the derived types survive; nothing is left to derive the child from
     assert child.id in ws.nodes and grand.id in ws.nodes
     assert child.parent_id is None
-    assert child.operation is None      # can't be replayed without its parent
+    assert child.operations == []
     assert child.status == STATUS_OK
     assert {e.id: e.vec for e in child.curve.bounded} == before  # curve intact
     # the grandchild still hangs off the child, which is untouched
@@ -159,15 +158,49 @@ def test_delete_detaches_children_into_roots_by_default():
     assert grand.id in child.children
 
 
-def test_delete_cascade_removes_the_whole_subtree():
+def test_deleting_a_middle_type_moves_its_children_up():
     ws, root, child = _root_and_contracted()
     v = child.curve.vertices[0]
     grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    before = {e.id: e.vec for e in grand.curve.bounded}
+    steps = [op.kind for op in child.operations] + [op.kind for op in grand.operations]
 
-    removed = ws.delete(root.id, cascade=True)
+    ws.delete(child.id)
 
-    assert set(removed) == {root.id, child.id, grand.id}
-    assert ws.nodes == {}
+    assert child.id not in ws.nodes
+    assert grand.parent_id == root.id
+    assert root.children == [grand.id]                    # in the deleted one's place
+    assert [op.kind for op in grand.operations] == steps  # the same derivation
+    assert {e.id: e.vec for e in grand.curve.bounded} == before
+    assert grand.status == STATUS_OK
+
+
+def test_an_inherited_derivation_still_replays():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    ws.delete(child.id)
+    before = {e.id: e.vec for e in grand.curve.bounded}
+
+    ws.set_color(root.id, "a", "#ff0000")                 # propagates to grand
+
+    assert grand.status == STATUS_OK
+    assert grand.curve.edges["a"].color == "#ff0000"      # the edit arrived
+    assert {e.id: e.vec for e in grand.curve.bounded} == before   # unchanged
+    grand.curve.validate()
+
+
+def test_a_break_in_propagation_survives_the_delete():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    ws.set_follow(child.id, False)      # stop edits to root here
+
+    ws.delete(child.id)
+
+    assert grand.follow_parent is False
+    ws.set_color(root.id, "a", "#ff0000")
+    assert grand.curve.edges["a"].color != "#ff0000"
 
 
 def test_descendants_are_transitive():
@@ -219,7 +252,7 @@ def test_subdivision_does_not_steal_ids_a_child_already_uses():
     four = ws.contract(root.id, "e")
     v = four.curve.vertices[0]
     child = ws.resolve(four.id, resolutions(four.curve, v)[0])
-    claimed = {child.operation.new_vertex_id, child.operation.new_edge_id}
+    claimed = {child.operations[0].new_vertex_id, child.operations[0].new_edge_id}
 
     ws.add_marking_on_edge(four.id, "a")
 
@@ -254,10 +287,10 @@ def test_stale_recorded_pairing_is_repaired_on_replay():
     four = ws.contract(root.id, "e")
     v = four.curve.vertices[0]
     child = ws.resolve(four.id, resolutions(four.curve, v)[0])
-    recorded = child.operation.side_a, child.operation.side_b
+    recorded = child.operations[0].side_a, child.operations[0].side_b
     ws.add_marking_on_edge(four.id, "a")
 
-    op = child.operation
+    op = child.operations[0]
     op.side_a, op.side_b = recorded            # rewind to the pre-edit ids
     child.status = STATUS_NEEDS_ATTENTION
     healed = ws.retry_failed()
@@ -267,3 +300,22 @@ def test_stale_recorded_pairing_is_repaired_on_replay():
     child.curve.validate()
     # the record now names the stub that took 'a'-s place at the vertex
     assert "a" not in op.side_a + op.side_b
+
+
+def test_deleting_twice_keeps_composing_the_derivation():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    mid = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    leaf = ws.contract(mid.id, [e.id for e in mid.curve.bounded][0])
+    before = {e.id: e.vec for e in leaf.curve.bounded}
+
+    ws.delete(child.id)
+    ws.delete(mid.id)
+
+    assert leaf.parent_id == root.id
+    assert [op.kind for op in leaf.operations] == ["contract", "resolve", "contract"]
+    ws.set_color(root.id, "a", "#00ff00")      # still re-derivable from the root
+    assert leaf.status == STATUS_OK
+    assert leaf.curve.edges["a"].color == "#00ff00"
+    assert {e.id: e.vec for e in leaf.curve.bounded} == before
+    leaf.curve.validate()

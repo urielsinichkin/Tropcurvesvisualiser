@@ -152,7 +152,8 @@ colors).
 
 Types form a **forest**: contraction/resolution create a **child** with a
 recorded operation and an **element map** to the parent (child = parent minus
-contracted edge; or parent plus new resolution edge(s)).
+contracted edge; or parent plus new resolution edge(s)). A child records its
+derivation as an ordered list of such steps, normally one.
 
 - Each type has a **`follow_parent`** flag (default true).
 - Propagation is **transitive**: an edit to a type flows to following children,
@@ -175,6 +176,15 @@ contracted edge; or parent plus new resolution edge(s)).
   this) is repaired on replay when the correspondence is forced -- exactly one
   recorded flag gone and one unaccounted for -- and loading a workspace retries
   everything marked needs attention.
+- **Deleting** a type removes that type and nothing else, with no questions
+  asked. Its derived types take its place: each moves up to the deleted type's
+  parent with the deleted type's steps prepended to its own, so it is still the
+  same derivation, expressed from one type further up, and edits keep reaching
+  it. The children of a deleted **root** become roots, there being nothing left
+  to derive them from; a `follow_parent = false` break is kept rather than
+  silently healed. Edits made directly to the deleted type (a marking added on
+  it, a recolor) are not part of any step, so a later re-derivation of its
+  children no longer carries them.
 - The propagation engine is built as a **per-element/per-attribute rule set**
   that currently resolves to all-or-nothing (the single flag), so **selective
   propagation** can be enabled later without reworking the model.

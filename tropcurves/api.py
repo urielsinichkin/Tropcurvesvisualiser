@@ -165,10 +165,10 @@ class Session:
         """Ids of every type derived from this one, transitively."""
         return self.ws.descendants(node_id)
 
-    def delete(self, node_id: str, cascade: bool = False) -> Dict[str, Any]:
-        """Delete a type (see ``Workspace.delete``); returns what was removed."""
-        removed = self.ws.delete(node_id, cascade=cascade)
-        return {"removed": removed, "remaining": [n for n in self.ws.nodes]}
+    def delete(self, node_id: str) -> Dict[str, Any]:
+        """Delete one type; its derived types move up (see ``Workspace.delete``)."""
+        self.ws.delete(node_id)
+        return {"removed": [node_id], "remaining": [n for n in self.ws.nodes]}
 
     # --- structural operations -----------------------------------------
     def contract(self, node_id: str, edge_id: str, name: Optional[str] = None) -> Dict[str, Any]:
