@@ -113,3 +113,61 @@ def test_render_gives_each_marking_the_valence_it_is_drawn_from():
     verts = {v["id"]: (v["x"], v["y"]) for v in s.render(node["id"])["curve"]["vertices"]}
     for m in marks.values():
         assert tuple(m["at"]) == verts[m["tail"]]
+
+
+def _five_valent_session():
+    s = Session()
+    spec = {"vertices": ["v"], "ends": [
+        {"id": "e0", "tail": "v", "vec": [1, 0], "name": "l0"},
+        {"id": "e1", "tail": "v", "vec": [0, 1], "name": "l1"},
+        {"id": "e2", "tail": "v", "vec": [-1, 0], "name": "l2"},
+        {"id": "e3", "tail": "v", "vec": [2, 1], "name": "l3"},
+        {"id": "e4", "tail": "v", "vec": [-2, -2], "name": "l4"},
+    ]}
+    return s, s.add_curve(spec, name="five")["id"]
+
+
+def test_preview_says_what_a_split_would_do():
+    s, node = _five_valent_session()
+    ok = s.preview_resolution(node, "v", ["e0", "e1"])
+    assert ok["ok"] and ok["new_edge_vec"] == [-1, -1]
+    assert "l0" in ok["label"] and "l1" in ok["label"]
+
+    too_small = s.preview_resolution(node, "v", ["e0"])
+    assert not too_small["ok"] and "two" in too_small["reason"]
+
+    s2, n2 = Session(), None
+    n2 = s2.add_curve({"vertices": ["v"], "ends": [
+        {"id": "a", "tail": "v", "vec": [1, 0]}, {"id": "b", "tail": "v", "vec": [-1, 0]},
+        {"id": "c", "tail": "v", "vec": [0, 1]}, {"id": "d", "tail": "v", "vec": [0, -1]},
+        {"id": "e", "tail": "v", "vec": [2, 2]}, {"id": "f", "tail": "v", "vec": [-2, -2]},
+    ]})["id"]
+    crossing = s2.preview_resolution(n2, "v", ["a", "b"])
+    assert not crossing["ok"] and crossing["is_crossing"]
+
+
+def test_resolve_subset_creates_the_split_child():
+    s, node = _five_valent_session()
+    child = s.resolve_subset(node, "v", ["e0", "e1"], name="split")
+
+    assert child["parent_id"] == node
+    assert child["num_bounded"] == 1
+    assert sorted(child["valences"].values()) == [3, 4]
+    assert child["genus"] == 0
+    # and the child can be split again
+    big = [v for v, k in child["valences"].items() if k == 4][0]
+    again = s.resolve_subset(child["id"], big, [e["id"] for e in
+                             s.render(child["id"])["curve"]["edges"]
+                             if e.get("tail") == big or e.get("head") == big][:2])
+    assert sorted(again["valences"].values()) == [3, 3, 3]
+
+
+def test_resolve_subset_refuses_a_crossing():
+    s = Session()
+    node = s.add_curve({"vertices": ["v"], "ends": [
+        {"id": "a", "tail": "v", "vec": [1, 0]}, {"id": "b", "tail": "v", "vec": [-1, 0]},
+        {"id": "c", "tail": "v", "vec": [0, 1]}, {"id": "d", "tail": "v", "vec": [0, -1]},
+        {"id": "e", "tail": "v", "vec": [2, 2]}, {"id": "f", "tail": "v", "vec": [-2, -2]},
+    ]})["id"]
+    with pytest.raises(ValueError):
+        s.resolve_subset(node, "v", ["a", "b"])

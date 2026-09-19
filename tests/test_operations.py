@@ -144,3 +144,96 @@ def test_marking_on_edge_leaves_the_dual_subdivision_unchanged():
     after = sorted(tuple(sorted((v.x, v.y) for v in cell.vertices))
                    for cell in build_subdivision(c).cells)
     assert after == before
+
+
+# --- resolving a vertex of valence 5 or more -------------------------------
+def _star(*vecs):
+    """One vertex with the given ends (they must sum to zero)."""
+    c = Curve()
+    c.add_vertex("v")
+    for i, vec in enumerate(vecs):
+        c.add_end(f"e{i}", "v", Vec2(*vec))
+    c.validate()
+    return c
+
+
+def test_a_five_valent_vertex_splits_along_a_chosen_subset():
+    from tropcurves.operations import resolution_for_subset, apply_resolution
+    c = _star((1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2))
+    res = resolution_for_subset(c, "v", ["e0", "e1"])
+
+    assert set(res.side_a) == {"e0", "e1"}
+    assert set(res.side_b) == {"e2", "e3", "e4"}
+    # balancing forces the new edge: it absorbs the chosen side's directions
+    assert res.new_edge_vec == -(Vec2(1, 0) + Vec2(0, 1))
+    out = apply_resolution(c, res)
+    out.curve.validate()
+    assert out.curve.valence(out.vertex_a) == 3
+    assert out.curve.valence(out.vertex_b) == 4
+    assert len(out.curve.bounded) == 1
+
+
+def test_both_sides_need_at_least_two_flags():
+    from tropcurves.operations import resolution_for_subset
+    c = _star((1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2))
+    for bad in ([], ["e0"], ["e0", "e1", "e2", "e3"], ["e0", "e1", "e2", "e3", "e4"]):
+        with pytest.raises(ValueError):
+            resolution_for_subset(c, "v", bad)
+
+
+def test_a_subset_must_be_flags_of_that_vertex():
+    from tropcurves.operations import resolution_for_sides, resolution_for_subset
+    c = _star((1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2))
+    with pytest.raises(ValueError):
+        resolution_for_subset(c, "v", ["e0", "nope"])
+    with pytest.raises(ValueError):       # sides must cover every flag
+        resolution_for_sides(c, "v", ["e0", "e1"], ["e2", "e3"])
+
+
+def test_a_subset_summing_to_zero_is_a_crossing():
+    from tropcurves.operations import resolution_for_subset, apply_resolution
+    c = _star((1, 0), (-1, 0), (0, 1), (0, -1), (2, 2), (-2, -2))
+    res = resolution_for_subset(c, "v", ["e0", "e1"])   # (1,0) + (-1,0) = 0
+    assert res.is_crossing
+    with pytest.raises(ValueError):
+        apply_resolution(c, res)
+
+
+def test_every_split_is_listed_once():
+    from tropcurves.operations import resolutions
+    c = _star((1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2))
+    listed = resolutions(c, "v", include_crossings=True)
+    assert len(listed) == 10                       # 2^5 / 2 - 5 - 1
+    seen = {frozenset([frozenset(r.side_a), frozenset(r.side_b)]) for r in listed}
+    assert len(seen) == len(listed)                # no split twice
+    for r in listed:
+        assert 2 <= len(r.side_a) and 2 <= len(r.side_b)
+        assert set(r.side_a) | set(r.side_b) == {f"e{i}" for i in range(5)}
+
+
+def test_valence_four_still_lists_the_three_pairings_in_order():
+    from tropcurves.operations import resolutions
+    c = builders.caterpillar_square()
+    four = contract_edge(c, "e").curve
+    listed = resolutions(four, four.vertices[0], include_crossings=True)
+    assert [tuple(r.side_a) for r in listed] == [("a", "b"), ("a", "c"), ("a", "d")]
+
+
+def test_resolving_below_valence_four_is_refused():
+    from tropcurves.operations import resolutions
+    c = _star((1, 0), (0, 1), (-1, -1))
+    with pytest.raises(ValueError):
+        resolutions(c, "v")
+
+
+def test_splitting_a_six_valent_vertex_twice_reaches_trivalent():
+    from tropcurves.operations import resolution_for_subset, apply_resolution
+    c = _star((1, 0), (0, 1), (-1, 0), (0, -1), (2, 3), (-2, -3))
+    out = apply_resolution(c, resolution_for_subset(c, "v", ["e0", "e1"]))
+    curve = out.curve
+    assert sorted(curve.valence(v) for v in curve.vertices) == [3, 5]
+    big = max(curve.vertices, key=curve.valence)
+    flags = [f.id for f in curve.incident(big)]
+    out2 = apply_resolution(curve, resolution_for_subset(curve, big, flags[:2]))
+    out2.curve.validate()
+    assert sorted(out2.curve.valence(v) for v in out2.curve.vertices) == [3, 3, 4]

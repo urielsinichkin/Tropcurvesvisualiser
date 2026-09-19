@@ -319,3 +319,42 @@ def test_deleting_twice_keeps_composing_the_derivation():
     assert leaf.curve.edges["a"].color == "#00ff00"
     assert {e.id: e.vec for e in leaf.curve.bounded} == before
     leaf.curve.validate()
+
+
+def test_a_higher_valence_split_propagates():
+    from tropcurves.curve import Curve
+    from tropcurves.operations import resolution_for_subset
+
+    c = Curve()
+    c.add_vertex("v")
+    for i, vec in enumerate([(1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2)]):
+        c.add_end(f"e{i}", "v", Vec2(*vec), name=f"l{i}")
+    ws = Workspace()
+    root = ws.add_root(c, name="five")
+    child = ws.resolve(root.id, resolution_for_subset(root.curve, "v", ["e0", "e1"]))
+    assert child.status == STATUS_OK
+
+    ws.rename_edge(root.id, "e2", "renamed")     # any edit re-derives the child
+
+    assert child.status == STATUS_OK             # a 5-way split replays
+    assert child.curve.edges["e2"].name == "renamed"
+    assert sorted(child.curve.valence(v) for v in child.curve.vertices) == [3, 4]
+    child.curve.validate()
+
+
+def test_a_split_that_stops_being_an_edge_is_flagged():
+    from tropcurves.curve import Curve
+    from tropcurves.operations import resolution_for_subset
+
+    c = Curve()
+    c.add_vertex("v")
+    for i, vec in enumerate([(1, 0), (0, 1), (-1, 0), (2, 1), (-2, -2)]):
+        c.add_end(f"e{i}", "v", Vec2(*vec), name=f"l{i}")
+    ws = Workspace()
+    root = ws.add_root(c, name="five")
+    child = ws.resolve(root.id, resolution_for_subset(root.curve, "v", ["e0", "e1"]))
+
+    # make the chosen side sum to zero: the split becomes a crossing
+    ws.edit_slopes(root.id, "e1", Vec2(-1, 0), dependent_end_id="e3")
+
+    assert child.status == STATUS_NEEDS_ATTENTION

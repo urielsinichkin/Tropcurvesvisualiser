@@ -18,7 +18,7 @@ from .balancing import resolve_slopes
 from .newton import newton_polygon
 from .layout import embed, readable_lengths, end_ray_length
 from .subdivision import build_subdivision, SubdivisionError
-from .operations import resolutions
+from .operations import resolutions, resolution_for_subset
 from .subdivision_import import import_subdivision
 from .workspace import Workspace
 from . import schema, builders
@@ -194,7 +194,37 @@ class Session:
         c = self.ws.nodes[node_id].curve
         res = resolutions(c, vertex, include_crossings=True)[index]
         if res.is_crossing:
-            raise ValueError("that pairing is a crossing, not a trivalent resolution")
+            raise ValueError("that pairing is a crossing, not a resolution")
+        child = self.ws.resolve(node_id, res, name=name)
+        return self.node_summary(child.id)
+
+    def preview_resolution(self, node_id: str, vertex: str,
+                           subset: List[str]) -> Dict[str, Any]:
+        """What splitting ``vertex`` along ``subset`` would give, without doing it.
+
+        Returns ``ok`` with the inserted edge's direction, or ``reason`` for why
+        that choice is not a resolution -- so a picker can say so as you click.
+        """
+        c = self.ws.nodes[node_id].curve
+        try:
+            res = resolution_for_subset(c, vertex, subset)
+        except ValueError as exc:
+            return {"ok": False, "reason": str(exc)}
+        if res.is_crossing:
+            return {"ok": False, "reason": "this split realizes as a crossing "
+                                           "(a parallelogram), not a bounded edge",
+                    "is_crossing": True}
+        return {"ok": True, "is_crossing": False,
+                "new_edge_vec": res.new_edge_vec.to_list(),
+                "label": res.label(c)}
+
+    def resolve_subset(self, node_id: str, vertex: str, subset: List[str],
+                       name: Optional[str] = None) -> Dict[str, Any]:
+        """Split ``vertex`` into one vertex carrying ``subset`` and one carrying the rest."""
+        c = self.ws.nodes[node_id].curve
+        res = resolution_for_subset(c, vertex, subset)
+        if res.is_crossing:
+            raise ValueError("that split is a crossing (a parallelogram), not a resolution")
         child = self.ws.resolve(node_id, res, name=name)
         return self.node_summary(child.id)
 

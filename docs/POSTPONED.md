@@ -61,12 +61,16 @@ parametrized tropical curves**.
 
 - Resolutions correspond to **adjacent maximal cells of the tropical moduli
   space**, not to triangulations of the dual polygon.
-- v1: resolve **4-valent vertices only** (up to 3 resolutions = the 3 flag
-  pairings; new bounded edge forced by balancing; may realize as an edge or a
-  crossing).
-- **Deferred:** resolution of vertices of valency >= 5 (richer: trivalent trees
-  refining the vertex; count grows, and realizability/crossing structure with
-  the plane slopes must be handled).
+- Resolve a vertex of **any valence >= 4**: choose how to split its flags in
+  two (at least 2 on each side); the new bounded edge is forced by balancing and
+  may realize as an edge or as a crossing. At valence 4 all (up to 3) splits are
+  listed; beyond that the UI has you tick one side.
+- **Done** (was deferred): valence >= 5. One split is one step -- the two new
+  vertices may need resolving in turn -- rather than jumping straight to a
+  trivalent refinement.
+- **Deferred:** enumerating the *maximal* refinements of a big vertex in one go
+  (all trivalent trees refining it), and any use of that enumeration's structure
+  (counting cells, walking the moduli space).
 
 ## Propagation (see interview §5)
 
