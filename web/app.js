@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "12";
+const APP_VERSION = "13";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -746,6 +746,8 @@ function renderSelected() {
 // ---------------------------------------------------------------------------
 const SVGNS = "http://www.w3.org/2000/svg";
 const VBW = 600, VBH = 400, PAD = 30;
+// radius of a marking in the interior of an edge; bigger vertices scale from it
+const MARK_UNIT_R = 5;
 
 function fitTransform(points) {
   if (!points.length) return p => [VBW / 2, VBH / 2];
@@ -838,15 +840,21 @@ function drawCurve(data) {
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
     svg.appendChild(text(mx, my - 4, lbl, col));
   });
-  c.vertices.forEach(v => {
-    const p = T([v.x, v.y]);
-    svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: 4, fill: "var(--ink)" }));
-  });
+  // Vertices are not drawn: where edges meet already shows them, and a dot at
+  // every one competes with the markings, which are the points that carry
+  // meaning. A marking sits exactly on its image, and its radius counts the
+  // valence of the vertex it hangs from, less the two directions any point on
+  // an edge already has -- so a marking in the interior of an edge (internally
+  // a trivalent vertex) is one unit, one at a trivalent vertex is two, and so on.
   c.markings.forEach(m => {
     const p = T(m.at);
     const col = renderColor(m.color);
-    svg.appendChild(svgEl("circle", { cx: p[0] + 8, cy: p[1] - 8, r: 5, fill: col, stroke: "var(--panel)", "stroke-width": 1.5 }));
-    svg.appendChild(text(p[0] + 14, p[1] - 8, m.name, col));
+    const r = MARK_UNIT_R * Math.max(1, (m.valence || 3) - 2);
+    svg.appendChild(svgEl("circle", {
+      cx: p[0], cy: p[1], r: r, fill: col,
+      stroke: "var(--panel)", "stroke-width": 1.5,
+    }));
+    svg.appendChild(text(p[0] + r + 6, p[1] - 4, m.name, col));
   });
 }
 

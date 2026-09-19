@@ -16,7 +16,7 @@ from .curve import Curve, EdgeKind
 from .geometry import Vec2, primitive
 from .balancing import resolve_slopes
 from .newton import newton_polygon
-from .layout import embed, readable_lengths
+from .layout import embed, readable_lengths, end_ray_length
 from .subdivision import build_subdivision, SubdivisionError
 from .operations import resolutions
 from .subdivision_import import import_subdivision
@@ -227,10 +227,7 @@ class Session:
     def _render_curve(self, c: Curve) -> Dict[str, Any]:
         pos = embed(c, readable_lengths(c))
         fpos = {v: (float(x), float(y)) for v, (x, y) in pos.items()}
-        xs = [p[0] for p in fpos.values()]
-        ys = [p[1] for p in fpos.values()]
-        span = max((max(xs) - min(xs)) if xs else 1.0, (max(ys) - min(ys)) if ys else 1.0, 1.0)
-        ray_len = span * 0.6 + 1.0
+        ray_len = end_ray_length(pos)   # the length the layout scored against
 
         vertices = [{"id": v, "x": fpos[v][0], "y": fpos[v][1]} for v in c.vertices]
         edges = []
@@ -254,7 +251,7 @@ class Session:
             })
         markings = [
             {"id": e.id, "name": e.name, "color": e.color, "at": list(fpos[e.tail]),
-             "tail": e.tail}
+             "tail": e.tail, "valence": c.valence(e.tail)}
             for e in c.markings
         ]
         return {"vertices": vertices, "edges": edges, "markings": markings}

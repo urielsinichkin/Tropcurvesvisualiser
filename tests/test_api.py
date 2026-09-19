@@ -97,3 +97,19 @@ def test_render_reports_subdivision_error_gracefully():
     r = s.render(summ["id"])
     assert r["subdivision"] is None
     assert r["subdivision_error"]
+
+
+def test_render_gives_each_marking_the_valence_it_is_drawn_from():
+    # the UI sizes a marking by the valence of the vertex it hangs from, so the
+    # render payload has to carry it
+    s = Session()
+    node = s.add_preset("caterpillar_square")
+    s.add_marking_on_edge(node["id"], "e", "on-edge")     # a new trivalent vertex
+    s.add_marking(node["id"], "v0", "at-vertex")          # v0 was trivalent -> 4
+    marks = {m["name"]: m for m in s.render(node["id"])["curve"]["markings"]}
+    assert marks["on-edge"]["valence"] == 3
+    assert marks["at-vertex"]["valence"] == 4
+    # and each sits exactly on its vertex
+    verts = {v["id"]: (v["x"], v["y"]) for v in s.render(node["id"])["curve"]["vertices"]}
+    for m in marks.values():
+        assert tuple(m["at"]) == verts[m["tail"]]
