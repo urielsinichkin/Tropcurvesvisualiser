@@ -85,6 +85,8 @@ def _operation_to_dict(op) -> Optional[Dict[str, Any]]:
         d["side_a"] = list(op.side_a)
     if op.side_b is not None:
         d["side_b"] = list(op.side_b)
+    if op.split_pieces:
+        d["split_pieces"] = list(op.split_pieces)
     return d
 
 
@@ -101,6 +103,7 @@ def _operation_from_dict(d: Optional[Dict[str, Any]]):
         side_b=tuple(d["side_b"]) if "side_b" in d else None,
         new_vertex_id=d.get("new_vertex_id"),
         new_edge_id=d.get("new_edge_id"),
+        split_pieces=list(d.get("split_pieces", [])),
     )
 
 

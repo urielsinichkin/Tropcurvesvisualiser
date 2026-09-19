@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "11";
+const APP_VERSION = "12";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -722,8 +722,20 @@ function renderSelected() {
   const data = api("render", selectedId);
   document.getElementById("curve-name").textContent = data.name;
   const st = document.getElementById("curve-status");
-  if (data.status !== "ok") { st.textContent = "⚠ needs attention (a parent edit no longer applies)"; st.className = "status warn"; }
-  else { st.textContent = ""; st.className = "status"; }
+  st.textContent = ""; st.className = "status";
+  if (data.status !== "ok") {
+    st.className = "status warn";
+    st.textContent = "⚠ needs attention — this type could not be rebuilt from its parent. ";
+    const again = document.createElement("button");
+    again.className = "small";
+    again.textContent = "Try again";
+    again.title = "Re-derive this type from its parent as it is now";
+    again.onclick = () => {
+      try { api("retry", selectedId); refreshAll(); autosave(); }
+      catch (e) { st.append(" (" + e.message + ")"); }
+    };
+    st.appendChild(again);
+  }
   drawCurve(data);
   drawSubdivision(data);
   renderControls();

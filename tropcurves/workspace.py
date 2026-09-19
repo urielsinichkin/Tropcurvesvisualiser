@@ -26,7 +26,10 @@ from .operations import (
     resolutions,
     apply_resolution,
     add_marking_on_edge,
+    EdgeMarkingResult,
     Resolution,
+    _fresh_edge_id,
+    _fresh_vertex_id,
 )
 
 STATUS_OK = "ok"
@@ -39,6 +42,15 @@ class Operation:
 
     kind: str                              # 'contract' | 'resolve'
     edge_id: Optional[str] = None          # contract: the contracted edge
+    split_pieces: List[str] = field(default_factory=list)
+    """contract: further pieces the contracted edge has since been split into.
+
+    Subdividing an edge in the parent (to hang a marking on it) turns one edge
+    into two. A child that contracts it should still identify the same two
+    vertices, so the replay contracts every piece -- the marking then lands on
+    the merged vertex, which is exactly where a marked point in the interior of
+    a shrinking edge ends up.
+    """
     vertex_id: Optional[str] = None        # resolve: the 4-valent parent vertex
     side_a: Optional[Tuple[str, str]] = None
     side_b: Optional[Tuple[str, str]] = None
@@ -189,9 +201,62 @@ class Workspace:
                             name: Optional[str] = None, color: str = "") -> str:
         """Attach a marking part-way along an edge/end, subdividing it."""
         node = self._get(node_id)
-        _, _, mid = add_marking_on_edge(node.curve, edge_id, name=name or "", color=color)
+        res = add_marking_on_edge(node.curve, edge_id, name=name or "", color=color,
+                                  reserved=self._subtree_ids(node_id))
+        self._remap_after_split(node_id, res)
         self._propagate(node_id)
-        return mid
+        return res.marking
+
+    def _subtree_ids(self, node_id: str) -> set:
+        """Every vertex/edge id the derived types already claim.
+
+        Ids are inherited by derivation, so a fresh id invented here must dodge
+        the ones a child invented for itself (its resolution's new vertex and
+        edge). Otherwise the parent and the child would be using one id for two
+        different things and the child could no longer be rebuilt.
+        """
+        out: set = set()
+        for nid in self.descendants(node_id):
+            n = self.nodes[nid]
+            out.update(n.curve.vertices)
+            out.update(n.curve.edges)
+            if n.operation is not None:
+                out.update(x for x in (n.operation.new_vertex_id, n.operation.new_edge_id) if x)
+        return out
+
+    def _remap_after_split(self, node_id: str, res: EdgeMarkingResult) -> None:
+        """Keep derived operations pointing at what they used to point at.
+
+        A derived type records its operation by flag id, against the parent as
+        it was. Subdividing an edge rewrites that picture in one place: at
+        ``res.moved_flag_vertex`` the flag that was ``split_edge`` is now
+        ``new_edge``, and the original edge is now two edges end to end.
+        Updating the records here keeps each child the *same* derivation --
+        separating the same four directions, identifying the same two vertices
+        -- instead of failing to replay or quietly degenerating something else.
+        """
+        for nid in self._following(node_id):
+            op = self.nodes[nid].operation
+            if op is None:
+                continue
+            if op.kind == "resolve" and op.vertex_id == res.moved_flag_vertex:
+                op.side_a = _subst(op.side_a, res.split_edge, res.new_edge)
+                op.side_b = _subst(op.side_b, res.split_edge, res.new_edge)
+            elif op.kind == "contract" and res.split_edge in [op.edge_id, *op.split_pieces]:
+                op.split_pieces = [*op.split_pieces, res.new_edge]
+
+    def _following(self, node_id: str) -> List[str]:
+        """Descendants reachable through types that follow their parent."""
+        out: List[str] = []
+        stack = list(self._get(node_id).children)
+        while stack:
+            nid = stack.pop()
+            node = self.nodes.get(nid)
+            if node is None or not node.follow_parent:
+                continue
+            out.append(nid)
+            stack.extend(node.children)
+        return out
 
     def remove_marking(self, node_id: str, marking_id: str) -> None:
         node = self._get(node_id)
@@ -233,7 +298,10 @@ class Workspace:
         assert op is not None
         try:
             if op.kind == "contract":
-                node.curve = contract_edge(parent.curve, op.edge_id).curve  # type: ignore[arg-type]
+                curve = parent.curve
+                for eid in [op.edge_id, *op.split_pieces]:
+                    curve = contract_edge(curve, eid).curve  # type: ignore[arg-type]
+                node.curve = curve
             elif op.kind == "resolve":
                 node.curve = self._replay_resolve(parent.curve, node, op)
             else:
@@ -244,21 +312,99 @@ class Workspace:
 
     def _replay_resolve(self, parent_curve: Curve, node: TypeNode, op: Operation) -> Curve:
         want = {frozenset(op.side_a), frozenset(op.side_b)}  # type: ignore[arg-type]
+        avail = resolutions(parent_curve, op.vertex_id, include_crossings=True)  # type: ignore[arg-type]
         matches = [
-            r for r in resolutions(parent_curve, op.vertex_id, include_crossings=True)  # type: ignore[arg-type]
+            r for r in avail
             if {frozenset(r.side_a), frozenset(r.side_b)} == want and not r.is_crossing
         ]
         if not matches:
+            matches = self._repair_sides(parent_curve, op, avail)
+        if not matches:
             raise ValueError("resolution no longer applies")
+
+        prev_edge_id = op.new_edge_id
+        new_vertex_id, new_edge_id = op.new_vertex_id, op.new_edge_id
+        # The parent may have taken these ids since (an edge subdivided under a
+        # marking, say). Re-using one would collide, so take fresh ones and keep
+        # the record in step -- what the resolution *is* has not changed.
+        if new_vertex_id in parent_curve._vset:
+            new_vertex_id = _fresh_vertex_id(parent_curve, op.vertex_id)  # type: ignore[arg-type]
+            op.new_vertex_id = new_vertex_id
+        if new_edge_id in parent_curve.edges:
+            new_edge_id = _fresh_edge_id(parent_curve)
+            op.new_edge_id = new_edge_id
+
         out = apply_resolution(parent_curve, matches[0],
-                               new_vertex_id=op.new_vertex_id, new_edge_id=op.new_edge_id)
+                               new_vertex_id=new_vertex_id, new_edge_id=new_edge_id)
         # preserve the inserted edge's presentation (name/color) across replays
-        old = node.curve.edges.get(op.new_edge_id)  # type: ignore[arg-type]
+        old = node.curve.edges.get(prev_edge_id)  # type: ignore[arg-type]
         if old is not None:
-            ne = out.curve.edges[op.new_edge_id]  # type: ignore[index]
-            ne.name = old.name
+            ne = out.curve.edges[new_edge_id]  # type: ignore[index]
+            taken = {e.name for e in out.curve.edges.values() if e.id != new_edge_id}
+            if old.name and old.name not in taken:
+                ne.name = old.name   # else the parent has since taken that name
             ne.color = old.color
         return out.curve
+
+    def _repair_sides(self, parent_curve: Curve, op: Operation,
+                      avail: List[Resolution]) -> List[Resolution]:
+        """Recover a recorded pairing whose flag ids were renamed out from under it.
+
+        ``_remap_after_split`` keeps records current as edits happen, but a
+        workspace saved before that existed -- or edited some way not yet
+        accounted for -- can hold a pairing naming a flag that is no longer at
+        the vertex. When exactly one recorded id is gone and exactly one flag
+        at the vertex is unaccounted for, the correspondence between them is
+        forced, so the recorded pairing still names a real resolution. Repair
+        the record in place: this is reading a rename, not picking anew.
+        """
+        recorded = set(op.side_a or ()) | set(op.side_b or ())
+        present = {f.id for f in parent_curve.incident(op.vertex_id)}  # type: ignore[arg-type]
+        missing, extra = recorded - present, present - recorded
+        if len(missing) != 1 or len(extra) != 1:
+            return []
+        old, new = missing.pop(), extra.pop()
+        side_a = _subst(op.side_a, old, new)
+        side_b = _subst(op.side_b, old, new)
+        want = {frozenset(side_a), frozenset(side_b)}
+        out = [r for r in avail
+               if {frozenset(r.side_a), frozenset(r.side_b)} == want and not r.is_crossing]
+        if out:
+            op.side_a, op.side_b = side_a, side_b
+        return out
+
+    # --- healing ---------------------------------------------------------
+    def retry(self, node_id: str) -> str:
+        """Re-derive one type from its parent, then everything under it."""
+        node = self._get(node_id)
+        if node.parent_id is None:
+            raise ValueError("a root type is not derived from anything")
+        self._rederive(node)
+        self._propagate(node_id)
+        return node.status
+
+    def retry_failed(self) -> List[str]:
+        """Re-derive every type marked ``needs_attention``; returns those healed.
+
+        A replay that failed against the parent of the moment can succeed later
+        -- the parent was edited again, or the replay itself got better -- so a
+        workspace gets one attempt to heal when it is loaded. Parents are
+        retried before their children, and a type that heals re-derives its own
+        subtree, since those were rebuilt from a stale curve.
+        """
+        healed: List[str] = []
+        for root in self.roots():
+            for nid in [root.id, *self.descendants(root.id)]:
+                node = self.nodes[nid]
+                if node.parent_id is None or not node.follow_parent:
+                    continue
+                if node.status != STATUS_NEEDS_ATTENTION:
+                    continue
+                self._rederive(node)
+                if node.status == STATUS_OK:
+                    healed.append(nid)
+                    self._propagate(nid)
+        return healed
 
     # --- helpers --------------------------------------------------------
     def _get(self, node_id: str) -> TypeNode:
@@ -274,3 +420,10 @@ class Workspace:
 
     def roots(self) -> List[TypeNode]:
         return [n for n in self.nodes.values() if n.parent_id is None]
+
+
+def _subst(pair: Optional[Tuple[str, str]], old: str, new: str) -> Optional[Tuple[str, str]]:
+    """``pair`` with ``old`` replaced by ``new``."""
+    if pair is None:
+        return None
+    return tuple(new if x == old else x for x in pair)  # type: ignore[return-value]

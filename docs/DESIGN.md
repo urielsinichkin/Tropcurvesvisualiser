@@ -132,6 +132,18 @@ contracted edge; or parent plus new resolution edge(s)).
   replay no longer applies, the child is flagged **needs attention** rather than
   guessed. If an edit makes a child unbalanced/degenerate, it is flagged
   **invalid** with an explanation.
+- An operation names its elements **by id**, so an edit that changes *which* id
+  sits at a flag has to update the records it invalidates. Only subdivision (a
+  marking placed on an edge) does this, and it is precise: at the far endpoint
+  the flag that was the edge is now the new stub, so a resolution there has that
+  id substituted, and a contraction of the subdivided edge gains the new piece
+  and contracts both -- the child keeps identifying the same two vertices, with
+  the marking landing on the merged vertex. Fresh ids also avoid every id the
+  derived types already claim, so a parent edit can never collide with a child's
+  own resolution edge. A record that went stale anyway (a workspace saved before
+  this) is repaired on replay when the correspondence is forced -- exactly one
+  recorded flag gone and one unaccounted for -- and loading a workspace retries
+  everything marked needs attention.
 - The propagation engine is built as a **per-element/per-attribute rule set**
   that currently resolves to all-or-nothing (the single flag), so **selective
   propagation** can be enabled later without reworking the model.

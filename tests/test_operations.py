@@ -84,9 +84,9 @@ def test_resolution_crossing_pairing_flagged():
 def test_marking_on_bounded_edge_subdivides_it():
     c = builders.caterpillar_square()
     before_newton = _newton_set(c)
-    v0, w_edge, mid = None, None, None
     from tropcurves.operations import add_marking_on_edge
-    w, new_edge, mid = add_marking_on_edge(c, "e", name="p")
+    r = add_marking_on_edge(c, "e", name="p")
+    w, new_edge, mid = r.vertex, r.new_edge, r.marking
     c.validate()  # connected genus-0 tree, balanced, no degenerate edges
 
     assert len(c.vertices) == 3          # one new vertex on the edge
@@ -105,7 +105,8 @@ def test_marking_on_end_keeps_the_end_identity():
     before_newton = _newton_set(c)
     before_vec = c.edges["a"].vec
     from tropcurves.operations import add_marking_on_edge
-    w, new_edge, mid = add_marking_on_edge(c, "a")
+    r = add_marking_on_edge(c, "a")
+    w, new_edge, mid = r.vertex, r.new_edge, r.marking
     c.validate()
 
     # 'a' is still an end, with the same direction, now leaving the new vertex
@@ -115,6 +116,9 @@ def test_marking_on_end_keeps_the_end_identity():
     # the piece towards the original vertex is a new bounded edge
     assert c.edges[new_edge].kind is EdgeKind.BOUNDED
     assert c.edges[new_edge].head == w
+    # the flag at the original vertex is now the stub, not the end
+    assert r.moved_flag_vertex == "v0" and r.split_edge == "a"
+    assert {f.id for f in c.incident("v0")} >= {new_edge} and "a" not in {f.id for f in c.incident("v0")}
     assert len(c.ends) == 4              # still four ends
     assert _newton_set(c) == before_newton
     assert c.is_balanced() and c.is_tree()

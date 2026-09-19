@@ -188,3 +188,82 @@ def test_needs_attention_when_resolve_no_longer_applies():
     # the stored resolution can no longer be replayed
     ws.add_marking(child.id, v)
     assert grand.status == STATUS_NEEDS_ATTENTION
+
+
+# --- markings placed on an edge, and what that does to derived types -------
+def test_marking_on_an_end_propagates_through_a_resolution():
+    # the user's case: resolve a 4-valent vertex, then mark one of the ends
+    # that was separated by the resolution. The end is subdivided, so the flag
+    # at the resolved vertex is now the stub -- the resolution still separates
+    # the same four directions and must replay.
+    ws = Workspace()
+    root = ws.add_root(builders.caterpillar_square(), name="root")
+    four = ws.contract(root.id, "e")                 # one 4-valent vertex
+    v = four.curve.vertices[0]
+    res = next(r for r in resolutions(four.curve, v) if "a" in r.side_a + r.side_b)
+    child = ws.resolve(four.id, res)
+    assert child.status == STATUS_OK
+
+    ws.add_marking_on_edge(four.id, "a", name="p")
+
+    assert child.status == STATUS_OK
+    child.curve.validate()
+    assert len(child.curve.markings) == 1            # the marking came along
+    assert child.curve.edges["a"].vec == four.curve.edges["a"].vec
+    assert newton_polygon(child.curve) == newton_polygon(four.curve)
+
+
+def test_subdivision_does_not_steal_ids_a_child_already_uses():
+    ws = Workspace()
+    root = ws.add_root(builders.caterpillar_square(), name="root")
+    four = ws.contract(root.id, "e")
+    v = four.curve.vertices[0]
+    child = ws.resolve(four.id, resolutions(four.curve, v)[0])
+    claimed = {child.operation.new_vertex_id, child.operation.new_edge_id}
+
+    ws.add_marking_on_edge(four.id, "a")
+
+    parent_new = set(four.curve.vertices) | set(four.curve.edges)
+    assert not (claimed & parent_new)                # ids kept apart
+    assert child.status == STATUS_OK
+
+
+def test_marking_a_contracted_edge_still_identifies_the_same_vertices():
+    # the child is "the type where edge e has length 0"; a marked point in the
+    # interior of e ends up at the merged vertex, so both pieces contract
+    ws = Workspace()
+    root = ws.add_root(builders.caterpillar_square(), name="root")
+    child = ws.contract(root.id, "e")
+    assert len(child.curve.vertices) == 1
+
+    ws.add_marking_on_edge(root.id, "e", name="p")
+
+    assert child.status == STATUS_OK
+    child.curve.validate()
+    assert len(child.curve.vertices) == 1            # still one merged vertex
+    assert len(child.curve.bounded) == 0             # no piece left behind
+    assert len(child.curve.markings) == 1
+    assert child.curve.markings[0].tail == child.curve.vertices[0]
+
+
+def test_stale_recorded_pairing_is_repaired_on_replay():
+    # a workspace saved before the records were kept in step can name a flag
+    # that has since been renamed; the correspondence is forced, so it heals
+    ws = Workspace()
+    root = ws.add_root(builders.caterpillar_square(), name="root")
+    four = ws.contract(root.id, "e")
+    v = four.curve.vertices[0]
+    child = ws.resolve(four.id, resolutions(four.curve, v)[0])
+    recorded = child.operation.side_a, child.operation.side_b
+    ws.add_marking_on_edge(four.id, "a")
+
+    op = child.operation
+    op.side_a, op.side_b = recorded            # rewind to the pre-edit ids
+    child.status = STATUS_NEEDS_ATTENTION
+    healed = ws.retry_failed()
+
+    assert healed == [child.id]
+    assert child.status == STATUS_OK
+    child.curve.validate()
+    # the record now names the stub that took 'a'-s place at the vertex
+    assert "a" not in op.side_a + op.side_b
