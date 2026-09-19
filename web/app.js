@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "15";
+const APP_VERSION = "16";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -1198,6 +1198,21 @@ function renderControls() {
 // ---------------------------------------------------------------------------
 function fmtVec(v) { return v ? `(${v[0]}, ${v[1]})` : ""; }
 
+// Vertices carry ids, but nothing in the picture shows them, so a dialog that
+// asks the user to pick one names it by what does show: the edges, ends and
+// markings that meet there, listed counterclockwise as they are drawn.
+function vertexLabel(c, vid) {
+  const flags = [];
+  c.edges.forEach(e => {
+    if (e.tail === vid) flags.push({ name: e.name, dir: [e.to[0] - e.from[0], e.to[1] - e.from[1]] });
+    if (e.head === vid) flags.push({ name: e.name, dir: [e.from[0] - e.to[0], e.from[1] - e.to[1]] });
+  });
+  flags.sort((a, b) => Math.atan2(a.dir[1], a.dir[0]) - Math.atan2(b.dir[1], b.dir[0]));
+  const names = flags.map(f => f.name)
+    .concat(c.markings.filter(m => m.tail === vid).map(m => m.name));
+  return names.length ? names.join(", ") : vid;
+}
+
 function dialogHead(title, blurb) {
   const body = document.getElementById("modal-body");
   body.innerHTML = `<h2>${escapeHtml(title)}</h2>
@@ -1301,8 +1316,9 @@ function openMarkingDialog() {
   const val = summ.valences || {};
   const body = dialogHead("Add a marking",
     "A marking is a contracted end (direction 0). Attach it at an existing " +
-    "vertex, or part-way along an edge or end &mdash; that subdivides the edge, " +
-    "putting a new vertex between the two pieces and hanging the marking there.");
+    "vertex &mdash; named here by the edges that meet there &mdash; or part-way " +
+    "along an edge or end, which subdivides the edge, putting a new vertex " +
+    "between the two pieces and hanging the marking there.");
   body.insertAdjacentHTML("beforeend",
     `<label>Name (optional) <input id="mk-name" type="text" placeholder="auto"></label>`);
 
@@ -1329,7 +1345,8 @@ function openMarkingDialog() {
   const atVertex = section("At a vertex");
   data.curve.vertices.forEach(v => {
     const b = document.createElement("button");
-    b.textContent = `at ${v.id}` + (val[v.id] ? `  (valence ${val[v.id]})` : "");
+    b.textContent = `where ${vertexLabel(data.curve, v.id)} meet`
+      + (val[v.id] ? `  (valence ${val[v.id]})` : "");
     b.onclick = () => run("add_marking", v.id);
     atVertex.appendChild(b);
   });
@@ -1383,6 +1400,7 @@ function openContractDialog() {
 
 function openResolveDialog() {
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
+  const data = api("render", selectedId);
   const v4 = Object.entries(summ.valences || {}).filter(([, k]) => k === 4).map(([v]) => v);
   const body = dialogHead("Resolve a 4-valent vertex",
     "Each resolution is an adjacent maximal cell of the tropical moduli space. " +
@@ -1394,7 +1412,7 @@ function openResolveDialog() {
   }
   let sel = null;
   if (v4.length > 1) {
-    sel = selectOf(v4.map(v => [v, v]));
+    sel = selectOf(v4.map(v => [v, `where ${vertexLabel(data.curve, v)} meet`]));
     body.appendChild(labeled("vertex", sel));
   }
   const listWrap = document.createElement("div");
