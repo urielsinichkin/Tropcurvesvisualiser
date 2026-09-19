@@ -63,29 +63,34 @@ def contract_edge(curve: Curve, edge_id: str) -> ContractResult:
 
 
 # ---------------------------------------------------------------------------
-# resolution of a 4-valent vertex
+# resolution of a vertex of valence >= 4
 # ---------------------------------------------------------------------------
 @dataclass
 class Resolution:
-    """One trivalent resolution of a 4-valent vertex.
+    """One resolution of a vertex: its flags split in two, joined by an edge.
 
-    ``side_a`` / ``side_b`` are the edge-id pairs on each new vertex, and
-    ``new_edge_vec`` is the direction of the inserted bounded edge (outgoing from
-    the ``side_a`` vertex), forced by balancing. ``is_crossing`` is True when the
-    forced edge is zero -- the pairing realizes as a transverse crossing
-    (parallelogram) rather than a genuine bounded edge, and is not offered as a
-    trivalent resolution.
+    ``side_a`` / ``side_b`` are the flag ids on each of the two new vertices --
+    every flag of the original vertex, in one group or the other, each group
+    holding at least two so that neither new vertex is 2-valent.
+    ``new_edge_vec`` is the direction of the inserted bounded edge (outgoing
+    from the ``side_a`` vertex), forced by balancing. ``is_crossing`` is True
+    when that comes out zero: the split realizes as a transverse crossing
+    (parallelogram) rather than a genuine bounded edge, and cannot be applied.
+
+    A 4-valent vertex has only 2+2 splits, so both new vertices are trivalent
+    and the result is a maximal cell of the moduli space. Splitting a bigger
+    vertex is still one step -- the pieces may need resolving in turn.
     """
 
     vertex: str
-    side_a: Tuple[str, str]
-    side_b: Tuple[str, str]
+    side_a: Tuple[str, ...]
+    side_b: Tuple[str, ...]
     new_edge_vec: Vec2
     is_crossing: bool
 
     def label(self, curve: Curve) -> str:
-        def nm(pair):
-            return "{" + ", ".join(sorted(curve.edges[i].name for i in pair)) + "}"
+        def nm(group):
+            return "{" + ", ".join(sorted(curve.edges[i].name for i in group)) + "}"
         kind = "crossing" if self.is_crossing else "edge"
         return f"{nm(self.side_a)} | {nm(self.side_b)}  ({kind})"
 
@@ -94,31 +99,63 @@ def _incident_flags(curve: Curve, vertex: str) -> List[Edge]:
     return curve.incident(vertex)
 
 
-def resolutions(curve: Curve, vertex: str, *, include_crossings: bool = False) -> List[Resolution]:
-    """All (up to 3) resolutions of a 4-valent vertex.
+def resolution_for_sides(curve: Curve, vertex: str,
+                         side_a: Iterable[str], side_b: Iterable[str]) -> Resolution:
+    """The resolution splitting ``vertex``'s flags into these two groups.
 
-    By default returns only genuine trivalent resolutions (a nonzero inserted
-    edge). Set ``include_crossings=True`` to also list the pairing(s) that
-    realize as a crossing (zero inserted edge).
+    The groups must together be exactly the flags at the vertex, with at least
+    two in each -- a group of one would leave a 2-valent vertex, which says
+    nothing new, and an empty one no vertex at all. The inserted edge's
+    direction is then forced by balancing.
     """
     flags = _incident_flags(curve, vertex)
-    if len(flags) != 4:
+    present = {f.id for f in flags}
+    a, b = tuple(side_a), tuple(side_b)
+    both = list(a) + list(b)
+    if len(set(both)) != len(both) or set(both) != present:
         raise ValueError(
-            f"vertex {vertex!r} has valence {len(flags)}; v1 resolves only 4-valent vertices"
+            f"the two sides must partition the {len(present)} flags at {vertex!r}"
         )
+    if len(a) < 2 or len(b) < 2:
+        raise ValueError("each side needs at least two flags")
     outs = {f.id: f.outgoing(vertex) for f in flags}
+    vec = -sum((outs[i] for i in a), ZERO)
+    return Resolution(vertex=vertex, side_a=a, side_b=b,
+                      new_edge_vec=vec, is_crossing=vec.is_zero())
+
+
+def resolution_for_subset(curve: Curve, vertex: str, subset: Iterable[str]) -> Resolution:
+    """The resolution putting ``subset`` on one new vertex and the rest on the other."""
+    chosen = tuple(dict.fromkeys(subset))    # de-duplicate, keep order
+    rest = tuple(f.id for f in _incident_flags(curve, vertex) if f.id not in set(chosen))
+    return resolution_for_sides(curve, vertex, chosen, rest)
+
+
+def resolutions(curve: Curve, vertex: str, *, include_crossings: bool = False) -> List[Resolution]:
+    """Every resolution of a vertex of valence >= 4.
+
+    One per way of splitting the flags in two (the two sides are interchangeable,
+    so each split is listed once). By default only genuine resolutions -- a
+    nonzero inserted edge -- are returned; ``include_crossings=True`` also lists
+    the splits that realize as a crossing.
+
+    The count grows quickly with valence (3 splits at valence 4, 10 at 5, 25 at
+    6), so past 4 the UI has you choose a side rather than reading a list.
+    """
+    flags = _incident_flags(curve, vertex)
+    d = len(flags)
+    if d < 4:
+        raise ValueError(f"vertex {vertex!r} has valence {d}; nothing to resolve below 4")
     ids = [f.id for f in flags]
     out: List[Resolution] = []
-    # the three ways to split 4 flags into 2 + 2 (fix ids[0], pair it with each)
-    for j in (1, 2, 3):
-        a = (ids[0], ids[j])
-        b = tuple(i for i in ids if i not in a)  # type: ignore[assignment]
-        vec = -(outs[a[0]] + outs[a[1]])
-        is_crossing = vec.is_zero()
-        if is_crossing and not include_crossings:
-            continue
-        out.append(Resolution(vertex=vertex, side_a=a, side_b=b,  # type: ignore[arg-type]
-                              new_edge_vec=vec, is_crossing=is_crossing))
+    # Each split has exactly one side containing ids[0], of size 2 .. d-2, so
+    # enumerating those subsets lists every split exactly once.
+    for size in range(2, d - 1):
+        for rest in itertools.combinations(ids[1:], size - 1):
+            res = resolution_for_subset(curve, vertex, (ids[0],) + rest)
+            if res.is_crossing and not include_crossings:
+                continue
+            out.append(res)
     return out
 
 

@@ -30,6 +30,7 @@ from .balancing import apply_two_ends_edit
 from .operations import (
     contract_edge,
     resolutions,
+    resolution_for_sides,
     apply_resolution,
     add_marking_on_edge,
     EdgeMarkingResult,
@@ -58,8 +59,8 @@ class Operation:
     a shrinking edge ends up.
     """
     vertex_id: Optional[str] = None        # resolve: the 4-valent parent vertex
-    side_a: Optional[Tuple[str, str]] = None
-    side_b: Optional[Tuple[str, str]] = None
+    side_a: Optional[Tuple[str, ...]] = None    # resolve: the flags on each side
+    side_b: Optional[Tuple[str, ...]] = None
     new_vertex_id: Optional[str] = None    # resolve: the inserted child vertex
     new_edge_id: Optional[str] = None      # resolve: the inserted child edge
 
@@ -336,16 +337,12 @@ class Workspace:
         raise ValueError(f"unknown operation {op.kind!r}")
 
     def _replay_resolve(self, parent_curve: Curve, node: TypeNode, op: Operation) -> Curve:
-        want = {frozenset(op.side_a), frozenset(op.side_b)}  # type: ignore[arg-type]
-        avail = resolutions(parent_curve, op.vertex_id, include_crossings=True)  # type: ignore[arg-type]
-        matches = [
-            r for r in avail
-            if {frozenset(r.side_a), frozenset(r.side_b)} == want and not r.is_crossing
-        ]
-        if not matches:
-            matches = self._repair_sides(parent_curve, op, avail)
-        if not matches:
-            raise ValueError("resolution no longer applies")
+        try:
+            res = resolution_for_sides(parent_curve, op.vertex_id, op.side_a, op.side_b)  # type: ignore[arg-type]
+        except ValueError:
+            res = self._repair_sides(parent_curve, op)
+        if res.is_crossing:
+            raise ValueError("that split no longer gives a bounded edge")
 
         prev_edge_id = op.new_edge_id
         new_vertex_id, new_edge_id = op.new_vertex_id, op.new_edge_id
@@ -359,7 +356,7 @@ class Workspace:
             new_edge_id = _fresh_edge_id(parent_curve)
             op.new_edge_id = new_edge_id
 
-        out = apply_resolution(parent_curve, matches[0],
+        out = apply_resolution(parent_curve, res,
                                new_vertex_id=new_vertex_id, new_edge_id=new_edge_id)
         # preserve the inserted edge's presentation (name/color) across replays
         old = node.curve.edges.get(prev_edge_id)  # type: ignore[arg-type]
@@ -371,32 +368,29 @@ class Workspace:
             ne.color = old.color
         return out.curve
 
-    def _repair_sides(self, parent_curve: Curve, op: Operation,
-                      avail: List[Resolution]) -> List[Resolution]:
-        """Recover a recorded pairing whose flag ids were renamed out from under it.
+    def _repair_sides(self, parent_curve: Curve, op: Operation) -> Resolution:
+        """Recover a recorded split whose flag ids were renamed out from under it.
 
         ``_remap_after_split`` keeps records current as edits happen, but a
         workspace saved before that existed -- or edited some way not yet
-        accounted for -- can hold a pairing naming a flag that is no longer at
-        the vertex. When exactly one recorded id is gone and exactly one flag
-        at the vertex is unaccounted for, the correspondence between them is
-        forced, so the recorded pairing still names a real resolution. Repair
-        the record in place: this is reading a rename, not picking anew.
+        accounted for -- can hold a split naming a flag that is no longer at the
+        vertex. When exactly one recorded id is gone and exactly one flag at the
+        vertex is unaccounted for, the correspondence between them is forced, so
+        the recorded split still names a real resolution. Repair the record in
+        place: this is reading a rename, not picking anew. Anything less clear
+        cut raises, and the type is flagged rather than guessed at.
         """
         recorded = set(op.side_a or ()) | set(op.side_b or ())
         present = {f.id for f in parent_curve.incident(op.vertex_id)}  # type: ignore[arg-type]
         missing, extra = recorded - present, present - recorded
         if len(missing) != 1 or len(extra) != 1:
-            return []
+            raise ValueError("resolution no longer applies")
         old, new = missing.pop(), extra.pop()
         side_a = _subst(op.side_a, old, new)
         side_b = _subst(op.side_b, old, new)
-        want = {frozenset(side_a), frozenset(side_b)}
-        out = [r for r in avail
-               if {frozenset(r.side_a), frozenset(r.side_b)} == want and not r.is_crossing]
-        if out:
-            op.side_a, op.side_b = side_a, side_b
-        return out
+        res = resolution_for_sides(parent_curve, op.vertex_id, side_a, side_b)  # type: ignore[arg-type]
+        op.side_a, op.side_b = side_a, side_b
+        return res
 
     # --- healing ---------------------------------------------------------
     def retry(self, node_id: str) -> str:
@@ -447,8 +441,8 @@ class Workspace:
         return [n for n in self.nodes.values() if n.parent_id is None]
 
 
-def _subst(pair: Optional[Tuple[str, str]], old: str, new: str) -> Optional[Tuple[str, str]]:
-    """``pair`` with ``old`` replaced by ``new``."""
-    if pair is None:
+def _subst(group: Optional[Tuple[str, ...]], old: str, new: str) -> Optional[Tuple[str, ...]]:
+    """``group`` with ``old`` replaced by ``new``."""
+    if group is None:
         return None
-    return tuple(new if x == old else x for x in pair)  # type: ignore[return-value]
+    return tuple(new if x == old else x for x in group)

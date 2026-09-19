@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "16";
+const APP_VERSION = "17";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -1131,7 +1131,7 @@ function renderControls() {
   // actions: each opens a dedicated dialog
   const ends = c.edges.filter(e => e.kind === "end");
   const bounded = c.edges.filter(e => e.kind === "bounded");
-  const v4 = Object.entries(summ.valences).filter(([v, k]) => k === 4).map(([v]) => v);
+  const v4 = Object.entries(summ.valences).filter(([v, k]) => k >= 4).map(([v]) => v);
   body.appendChild(group("Actions", () => {
     const g = document.createElement("div"); g.className = "ctrl-group";
     const mk = (label, enabled, why, onclick) => {
@@ -1150,7 +1150,7 @@ function renderControls() {
       mk("Contract edge…", bounded.length >= 1,
          "this type has no bounded edges to contract", openContractDialog),
       mk("Resolve vertex…", v4.length >= 1,
-         "this type has no 4-valent vertex to resolve", openResolveDialog),
+         "this type has no vertex of valence 4 or more to resolve", openResolveDialog),
     ]));
     return g;
   }));
@@ -1201,15 +1201,19 @@ function fmtVec(v) { return v ? `(${v[0]}, ${v[1]})` : ""; }
 // Vertices carry ids, but nothing in the picture shows them, so a dialog that
 // asks the user to pick one names it by what does show: the edges, ends and
 // markings that meet there, listed counterclockwise as they are drawn.
-function vertexLabel(c, vid) {
+function vertexFlags(c, vid) {
   const flags = [];
   c.edges.forEach(e => {
-    if (e.tail === vid) flags.push({ name: e.name, dir: [e.to[0] - e.from[0], e.to[1] - e.from[1]] });
-    if (e.head === vid) flags.push({ name: e.name, dir: [e.from[0] - e.to[0], e.from[1] - e.to[1]] });
+    if (e.tail === vid) flags.push({ id: e.id, name: e.name, dir: [e.to[0] - e.from[0], e.to[1] - e.from[1]] });
+    if (e.head === vid) flags.push({ id: e.id, name: e.name, dir: [e.from[0] - e.to[0], e.from[1] - e.to[1]] });
   });
   flags.sort((a, b) => Math.atan2(a.dir[1], a.dir[0]) - Math.atan2(b.dir[1], b.dir[0]));
-  const names = flags.map(f => f.name)
-    .concat(c.markings.filter(m => m.tail === vid).map(m => m.name));
+  // markings have no direction of their own, so they come last
+  return flags.concat(c.markings.filter(m => m.tail === vid)
+                       .map(m => ({ id: m.id, name: m.name, dir: [0, 0] })));
+}
+function vertexLabel(c, vid) {
+  const names = vertexFlags(c, vid).map(f => f.name);
   return names.length ? names.join(", ") : vid;
 }
 
@@ -1401,43 +1405,100 @@ function openContractDialog() {
 function openResolveDialog() {
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
   const data = api("render", selectedId);
-  const v4 = Object.entries(summ.valences || {}).filter(([, k]) => k === 4).map(([v]) => v);
-  const body = dialogHead("Resolve a 4-valent vertex",
-    "Each resolution is an adjacent maximal cell of the tropical moduli space. " +
-    "A crossing pairing realizes as a parallelogram, so it cannot become a " +
-    "bounded edge and is offered only for reference.");
-  if (!v4.length) {
-    body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no 4-valent vertex.</p>`);
+  const valences = summ.valences || {};
+  const big = Object.entries(valences).filter(([, k]) => k >= 4).map(([v]) => v);
+  const body = dialogHead("Resolve a vertex",
+    "Resolving splits a vertex in two, joined by a new bounded edge whose " +
+    "direction balancing forces. Each one is an adjacent maximal cell of the " +
+    "tropical moduli space. A split whose forced edge comes out zero realizes " +
+    "as a parallelogram, not an edge, and cannot be applied.");
+  if (!big.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no vertex of valence 4 or more.</p>`);
     openModal(); return;
   }
   let sel = null;
-  if (v4.length > 1) {
-    sel = selectOf(v4.map(v => [v, `where ${vertexLabel(data.curve, v)} meet`]));
+  if (big.length > 1) {
+    sel = selectOf(big.map(v => [v, `where ${vertexLabel(data.curve, v)} meet`]));
     body.appendChild(labeled("vertex", sel));
   }
   const listWrap = document.createElement("div");
-  listWrap.className = "reslist"; listWrap.style.marginTop = "10px";
+  listWrap.style.marginTop = "10px";
   body.appendChild(listWrap);
   body.appendChild(errBox());
-  const fill = () => {
-    const vertex = sel ? sel.value : v4[0];
-    listWrap.innerHTML = "";
+
+  const commit = (fn) => {
+    try {
+      const child = fn();
+      closeModal(); refreshAll(); selectNode(child.id); autosave();
+    } catch (err) { showModalError(err.message); }
+  };
+
+  // Valence 4 has only three splits, so they are worth reading as a list.
+  const fillList = (vertex) => {
     let list;
     try { list = api("list_resolutions", selectedId, vertex); }
     catch (e) { showModalError(e.message); return; }
+    const box = document.createElement("div");
+    box.className = "reslist";
     list.forEach(r => {
       const b = document.createElement("button");
       b.textContent = r.label;
       b.disabled = r.is_crossing;
       if (r.is_crossing) b.title = "crossing pairing — realizes as a parallelogram";
-      b.onclick = () => {
-        try {
-          const child = api("resolve", selectedId, vertex, r.index);
-          closeModal(); refreshAll(); selectNode(child.id); autosave();
-        } catch (err) { showModalError(err.message); }
-      };
-      listWrap.appendChild(b);
+      b.onclick = () => commit(() => api("resolve", selectedId, vertex, r.index));
+      box.appendChild(b);
     });
+    listWrap.appendChild(box);
+  };
+
+  // Past that the list grows fast (25 splits at valence 6), so choose a side
+  // instead: everything ticked goes to one new vertex, the rest to the other.
+  const fillPicker = (vertex) => {
+    const flags = vertexFlags(data.curve, vertex);
+    const d = flags.length;
+    listWrap.insertAdjacentHTML("beforeend",
+      `<p class="muted" style="margin:0 0 6px">Tick the edges to gather on one side
+       (at least 2, at most ${d - 2} of ${d}); the rest go on the other.</p>`);
+    const boxes = [];
+    flags.forEach(f => {
+      const lab = document.createElement("label");
+      lab.className = "check";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = f.id;
+      lab.append(cb, document.createTextNode(f.name));
+      listWrap.appendChild(lab);
+      boxes.push(cb);
+    });
+    const note = document.createElement("p");
+    note.className = "muted"; note.style.margin = "8px 0";
+    const go = document.createElement("button");
+    go.textContent = "Resolve"; go.disabled = true;
+    const chosen = () => boxes.filter(b => b.checked).map(b => b.value);
+    const update = () => {
+      const pick = chosen();
+      let res;
+      try { res = api("preview_resolution", selectedId, vertex, pick); }
+      catch (e) { res = { ok: false, reason: e.message }; }
+      if (res.ok) {
+        const rest = flags.filter(f => !pick.includes(f.id)).map(f => f.name).join(", ");
+        const side = flags.filter(f => pick.includes(f.id)).map(f => f.name).join(", ");
+        note.textContent = `{${side}} | {${rest}}, joined by a new edge ${fmtVec(res.new_edge_vec)}`;
+      } else {
+        note.textContent = res.reason;
+      }
+      go.disabled = !res.ok;
+    };
+    boxes.forEach(b => { b.onchange = update; });
+    go.onclick = () => commit(() => api("resolve_subset", selectedId, vertex, chosen(), null));
+    listWrap.append(note, go);
+    update();
+  };
+
+  const fill = () => {
+    const vertex = sel ? sel.value : big[0];
+    listWrap.innerHTML = "";
+    showModalError("");
+    if (valences[vertex] === 4) fillList(vertex); else fillPicker(vertex);
   };
   if (sel) sel.onchange = fill;
   fill();

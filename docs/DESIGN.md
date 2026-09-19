@@ -135,11 +135,16 @@ colors).
 - **Contract edge** (bounded edges only): merge the two endpoints; dually erase
   the shared subdivision edge and merge the two cells. Ends/markings can't be
   contracted.
-- **Resolve a 4-valent vertex**: present the (up to 3) flag pairings 2+2. Each
-  introduces a new bounded edge whose direction is forced by balancing; it may
-  realize as a genuine edge or as a crossing (parallelogram); a pairing forcing
-  a zero-vector edge is the crossing case. All valid pairings are shown, labeled
-  embedded vs crossing. (>= 5-valent: deferred.)
+- **Resolve a vertex** of valence `d >= 4`: split its flags into two groups,
+  each with at least 2 (so neither new vertex is 2-valent, which would say
+  nothing), joined by a new bounded edge whose direction is forced by balancing
+  -- minus the sum of one group's outgoing vectors. A group forcing a zero
+  vector is the crossing case: it realizes as a parallelogram rather than an
+  edge and cannot be applied. At `d = 4` the only splits are 2+2, both new
+  vertices come out trivalent, and the (up to 3) pairings are listed to choose
+  from. Beyond that the count grows fast -- 10 splits at `d = 5`, 25 at `d = 6`
+  -- so the UI has you tick one side instead, showing the forced edge as you go;
+  the pieces may need resolving in turn.
 - **Edit slopes**: the two-ends mechanism (2.2).
 - **Add / remove markings**: contracted ends at a chosen vertex, or on a
   chosen edge/end (subdividing it as in 2.1). Subdividing an end keeps the
@@ -239,7 +244,8 @@ docs/                       # DESIGN.md, POSTPONED.md
   crossings, validates a genus-0 tree, and is wired into the API/GUI (New → From
   subdivision); clearance-seeking length choice so no vertex is drawn on an edge
   it does not meet.]**
-- **P3 — Operations + propagation**: contract, resolve-4-valent, markings,
+- **P3 — Operations + propagation**: contract, resolve a vertex of any valence
+  >= 4, markings,
   rename/color; the derivation forest and transitive propagation. **[done —
   operations + Workspace forest with transitive all-or-nothing propagation and
   needs-attention flagging; 65 tests total]**
