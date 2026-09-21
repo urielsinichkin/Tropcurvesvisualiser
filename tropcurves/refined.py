@@ -14,15 +14,14 @@ A vertex is **marked** when it carries a marking: internally it is 4-valent
 with one contracted end, and counts as a marked trivalent vertex.
 
 A marking in the **interior of an edge** -- a vertex with only two edges, so
-internally 3-valent with one contracted end -- is not a vertex of the curve at
-all: balancing makes its two edge directions opposite, their wedge vanishes, so
-``mu = 0`` and it contributes a factor of 1, leaving the multiplicity alone.
-(Written ``[0]^+``, though note the formula above gives ``2/(q^(1/2) +
-q^(-1/2))`` at ``a = 0``, which is 1 only at ``q = 1``; the factor here is 1
-identically, which is what "does not affect the multiplicity" means.) The same
-goes for a bare two-valent vertex with no marking: it is a subdivision point,
-not a vertex, so it too contributes 1 rather than the ``[0]^- = 0`` the formula
-would give.
+internally 3-valent with one contracted end -- does not count: it is not a
+vertex of the curve at all. Balancing makes its two edge directions opposite,
+so their wedge and hence ``mu`` vanish, and the factor is 1, leaving the
+multiplicity exactly as it was before the edge was subdivided. The same goes
+for a bare two-valent vertex with no marking, which is a subdivision point
+rather than a vertex. Neither is read off the formula above, which at ``a = 0``
+gives ``0`` for ``[0]^-`` and ``2/(q^(1/2) + q^(-1/2))`` for ``[0]^+``; the
+factor is 1 identically.
 
 Anything else -- a vertex of another shape, or a trivalent one whose dual
 triangle is degenerate -- leaves the multiplicity undefined, and
@@ -294,9 +293,9 @@ class VertexMultiplicity:
         return q_integer_plus(self.mu) if self.marked else q_integer_minus(self.mu)
 
     def label(self) -> str:
-        """The factor as written, e.g. ``[3]-``."""
+        """The factor as written, e.g. ``[3]-``; an interior point is plainly 1."""
         if self.interior:
-            return "[0]+" if self.marked else "1"
+            return "1"
         return f"[{self.mu}]{'+' if self.marked else '-'}"
 
 
@@ -306,7 +305,7 @@ def vertex_multiplicity(curve: Curve, vertex: str) -> VertexMultiplicity:
     Accepts a trivalent vertex, or a 4-valent one carrying a single marking --
     a marked trivalent vertex -- or a point in the interior of an edge (two
     edges, with or without a marking), which is not a vertex of the curve and
-    contributes nothing. Anything else raises.
+    so contributes a factor of 1. Anything else raises.
     """
     flags = curve.incident(vertex)
     marks = [f for f in flags if f.kind is EdgeKind.MARKING]

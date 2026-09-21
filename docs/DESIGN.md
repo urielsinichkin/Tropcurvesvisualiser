@@ -165,14 +165,13 @@ computed as `|v1 ^ v2|` for two of the three outgoing vectors. A vertex counts
 as **marked** when it carries a marking -- internally 4-valent with one
 contracted end, i.e. a marked trivalent vertex.
 
-A marking in the **interior of an edge** is not a vertex of the curve: balancing
-makes its two edge directions opposite, so their wedge -- and `mu` -- vanishes,
-and it contributes a factor of 1, written `[0]^+`. (The formula itself gives
-`2/(q^(1/2) + q^(-1/2))` at `a = 0`, which is 1 only at `q = 1`; the factor
-taken here is 1 identically, which is what "does not affect the multiplicity"
-means.) A bare two-valent vertex with no marking is likewise a subdivision
-point, not a vertex, and also contributes 1 rather than the `[0]^- = 0` the
-formula would give.
+A marking in the **interior of an edge** does not count: it is not a vertex of
+the curve. Balancing makes its two edge directions opposite, so their wedge --
+and `mu` -- vanishes, and the factor is 1, leaving the multiplicity exactly as
+it was before the edge was subdivided. A bare two-valent vertex with no marking
+is likewise a subdivision point rather than a vertex, and also contributes 1.
+Neither comes from the formula, which at `a = 0` gives `[0]^- = 0` and
+`[0]^+ = 2/(q^(1/2) + q^(-1/2))`; the factor is 1 identically.
 
 It is **undefined** for anything else, and says which vertex and why: a vertex
 of another shape, or a trivalent one whose dual triangle is degenerate.
