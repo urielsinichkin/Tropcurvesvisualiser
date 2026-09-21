@@ -254,7 +254,8 @@ class Session:
             "text": value.text(),
             "is_polynomial": value.is_polynomial,
             "at_q_1": str(value.at_q(Fraction(1))),
-            "vertices": [{"vertex": v.vertex, "mu": v.mu, "marked": v.marked} for v in vms],
+            "vertices": [{"vertex": v.vertex, "mu": v.mu, "marked": v.marked,
+                          "interior": v.interior, "factor": v.label()} for v in vms],
         }
 
     def refined_multiplicities(self, node_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:

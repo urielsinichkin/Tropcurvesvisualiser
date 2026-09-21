@@ -190,7 +190,19 @@ def test_refined_multiplicity_reports_the_value_and_the_vertices():
 
     assert info["defined"] and info["text"] == "q^(1/2) + q^(-1/2)"
     assert info["is_polynomial"] and info["at_q_1"] == "2"
-    assert info["vertices"] == [{"vertex": "v", "mu": 2, "marked": False}]
+    assert info["vertices"] == [{"vertex": "v", "mu": 2, "marked": False,
+                                 "interior": False, "factor": "[2]-"}]
+
+
+def test_a_marking_on_an_edge_does_not_change_the_multiplicity():
+    s = Session()
+    node = s.add_preset("caterpillar_square")["id"]
+    before = s.refined_multiplicity(node)["text"]
+    s.add_marking_on_edge(node, "e", "mid")
+    after = s.refined_multiplicity(node)
+
+    assert after["defined"] and after["text"] == before
+    assert [v["factor"] for v in after["vertices"]].count("[0]+") == 1
 
 
 def test_refined_multiplicity_says_why_it_is_undefined():

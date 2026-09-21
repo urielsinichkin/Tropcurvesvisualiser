@@ -113,13 +113,58 @@ def test_two_markings_at_one_vertex_are_refused():
         refined_multiplicity(c)
 
 
-def test_a_marking_in_the_interior_of_an_edge_is_refused():
-    # that vertex is trivalent counting the marking, so the curve under it is
-    # not trivalent -- the definition does not cover it
-    c = builders.caterpillar_square()
+def test_a_marking_in_the_interior_of_an_edge_leaves_the_multiplicity_alone():
+    # that point is not a vertex of the curve: balancing makes its two edge
+    # directions opposite, so mu = 0 and the factor is 1
+    c = _two_vertex_curve()
+    before = refined_multiplicity(c)
     add_marking_on_edge(c, "e", name="mid")
-    with pytest.raises(MultiplicityError):
-        refined_multiplicity(c)
+
+    assert refined_multiplicity(c) == before
+    mid = [v for v in _by_vertex(c).values() if v.interior][0]
+    assert (mid.mu, mid.marked, mid.label()) == (0, True, "[0]+")
+    assert mid.factor() == RefinedValue.one()
+
+
+def test_a_bare_two_valent_vertex_also_contributes_one():
+    # removing the marking leaves a subdivision point, still not a vertex --
+    # and [0]^- would be 0, which would wrongly wipe out the whole product
+    c = _two_vertex_curve()
+    before = refined_multiplicity(c)
+    added = add_marking_on_edge(c, "e", name="mid")
+    del c.edges[added.marking]
+
+    assert refined_multiplicity(c) == before
+    spot = [v for v in _by_vertex(c).values() if v.interior][0]
+    assert (spot.marked, spot.label()) == (False, "1")
+
+
+def test_subdividing_an_edge_repeatedly_changes_nothing():
+    c = _two_vertex_curve()
+    before = refined_multiplicity(c)
+    add_marking_on_edge(c, "e", name="p1")
+    add_marking_on_edge(c, "e", name="p2")
+    add_marking_on_edge(c, "a", name="p3")      # on an end, too
+
+    assert refined_multiplicity(c) == before
+
+
+def _by_vertex(curve):
+    from tropcurves.refined import vertex_multiplicities
+    return {v.vertex: v for v in vertex_multiplicities(curve)}
+
+
+def _two_vertex_curve():
+    """Two trivalent vertices, of multiplicity 2 and 1."""
+    c = Curve()
+    c.add_vertex("v0"); c.add_vertex("v1")
+    c.add_bounded("e", "v0", "v1", Vec2(1, 1), name="e")
+    c.add_end("a", "v0", Vec2(-2, 0), name="a")
+    c.add_end("b", "v0", Vec2(1, -1), name="b")
+    c.add_end("c", "v1", Vec2(2, 1), name="c")
+    c.add_end("d", "v1", Vec2(-1, 0), name="d")
+    c.validate()
+    return c
 
 
 # --- whole curves ----------------------------------------------------------
@@ -129,15 +174,7 @@ def test_a_line_and_the_square_caterpillar_have_multiplicity_one():
 
 
 def test_a_curve_is_the_product_over_its_vertices():
-    # two vertices, of multiplicity 2 and 1
-    c = Curve()
-    c.add_vertex("v0"); c.add_vertex("v1")
-    c.add_bounded("e", "v0", "v1", Vec2(1, 1), name="e")
-    c.add_end("a", "v0", Vec2(-2, 0), name="a")
-    c.add_end("b", "v0", Vec2(1, -1), name="b")
-    c.add_end("c", "v1", Vec2(2, 1), name="c")
-    c.add_end("d", "v1", Vec2(-1, 0), name="d")
-    c.validate()
+    c = _two_vertex_curve()
     assert vertex_multiplicity(c, "v0").mu == 2
     assert vertex_multiplicity(c, "v1").mu == 1
     assert refined_multiplicity(c) == q_integer_minus(2) * q_integer_minus(1)

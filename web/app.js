@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "19";
+const APP_VERSION = "20";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -1140,8 +1140,7 @@ function renderControls() {
       wrap.appendChild(line);
       const how = document.createElement("p");
       how.className = "muted"; how.style.margin = "0"; how.style.fontSize = "12px";
-      how.textContent = info.vertices
-        .map(v => `[${v.mu}]${v.marked ? "+" : "-"}`).join(" · ")
+      how.textContent = info.vertices.map(v => v.factor).join(" · ")
         + `  ·  at q = 1: ${info.at_q_1}`;
       wrap.appendChild(how);
     } else {
@@ -1284,7 +1283,9 @@ function openMultiplicityDialog() {
     "Goettsche-Schroeter: the product of [&mu;(V)]<sub>q</sub><sup>&minus;</sup> " +
     "over the unmarked vertices and [&mu;(V)]<sub>q</sub><sup>+</sup> over the " +
     "marked ones, where &mu;(V) is the lattice area of the vertex's dual triangle. " +
-    "It needs every vertex to be trivalent, or trivalent with one marking.");
+    "It needs every vertex to be trivalent, or trivalent with one marking; a " +
+    "marking in the interior of an edge is not a vertex of the curve and " +
+    "contributes 1.");
   if (!rows.length) {
     body.insertAdjacentHTML("beforeend", `<p class="muted">No types yet.</p>`);
     openModal(); return;
