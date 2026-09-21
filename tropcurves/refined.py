@@ -11,10 +11,22 @@ three outgoing vectors -- and
     [a]_q^{+-} = (q^{a/2} +- q^{-a/2}) / (q^{1/2} +- q^{-1/2}).
 
 A vertex is **marked** when it carries a marking: internally it is 4-valent
-with one contracted end, and counts as a marked trivalent vertex. Anything else
--- a vertex of another shape, or one whose dual triangle is degenerate -- leaves
-the multiplicity undefined, and :class:`MultiplicityError` says which vertex and
-why.
+with one contracted end, and counts as a marked trivalent vertex.
+
+A marking in the **interior of an edge** -- a vertex with only two edges, so
+internally 3-valent with one contracted end -- is not a vertex of the curve at
+all: balancing makes its two edge directions opposite, their wedge vanishes, so
+``mu = 0`` and it contributes a factor of 1, leaving the multiplicity alone.
+(Written ``[0]^+``, though note the formula above gives ``2/(q^(1/2) +
+q^(-1/2))`` at ``a = 0``, which is 1 only at ``q = 1``; the factor here is 1
+identically, which is what "does not affect the multiplicity" means.) The same
+goes for a bare two-valent vertex with no marking: it is a subdivision point,
+not a vertex, so it too contributes 1 rather than the ``[0]^- = 0`` the formula
+would give.
+
+Anything else -- a vertex of another shape, or a trivalent one whose dual
+triangle is degenerate -- leaves the multiplicity undefined, and
+:class:`MultiplicityError` says which vertex and why.
 
 Everything is exact. Values are Laurent polynomials in ``t = q^(1/2)`` over the
 integers, except that ``[a]^+`` with ``a`` even is not a polynomial at all: it
@@ -273,17 +285,35 @@ class VertexMultiplicity:
     vertex: str
     mu: int
     marked: bool
+    interior: bool = False      # a point in the interior of an edge, not a vertex
+
+    def factor(self) -> RefinedValue:
+        """What this vertex contributes to the product."""
+        if self.interior:
+            return RefinedValue.one()
+        return q_integer_plus(self.mu) if self.marked else q_integer_minus(self.mu)
+
+    def label(self) -> str:
+        """The factor as written, e.g. ``[3]-``."""
+        if self.interior:
+            return "[0]+" if self.marked else "1"
+        return f"[{self.mu}]{'+' if self.marked else '-'}"
 
 
 def vertex_multiplicity(curve: Curve, vertex: str) -> VertexMultiplicity:
     """Mikhalkin multiplicity of a vertex, and whether it is marked.
 
     Accepts a trivalent vertex, or a 4-valent one carrying a single marking --
-    a marked trivalent vertex. Anything else raises.
+    a marked trivalent vertex -- or a point in the interior of an edge (two
+    edges, with or without a marking), which is not a vertex of the curve and
+    contributes nothing. Anything else raises.
     """
     flags = curve.incident(vertex)
     marks = [f for f in flags if f.kind is EdgeKind.MARKING]
     real = [f for f in flags if f.kind is not EdgeKind.MARKING]
+    if len(real) == 2 and len(marks) <= 1:
+        # balancing makes the two directions opposite, so mu = 0 either way
+        return VertexMultiplicity(vertex=vertex, mu=0, marked=bool(marks), interior=True)
     if len(real) != 3 or len(marks) > 1:
         has = f"{len(real)} edge{'' if len(real) == 1 else 's'}"
         if marks:
@@ -315,7 +345,7 @@ def refined_multiplicity(curve: Curve) -> RefinedValue:
     """The refined multiplicity of a trivalent (possibly marked) curve."""
     out = RefinedValue.one()
     for vm in vertex_multiplicities(curve):
-        out = out * (q_integer_plus(vm.mu) if vm.marked else q_integer_minus(vm.mu))
+        out = out * vm.factor()
     return out
 
 
