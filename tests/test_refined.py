@@ -122,7 +122,7 @@ def test_a_marking_in_the_interior_of_an_edge_leaves_the_multiplicity_alone():
 
     assert refined_multiplicity(c) == before
     mid = [v for v in _by_vertex(c).values() if v.interior][0]
-    assert (mid.mu, mid.marked, mid.label()) == (0, True, "[0]+")
+    assert (mid.mu, mid.marked, mid.label()) == (0, True, "1")
     assert mid.factor() == RefinedValue.one()
 
 

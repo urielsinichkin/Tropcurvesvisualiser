@@ -202,7 +202,8 @@ def test_a_marking_on_an_edge_does_not_change_the_multiplicity():
     after = s.refined_multiplicity(node)
 
     assert after["defined"] and after["text"] == before
-    assert [v["factor"] for v in after["vertices"]].count("[0]+") == 1
+    assert [v["factor"] for v in after["vertices"]].count("1") == 1
+    assert [v for v in after["vertices"] if v["interior"]][0]["marked"] is True
 
 
 def test_refined_multiplicity_says_why_it_is_undefined():

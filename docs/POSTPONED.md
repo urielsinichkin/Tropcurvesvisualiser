@@ -35,10 +35,10 @@ parametrized tropical curves**.
   refined multiplicity equals its complement's. Still deferred: multiplicities
   read off the *cells of the subdivision* rather than the curve, and any actual
   curve-counting (Severi degrees, invariance checks).
-- **Settled:** a marking in the interior of an edge contributes 1 -- it is not
+- **Settled:** a marking in the interior of an edge does not count -- it is not
   a vertex of the curve, and its two edge directions are opposite so `mu = 0`.
-  Same for a bare two-valent vertex. Note this is the factor 1 *identically*,
-  not the `2/(q^(1/2) + q^(-1/2))` that `[0]^+` evaluates to as a formula.
+  The factor is 1 identically (not anything `[0]^±` evaluates to as a formula).
+  Same for a bare two-valent vertex.
 - **Chamber choice for display.** The combinatorial type (tree + slopes +
   markings) is the object of record; the dual subdivision is a display
   convenience. To draw it we pick an **arbitrary maximal-dimensional (generic)
