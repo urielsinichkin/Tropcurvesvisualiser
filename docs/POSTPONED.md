@@ -29,8 +29,17 @@ parametrized tropical curves**.
 
 ## Subdivision / crossings (see interview §2)
 
-- **Multiplicities** (lattice areas of cells, Mikhalkin weights) and any
-  curve-counting: out of scope for now.
+- **Multiplicities.** The Mikhalkin multiplicity of a vertex and the
+  Goettsche-Schroeter **refined multiplicity** of a whole curve are implemented
+  (`refined.py`), together with the search for a subset of curves whose total
+  refined multiplicity equals its complement's. Still deferred: multiplicities
+  read off the *cells of the subdivision* rather than the curve, and any actual
+  curve-counting (Severi degrees, invariance checks).
+- **A marking in the interior of an edge** has no refined multiplicity: its
+  vertex is trivalent only by counting the contracted end, so the curve beneath
+  is not trivalent, and the definition as stated does not cover it. If those
+  should instead contribute a factor of 1 (a marked point on an edge rather
+  than at a vertex), that is a one-line change in `vertex_multiplicity`.
 - **Chamber choice for display.** The combinatorial type (tree + slopes +
   markings) is the object of record; the dual subdivision is a display
   convenience. To draw it we pick an **arbitrary maximal-dimensional (generic)

@@ -6,12 +6,12 @@
 const PKG_FILES = [
   "geometry.py", "curve.py", "balancing.py", "newton.py", "layout.py",
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
-  "schema.py", "builders.py", "api.py", "__init__.py",
+  "refined.py", "schema.py", "builders.py", "api.py", "__init__.py",
 ];
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "18";
+const APP_VERSION = "19";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -256,6 +256,7 @@ function bind(id, prop, handler) {
 function wireGlobalButtons() {
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
+  bind("btn-mult", "onclick", openMultiplicityDialog);
   bind("btn-save", "onclick", exportJSON);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("file-input", "onchange", importJSON);
@@ -1128,6 +1129,29 @@ function renderControls() {
     return wrap;
   }));
 
+  body.appendChild(group("Refined multiplicity", () => {
+    const wrap = document.createElement("div");
+    wrap.className = "ctrl-group";
+    const info = api("refined_multiplicity", selectedId);
+    const line = document.createElement("div");
+    if (info.defined) {
+      line.className = "mult";
+      line.textContent = info.text;
+      wrap.appendChild(line);
+      const how = document.createElement("p");
+      how.className = "muted"; how.style.margin = "0"; how.style.fontSize = "12px";
+      how.textContent = info.vertices
+        .map(v => `[${v.mu}]${v.marked ? "+" : "-"}`).join(" · ")
+        + `  ·  at q = 1: ${info.at_q_1}`;
+      wrap.appendChild(how);
+    } else {
+      line.className = "muted";
+      line.textContent = "undefined — " + info.reason;
+      wrap.appendChild(line);
+    }
+    return wrap;
+  }));
+
   // actions: each opens a dedicated dialog
   const ends = c.edges.filter(e => e.kind === "end");
   const bounded = c.edges.filter(e => e.kind === "bounded");
@@ -1250,6 +1274,92 @@ function clearViews() {
 // each stays the same derivation expressed from one type further up; the
 // children of a root become roots. There is no undo, so it asks first, and
 // says where the derived types will end up rather than just warning.
+// The refined multiplicity of every type at once, and the question the whole
+// thing is for: can these curves be split into two halves that carry the same
+// total? Multiplicities are exact (Laurent polynomials in q^(1/2), or a ratio
+// of them), so "the same" here means equal on the nose, not numerically.
+function openMultiplicityDialog() {
+  const rows = api("refined_multiplicities", null);
+  const body = dialogHead("Refined multiplicities",
+    "Goettsche-Schroeter: the product of [&mu;(V)]<sub>q</sub><sup>&minus;</sup> " +
+    "over the unmarked vertices and [&mu;(V)]<sub>q</sub><sup>+</sup> over the " +
+    "marked ones, where &mu;(V) is the lattice area of the vertex's dual triangle. " +
+    "It needs every vertex to be trivalent, or trivalent with one marking.");
+  if (!rows.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">No types yet.</p>`);
+    openModal(); return;
+  }
+
+  const list = document.createElement("div");
+  list.style.margin = "10px 0";
+  const boxes = [];
+  rows.forEach(r => {
+    const lab = document.createElement("label");
+    lab.className = "mult-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = r.id; cb.checked = r.defined; cb.disabled = !r.defined;
+    const name = document.createElement("span");
+    name.className = "tname"; name.textContent = r.name;
+    const val = document.createElement("span");
+    val.className = r.defined ? "mult" : "muted";
+    val.textContent = r.defined ? r.text : "undefined — " + r.reason;
+    lab.append(cb, name, val);
+    list.appendChild(lab);
+    if (r.defined) boxes.push(cb);
+  });
+  body.appendChild(list);
+
+  const all = document.createElement("button");
+  all.className = "small";
+  all.textContent = "Select all";
+  all.onclick = () => { boxes.forEach(b => { b.checked = true; }); result.textContent = ""; };
+  const none = document.createElement("button");
+  none.className = "small";
+  none.textContent = "Select none";
+  none.onclick = () => { boxes.forEach(b => { b.checked = false; }); result.textContent = ""; };
+  const go = document.createElement("button");
+  go.textContent = "Check for a balanced split";
+  const result = document.createElement("div");
+  result.style.marginTop = "10px";
+
+  go.onclick = () => {
+    const picked = boxes.filter(b => b.checked).map(b => b.value);
+    result.textContent = "";
+    if (picked.length < 2) {
+      result.className = "muted";
+      result.textContent = "Pick at least two types to split.";
+      return;
+    }
+    let out;
+    try { out = api("balanced_split", picked); }
+    catch (e) { showModalError(e.message); return; }
+    if (!out.ok) {
+      result.className = "muted";
+      result.textContent = out.reason ||
+        ("some of these have no multiplicity: " +
+         out.undefined.map(u => u.name).join(", "));
+      return;
+    }
+    const nameOf = id => (rows.find(r => r.id === id) || {}).name || id;
+    result.className = "";
+    if (!out.found) {
+      result.innerHTML = `<p class="muted" style="margin:0">No subset balances.
+        The total is <span class="mult">${escapeHtml(out.total)}</span>, and no
+        way of splitting these ${picked.length} types gives two halves with the
+        same total.</p>`;
+      return;
+    }
+    result.innerHTML = `<p style="margin:0 0 4px">Balanced, each half totalling
+      <span class="mult">${escapeHtml(out.value)}</span>:</p>
+      <p class="muted" style="margin:0">{${out.subset.map(nameOf).map(escapeHtml).join(", ")}}
+      &nbsp;|&nbsp; {${out.complement.map(nameOf).map(escapeHtml).join(", ")}}</p>`;
+  };
+  body.appendChild(row([go, all, none]));
+  body.appendChild(result);
+  body.appendChild(errBox());
+  openModal();
+}
+
 function openDeleteDialog() {
   const nodes = api("list_nodes");
   const summ = nodes.find(n => n.id === selectedId);

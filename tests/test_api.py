@@ -171,3 +171,71 @@ def test_resolve_subset_refuses_a_crossing():
     ]})["id"]
     with pytest.raises(ValueError):
         s.resolve_subset(node, "v", ["a", "b"])
+
+
+# --- refined multiplicity through the session ------------------------------
+def _mu_curve(session, vecs, name, marked=False):
+    spec = {"vertices": ["v"], "ends": [
+        {"id": f"e{i}", "tail": "v", "vec": list(v), "name": f"{name}{i}"}
+        for i, v in enumerate(vecs)]}
+    if marked:
+        spec["markings"] = [{"id": "m1", "tail": "v", "name": name + "p"}]
+    return session.add_curve(spec, name=name)["id"]
+
+
+def test_refined_multiplicity_reports_the_value_and_the_vertices():
+    s = Session()
+    node = _mu_curve(s, [(2, 0), (-1, 1), (-1, -1)], "two")
+    info = s.refined_multiplicity(node)
+
+    assert info["defined"] and info["text"] == "q^(1/2) + q^(-1/2)"
+    assert info["is_polynomial"] and info["at_q_1"] == "2"
+    assert info["vertices"] == [{"vertex": "v", "mu": 2, "marked": False}]
+
+
+def test_refined_multiplicity_says_why_it_is_undefined():
+    s = Session()
+    node = s.add_preset("caterpillar_square")["id"]
+    four = s.contract(node, "e")["id"]
+    info = s.refined_multiplicity(four)
+
+    assert not info["defined"]
+    assert "trivalent" in info["reason"]
+
+
+def test_balanced_split_finds_the_halves():
+    s = Session()
+    ids = [_mu_curve(s, [(2, 0), (-1, 1), (-1, -1)], "a"),
+           _mu_curve(s, [(3, 0), (-1, 1), (-2, -1)], "b"),
+           _mu_curve(s, [(2, 0), (-1, 1), (-1, -1)], "c"),
+           _mu_curve(s, [(3, 0), (-1, 1), (-2, -1)], "d")]
+    out = s.balanced_split(ids)
+
+    assert out["ok"] and out["found"]
+    assert sorted(out["subset"] + out["complement"]) == sorted(ids)
+    assert len(out["subset"]) == 2
+    # each half is one of each kind
+    assert {s.refined_multiplicity(i)["text"] for i in out["subset"]} == \
+           {s.refined_multiplicity(i)["text"] for i in out["complement"]}
+
+
+def test_balanced_split_reports_when_there_is_none():
+    s = Session()
+    ids = [_mu_curve(s, [(2, 0), (-1, 1), (-1, -1)], "a"),
+           _mu_curve(s, [(3, 0), (-1, 1), (-2, -1)], "b")]
+    out = s.balanced_split(ids)
+
+    assert out["ok"] and not out["found"]
+    assert out["total"] == "q + q^(1/2) + 1 + q^(-1/2) + q^-1"
+
+
+def test_balanced_split_needs_every_multiplicity_to_exist():
+    s = Session()
+    good = _mu_curve(s, [(2, 0), (-1, 1), (-1, -1)], "a")
+    preset = s.add_preset("caterpillar_square")["id"]
+    bad = s.contract(preset, "e")["id"]
+
+    out = s.balanced_split([good, bad])
+
+    assert not out["ok"]
+    assert [u["id"] for u in out["undefined"]] == [bad]
