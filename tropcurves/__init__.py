@@ -15,7 +15,24 @@ from .balancing import (
 from .newton import newton_polygon
 from .layout import embed, readable_lengths, generic_lengths
 from .subdivision import build_subdivision, Subdivision, SubdivisionCell, SubdivisionError
-from .operations import contract_edge, resolutions, apply_resolution, Resolution
+from .operations import (
+    contract_edge,
+    resolutions,
+    resolution_for_sides,
+    resolution_for_subset,
+    apply_resolution,
+    Resolution,
+)
+from .refined import (
+    refined_multiplicity,
+    vertex_multiplicity,
+    balanced_split,
+    q_integer_minus,
+    q_integer_plus,
+    MultiplicityError,
+    RefinedValue,
+    Laurent,
+)
 from .subdivision_import import import_subdivision
 from .workspace import Workspace, TypeNode, Operation
 from .api import Session
@@ -48,6 +65,16 @@ __all__ = [
     "resolutions",
     "apply_resolution",
     "Resolution",
+    "resolution_for_sides",
+    "resolution_for_subset",
+    "refined_multiplicity",
+    "vertex_multiplicity",
+    "balanced_split",
+    "q_integer_minus",
+    "q_integer_plus",
+    "MultiplicityError",
+    "RefinedValue",
+    "Laurent",
     "import_subdivision",
     "Workspace",
     "TypeNode",

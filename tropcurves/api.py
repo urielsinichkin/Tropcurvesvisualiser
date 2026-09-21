@@ -20,6 +20,10 @@ from .layout import embed, readable_lengths, end_ray_length
 from .subdivision import build_subdivision, SubdivisionError
 from .operations import resolutions, resolution_for_subset
 from .subdivision_import import import_subdivision
+from .refined import (
+    refined_multiplicity, vertex_multiplicities, balanced_split,
+    MultiplicityError, MAX_SPLIT_ITEMS,
+)
 from .workspace import Workspace
 from . import schema, builders
 
@@ -227,6 +231,72 @@ class Session:
             raise ValueError("that split is a crossing (a parallelogram), not a resolution")
         child = self.ws.resolve(node_id, res, name=name)
         return self.node_summary(child.id)
+
+    # --- refined multiplicity -------------------------------------------
+    def refined_multiplicity(self, node_id: str) -> Dict[str, Any]:
+        """The Goettsche-Schroeter refined multiplicity of one type.
+
+        ``defined`` is False with a ``reason`` when the curve is not trivalent
+        (markings aside); otherwise ``text`` is the value and ``vertices``
+        lists what each vertex contributed.
+        """
+        c = self.ws.nodes[node_id].curve
+        try:
+            vms = vertex_multiplicities(c)
+            value = refined_multiplicity(c)
+        except MultiplicityError as exc:
+            return {"id": node_id, "name": self.ws.nodes[node_id].name,
+                    "defined": False, "reason": str(exc)}
+        return {
+            "id": node_id,
+            "name": self.ws.nodes[node_id].name,
+            "defined": True,
+            "text": value.text(),
+            "is_polynomial": value.is_polynomial,
+            "at_q_1": str(value.at_q(Fraction(1))),
+            "vertices": [{"vertex": v.vertex, "mu": v.mu, "marked": v.marked} for v in vms],
+        }
+
+    def refined_multiplicities(self, node_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        ids = list(self.ws.nodes) if node_ids is None else node_ids
+        return [self.refined_multiplicity(nid) for nid in ids]
+
+    def balanced_split(self, node_ids: List[str]) -> Dict[str, Any]:
+        """Can these types be split in two halves of equal total multiplicity?
+
+        Returns the halves when one exists. Every chosen type needs a defined
+        multiplicity, since otherwise there is nothing to add up.
+        """
+        values, undefined = [], []
+        for nid in node_ids:
+            info = self.refined_multiplicity(nid)
+            if not info["defined"]:
+                undefined.append({"id": nid, "name": info["name"], "reason": info["reason"]})
+            else:
+                values.append(refined_multiplicity(self.ws.nodes[nid].curve))
+        if undefined:
+            return {"ok": False, "undefined": undefined}
+        if len(node_ids) > MAX_SPLIT_ITEMS:
+            return {"ok": False, "reason": f"pick at most {MAX_SPLIT_ITEMS} types "
+                                           f"(this is a subset search over 2^n splits)"}
+        total = values[0] if values else None
+        for v in values[1:]:
+            total = total + v
+        chosen = balanced_split(values)
+        out: Dict[str, Any] = {
+            "ok": True,
+            "found": chosen is not None,
+            "total": total.text() if total is not None else "0",
+        }
+        if chosen is not None:
+            picked = [node_ids[i] for i in chosen]
+            half = values[chosen[0]] if chosen else None
+            for i in chosen[1:]:
+                half = half + values[i]
+            out["subset"] = picked
+            out["complement"] = [n for n in node_ids if n not in set(picked)]
+            out["value"] = half.text() if half is not None else "0"
+        return out
 
     # --- render data ----------------------------------------------------
     def render(self, node_id: str) -> Dict[str, Any]:

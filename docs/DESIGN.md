@@ -153,6 +153,33 @@ colors).
 - **Rename**: ends, markings, edges (uniqueness enforced within a type).
 - **Recolor**: any end, marking, or edge.
 
+### 3.1 Refined multiplicity (Goettsche-Schroeter)
+
+For a trivalent curve,
+
+    mult_q(C) = prod_{V unmarked} [mu(V)]_q^-  *  prod_{V marked} [mu(V)]_q^+,
+    [a]_q^{+-} = (q^{a/2} +- q^{-a/2}) / (q^{1/2} +- q^{-1/2}),
+
+with `mu(V)` the Mikhalkin multiplicity: the lattice area of the dual triangle,
+computed as `|v1 ^ v2|` for two of the three outgoing vectors. A vertex counts
+as **marked** when it carries a marking -- internally 4-valent with one
+contracted end, i.e. a marked trivalent vertex.
+
+It is **undefined** for anything else, and says which vertex and why: a vertex
+of another shape (including a marking in the interior of an edge, whose vertex
+is trivalent only by counting the marking), or one whose dual triangle is
+degenerate.
+
+Arithmetic is exact. Values are Laurent polynomials in `t = q^(1/2)` over the
+integers, except that `[a]^+` for even `a` is genuinely not a polynomial;
+nothing but `1 + t^2` can ever appear in a denominator, so a value is carried as
+`num / (1 + t^2)^k` in lowest terms. Equality is then exact and addition closed
+-- which is what lets a set of curves be searched for a **balanced split**: a
+subset whose total multiplicity equals its complement's. Both halves are equal
+exactly when one half is half of everything, so the search halves the total (no
+subset can work if some coefficient is odd) and meets in the middle, `2^(n/2)`
+work rather than `2^n`.
+
 ## 4. Derivation tree and propagation
 
 Types form a **forest**: contraction/resolution create a **child** with a
@@ -227,6 +254,7 @@ tropcurves/                 # pure-Python core package
   subdivision.py            # generic-chamber dual mixed subdivision
   layout.py                 # readable length/embedding chooser
   operations.py             # contract, resolve, edit slopes, markings, rename, color
+  refined.py                # Goettsche-Schroeter refined multiplicity, balanced splits
   workspace.py              # forest of types + propagation engine
   schema.py                 # versioned JSON (de)serialization
 tests/                      # headless unit tests for the core
