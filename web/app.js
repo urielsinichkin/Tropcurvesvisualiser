@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "22";
+const APP_VERSION = "23";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -253,7 +253,30 @@ function bind(id, prop, handler) {
   else console.warn("missing element (stale index.html?):", id);
 }
 
+// The actions collapse behind ☰ on a narrow screen (see styles.css). Opening
+// is a class on the panel; anything that acts, Escape, or a tap outside closes
+// it again. On a wide screen the class does nothing, so this is harmless there.
+function wireMenu() {
+  const btn = document.getElementById("btn-menu");
+  const menu = document.getElementById("menu");
+  if (!btn || !menu) return;
+  const setOpen = open => {
+    menu.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  btn.onclick = ev => {
+    ev.stopPropagation();
+    setOpen(!menu.classList.contains("open"));
+  };
+  menu.addEventListener("click", ev => { if (ev.target.closest("button")) setOpen(false); });
+  document.addEventListener("click", ev => {
+    if (ev.target !== btn && !menu.contains(ev.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") setOpen(false); });
+}
+
 function wireGlobalButtons() {
+  wireMenu();
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
