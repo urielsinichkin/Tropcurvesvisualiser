@@ -38,6 +38,26 @@ class Session:
     def save(self) -> str:
         return schema.dumps_workspace(self.ws)
 
+    def export_subset(self, node_ids: List[str]) -> str:
+        """Save only these types, as a workspace that stands on its own.
+
+        A left-out type does not orphan what came after it: the export is the
+        workspace with everything unselected *deleted*, so each kept type is
+        re-attached to its nearest kept ancestor, carrying the skipped steps in
+        front of its own, and one with no kept ancestor becomes a root. What is
+        exported therefore reads back as the same curves, still derived from
+        one another wherever both ends were included.
+        """
+        keep = set(node_ids)
+        unknown = [n for n in keep if n not in self.ws.nodes]
+        if unknown:
+            raise ValueError(f"unknown type id(s): {', '.join(sorted(unknown))}")
+        copy = schema.loads_workspace(schema.dumps_workspace(self.ws))
+        for nid in list(copy.nodes):
+            if nid not in keep:
+                copy.delete(nid)
+        return schema.dumps_workspace(copy)
+
     def load(self, text: str) -> None:
         self.ws = schema.loads_workspace(text)
         # A replay that failed when the file was written may well succeed now,

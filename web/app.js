@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "21";
+const APP_VERSION = "22";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 
@@ -257,7 +257,7 @@ function wireGlobalButtons() {
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
-  bind("btn-save", "onclick", exportJSON);
+  bind("btn-save", "onclick", openExportDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("file-input", "onchange", importJSON);
   bind("modal-cancel", "onclick", closeModal);
@@ -354,14 +354,90 @@ async function copyPanelPng(svgId, background, btn, filename) {
   }
 }
 
-function exportJSON() {
-  const text = api("save");
+function downloadJSON(text, filename) {
   const blob = new Blob([text], { type: "application/json" });
   const a = document.getElementById("download-anchor");
   a.href = URL.createObjectURL(blob);
-  a.download = "tropical-workspace.json";
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// Export asks which types to save. A subset is not a truncation: whatever is
+// left out is *deleted* from the copy being written, so a kept type re-attaches
+// to its nearest kept ancestor (carrying the skipped steps) or becomes a root,
+// and the file reads back as the same curves.
+function openExportDialog() {
+  const nodes = api("list_nodes");
+  const body = dialogHead("Export",
+    "Choose what to save. A type whose parent is left out is re-attached to " +
+    "the nearest included one, carrying the steps in between, so it is still " +
+    "the same derivation; with no included ancestor it becomes a root.");
+  if (!nodes.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">No types to export.</p>`);
+    openModal(); return;
+  }
+
+  const byId = {}; nodes.forEach(n => byId[n.id] = n);
+  const list = document.createElement("div");
+  list.style.margin = "10px 0";
+  const boxes = [];
+  const depthOf = n => {
+    let d = 0, cur = n;
+    while (cur.parent_id && byId[cur.parent_id]) { d++; cur = byId[cur.parent_id]; }
+    return d;
+  };
+  nodes.forEach(n => {
+    const lab = document.createElement("label");
+    lab.className = "mult-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.value = n.id; cb.checked = true;
+    const name = document.createElement("span");
+    name.className = "tname";
+    name.style.paddingLeft = (depthOf(n) * 14) + "px";
+    name.textContent = n.name;
+    const meta = document.createElement("span");
+    meta.className = "muted";
+    meta.textContent = `${n.num_ends} ends · ${n.num_bounded} edges · ${n.num_markings} marks`;
+    lab.append(cb, name, meta);
+    list.appendChild(lab);
+    boxes.push(cb);
+  });
+  body.appendChild(list);
+
+  const go = document.createElement("button");
+  const all = document.createElement("button"); all.className = "small"; all.textContent = "Select all";
+  const none = document.createElement("button"); none.className = "small"; none.textContent = "Select none";
+  const picked = () => boxes.filter(b => b.checked).map(b => b.value);
+  const sync = () => {
+    const n = picked().length;
+    go.textContent = n === nodes.length ? `Export all ${n}` : `Export ${n} of ${nodes.length}`;
+    go.disabled = n === 0;
+  };
+  boxes.forEach(b => { b.onchange = sync; });
+  all.onclick = () => { boxes.forEach(b => { b.checked = true; }); sync(); };
+  none.onclick = () => { boxes.forEach(b => { b.checked = false; }); sync(); };
+  go.onclick = () => {
+    const ids = picked();
+    let text;
+    try { text = ids.length === nodes.length ? api("save") : api("export_subset", ids); }
+    catch (e) { showModalError(e.message); return; }
+    downloadJSON(text, exportFilename(ids, nodes, byId));
+    closeModal();
+  };
+  sync();
+  body.appendChild(row([go, all, none]));
+  body.appendChild(errBox());
+  openModal();
+}
+
+function exportFilename(ids, nodes, byId) {
+  if (ids.length === nodes.length) return "tropical-workspace.json";
+  if (ids.length === 1) {
+    const safe = (byId[ids[0]].name || "curve").replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "");
+    return (safe || "curve") + ".json";
+  }
+  return `tropical-subset-${ids.length}.json`;
 }
 
 function importJSON(ev) {
