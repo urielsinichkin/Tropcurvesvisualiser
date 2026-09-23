@@ -38,6 +38,30 @@ h2 { font-size: 14px; margin: 0 0 8px; letter-spacing: .01em; }
   position: sticky; top: 0; z-index: 5;
 }
 .actions { display: flex; gap: 8px; align-items: center; }
+.status-line { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+#btn-menu { display: none; font-size: 18px; line-height: 1; padding: 6px 11px; }
+
+/* Narrow screens: the actions become a panel under the bar, behind ☰.
+   The row does not fit a phone, and shrinking it further would leave buttons
+   too small to hit. */
+@media (max-width: 720px) {
+  #topbar { gap: 8px; padding: 8px 12px; }
+  #topbar h1 { font-size: 16px; }
+  #btn-menu { display: block; }
+  #menu {
+    display: none; position: absolute; right: 8px; top: 100%;
+    flex-direction: column; align-items: stretch; gap: 6px;
+    min-width: 210px; max-width: calc(100vw - 16px); padding: 10px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow);
+  }
+  #menu.open { display: flex; }
+  #menu button { text-align: left; width: 100%; }
+  .status-line {
+    flex-direction: column; align-items: flex-start; gap: 2px;
+    border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px;
+  }
+}
 
 button {
   font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);

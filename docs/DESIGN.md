@@ -306,7 +306,9 @@ docs/                       # DESIGN.md, POSTPONED.md
   fixing dark-background readability) with a Colors settings dialog to override
   the default and a per-element reset-to-default control; the dual-subdivision
   panel is collapsed by default per curve; vertices undrawn and markings drawn
-  on their image, sized by valence; lengths chosen for clearance. Remaining:
+  on their image, sized by valence; lengths chosen for clearance; the top bar's
+  actions collapse behind a hamburger below 720px, since the row does not fit a
+  phone. Remaining:
   spreading beyond clearance and label-collision avoidance, custom (graph/ends)
   curve entry, further aesthetic and a11y passes.]**
 

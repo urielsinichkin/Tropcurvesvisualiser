@@ -6,19 +6,24 @@
 <title>Tropical Curves Visualiser</title>
 <!-- Bump ?v= on each deploy that changes styles.css. app.js does not need a
      manual bump: it is loaded with a time-based token at the end of <body>. -->
-<link rel="stylesheet" href="styles.css?v=11" />
+<link rel="stylesheet" href="styles.css?v=12" />
 </head>
 <body>
 <header id="topbar">
   <h1>Tropical Curves</h1>
-  <div class="actions">
+  <!-- On a narrow screen the actions collapse behind this button; wide screens
+       show them in a row and hide the button (CSS only, same markup). -->
+  <button id="btn-menu" aria-label="Menu" aria-controls="menu" aria-expanded="false">☰</button>
+  <div class="actions" id="menu">
     <button id="btn-new">New</button>
     <button id="btn-settings" title="Display settings: colors, labels, background">🎨 Display</button>
     <button id="btn-mult" title="Refined multiplicities, and balanced splits of a set of curves">Multiplicity</button>
     <button id="btn-save" title="Save the workspace, or a chosen subset of it, as JSON">Export…</button>
     <button id="btn-load">Import</button>
-    <span id="autosave" class="muted" title="Saved in this browser"></span>
-    <span id="app-version" class="muted" title="Loaded app version (blank means a stale cached app.js)"></span>
+    <span class="status-line">
+      <span id="autosave" class="muted" title="Saved in this browser"></span>
+      <span id="app-version" class="muted" title="Loaded app version (blank means a stale cached app.js)"></span>
+    </span>
   </div>
 </header>
 
