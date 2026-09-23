@@ -252,3 +252,60 @@ def test_balanced_split_needs_every_multiplicity_to_exist():
 
     assert not out["ok"]
     assert [u["id"] for u in out["undefined"]] == [bad]
+
+
+# --- exporting part of a workspace -----------------------------------------
+def _chain_session():
+    s = Session()
+    root = s.add_preset("caterpillar_square")["id"]
+    mid = s.contract(root, "e", name="four")["id"]
+    v = [x for x, k in s.node_summary(mid)["valences"].items() if k == 4][0]
+    leaf = s.resolve(mid, v, 0, name="leaf")["id"]
+    return s, root, mid, leaf
+
+
+def test_exporting_everything_matches_a_plain_save():
+    s, root, mid, leaf = _chain_session()
+    assert s.export_subset([root, mid, leaf]) == s.save()
+
+
+def test_a_skipped_middle_type_is_composed_away():
+    s, root, mid, leaf = _chain_session()
+
+    back = Session()
+    back.load(s.export_subset([root, leaf]))
+
+    assert sorted(n["id"] for n in back.list_nodes()) == sorted([root, leaf])
+    assert back.node_summary(leaf)["parent_id"] == root
+    assert [op.kind for op in back.ws.nodes[leaf].operations] == ["contract", "resolve"]
+    # the curve came across unchanged, and edits still reach it
+    assert back.render(leaf)["curve"] == s.render(leaf)["curve"]
+    back.set_color(root, "a", "#ff0000")
+    assert back.node_summary(leaf)["status"] == "ok"
+    assert [e for e in back.render(leaf)["curve"]["edges"]
+            if e["id"] == "a"][0]["color"] == "#ff0000"
+
+
+def test_a_type_with_no_included_ancestor_becomes_a_root():
+    s, root, mid, leaf = _chain_session()
+
+    back = Session()
+    back.load(s.export_subset([leaf]))
+
+    assert [n["id"] for n in back.list_nodes()] == [leaf]
+    assert back.node_summary(leaf)["parent_id"] is None
+    assert back.ws.nodes[leaf].operations == []
+    assert back.render(leaf)["curve"] == s.render(leaf)["curve"]
+
+
+def test_exporting_a_subset_leaves_the_workspace_alone():
+    s, root, mid, leaf = _chain_session()
+    before = s.save()
+    s.export_subset([leaf])
+    assert s.save() == before
+
+
+def test_exporting_an_unknown_id_is_refused():
+    s, root, mid, leaf = _chain_session()
+    with pytest.raises(ValueError):
+        s.export_subset([root, "nope"])

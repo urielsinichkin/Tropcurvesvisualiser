@@ -232,7 +232,13 @@ derivation as an ordered list of such steps, normally one.
 
 - A **workspace** holds many types, the derivation forest, and presentation.
 - **Continuous autosave** to browser storage (localStorage + IndexedDB), plus
-  one-click **JSON export/import** to move a workspace between devices.
+  **JSON export/import** to move a workspace between devices.
+- Export can save **a subset** of the types rather than all of them. A subset is
+  not a truncation: it is the workspace with everything unselected deleted
+  (section 4), so a kept type re-attaches to its nearest kept ancestor carrying
+  the skipped steps in front of its own, or becomes a root when it has none.
+  What comes out reads back as the same curves, still derived from one another
+  wherever both ends were included.
 - A versioned JSON schema is the single source of truth for save/load.
 
 ## 6. Architecture
