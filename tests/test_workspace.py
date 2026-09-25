@@ -4,7 +4,7 @@ from tropcurves.geometry import Vec2
 from tropcurves.newton import newton_polygon
 from tropcurves.operations import resolutions
 from tropcurves.workspace import Workspace, STATUS_OK, STATUS_NEEDS_ATTENTION
-from tropcurves import builders
+from tropcurves import builders, schema
 
 
 def _root_and_contracted():
@@ -358,3 +358,40 @@ def test_a_split_that_stops_being_an_edge_is_flagged():
     ws.edit_slopes(root.id, "e1", Vec2(-1, 0), dependent_end_id="e3")
 
     assert child.status == STATUS_NEEDS_ATTENTION
+
+
+def test_a_marking_put_on_a_derived_type_survives_re_derivation():
+    # the marking is not part of the child's recorded steps, so a naive replay
+    # drops it -- and with it the vertex's [mu]^+ factor
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    ws.add_marking(child.id, v, name="star")
+    assert len(child.curve.markings) == 1
+
+    ws.edit_slopes(root.id, "a", Vec2(-2, -1), dependent_end_id="c")
+
+    assert child.status == STATUS_OK
+    assert [m.name for m in child.curve.markings] == ["star"]
+    assert child.curve.markings[0].tail == v
+    child.curve.validate()
+
+
+def test_re_deriving_changes_nothing_when_the_edit_changes_nothing():
+    ws, root, child = _root_and_contracted()
+    ws.add_marking(child.id, child.curve.vertices[0], name="star")
+    ws.set_color(root.id, "a", "#123456")
+    before = schema.curve_to_dict(child.curve)
+
+    ws.edit_slopes(root.id, "a", root.curve.edges["a"].vec, dependent_end_id="c")
+
+    assert schema.curve_to_dict(child.curve) == before
+
+
+def test_a_marking_whose_vertex_is_gone_is_not_forced_back():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    ws.add_marking(child.id, v, name="star")
+    # subdividing in the parent gives the child a new vertex set, but v survives
+    ws.add_marking_on_edge(root.id, "a")
+    assert "star" in {m.name for m in child.curve.markings}
+    child.curve.validate()

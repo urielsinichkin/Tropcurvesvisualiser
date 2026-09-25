@@ -202,6 +202,13 @@ derivation as an ordered list of such steps, normally one.
   replay no longer applies, the child is flagged **needs attention** rather than
   guessed. If an edit makes a child unbalanced/degenerate, it is flagged
   **invalid** with an explanation.
+- A marking put on a derived type **survives** re-derivation. It is not in that
+  type's recorded steps (the parent knows nothing about it), so a plain replay
+  would drop it -- and a marking is part of the curve, not presentation: losing
+  one turns a marked vertex into a plain one and changes the refined
+  multiplicity. It is re-attached at the same vertex. Renames and recolors made
+  directly on a derived type are still overwritten by the parent's, which is
+  what all-or-nothing propagation means.
 - An operation names its elements **by id**, so an edit that changes *which* id
   sits at a flag has to update the records it invalidates. Only subdivision (a
   marking placed on an edge) does this, and it is precise: at the far endpoint
