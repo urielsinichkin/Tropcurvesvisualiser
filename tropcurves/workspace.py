@@ -321,10 +321,31 @@ class Workspace:
             curve = parent.curve
             for op in node.operations:
                 curve = self._replay(curve, node, op)
+            if curve is parent.curve:
+                curve = curve.copy()        # no steps: never hand back the parent's own
+            self._restore_own_markings(node.curve, curve)
             node.curve = curve
             node.status = STATUS_OK
         except Exception:
             node.status = STATUS_NEEDS_ATTENTION
+
+    def _restore_own_markings(self, old: Curve, new: Curve) -> None:
+        """Carry over markings that belong to this type rather than its parent.
+
+        A derived type is rebuilt by replaying its recorded steps on the parent,
+        so anything done to it *directly* is not in that record. For a marking
+        that matters: a marking is part of the curve, not presentation -- losing
+        one turns a marked vertex into a plain one and changes the refined
+        multiplicity -- so a marking the type had and the replay did not produce
+        is re-attached at the same vertex. (Markings inherited from the parent
+        come back on their own, under the same ids, and are left alone.)
+        """
+        for e in old.markings:
+            if e.id in new.edges or e.tail not in new._vset:
+                continue    # inherited already, or its vertex no longer exists
+            taken = {x.name for x in new.edges.values()}
+            new.add_marking(e.id, e.tail,
+                            name=e.name if e.name not in taken else "", color=e.color)
 
     def _replay(self, curve: Curve, node: TypeNode, op: Operation) -> Curve:
         """One recorded step, applied to the curve the step before left."""
