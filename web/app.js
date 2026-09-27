@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "28";
+const APP_VERSION = "29";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1032,6 +1032,7 @@ function drawCurve(data, opts = {}) {
   const svg = clearSvg(opts.svgId || "curve-svg");
   const pickEdge = opts.pickEdge || null, pickVertex = opts.pickVertex || null;
   const dim = !!opts.dim;
+  const withLabels = opts.labels !== false;   // off for thumbnails too small to read
   const edgePicks = [], vertexPicks = [], lines = {};
   const c = data.curve;
   const pts = [];
@@ -1063,7 +1064,7 @@ function drawCurve(data, opts = {}) {
     else if (dim) line.setAttribute("opacity", "0.3");
     segments.push({ a: a, b: b, half: width / 2 });
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
-    if (lbl) {
+    if (lbl && withLabels) {
       wanted.push({ text: lbl, color: col, kind: "edge", a: a, b: b,
                     key: "e:" + e.id, hidden: !showEdges });
       if (!showEdges) {
@@ -1088,7 +1089,7 @@ function drawCurve(data, opts = {}) {
       ...(dim ? { opacity: "0.3" } : {}),
     }));
     discs.push({ p: p, r: r });
-    if (m.name) {
+    if (m.name && withLabels) {
       wanted.push({ text: m.name, color: col, kind: "mark", p: p, r: r,
                     key: "m:" + m.id, hidden: !showMarks });
       if (!showMarks) {
@@ -1130,6 +1131,18 @@ function drawCurve(data, opts = {}) {
   });
   placeLabels(svg, wanted, segments, discs);
   return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, lines: lines };
+}
+
+// Draw a curve that does not exist yet -- what an operation would produce --
+// with the edge it adds picked out in the accent colour.
+function drawPreview(svgId, preview, opts = {}) {
+  const drawn = drawCurve({ curve: preview.curve }, { svgId: svgId, labels: opts.labels });
+  const ln = drawn.lines[preview.new_edge];
+  if (ln) {
+    ln.setAttribute("stroke", "var(--accent)");
+    ln.setAttribute("stroke-width", +ln.getAttribute("stroke-width") + 2);
+  }
+  return drawn;
 }
 
 // A picture in a dialog whose edges and/or vertices can be pointed at. With a
@@ -1982,6 +1995,7 @@ function openResolveDialog() {
   body.appendChild(errBox());
   let picker = null;
   let current = null;         // the vertex whose resolutions are shown
+  let edgeHits = [];          // its edges' click targets on the picture
   const describeVertex = id => `where ${vertexLabel(data.curve, id)} meet (valence ${valences[id]})`;
 
   const commit = (fn) => {
@@ -1991,22 +2005,48 @@ function openResolveDialog() {
     } catch (err) { showModalError(err.message); }
   };
 
-  // Valence 4 has only three splits, so they are worth reading as a list.
+  // Valence 4 has only three splits, so each is shown as the curve it makes:
+  // click the one you want. Hovering one also shows, on the picture above,
+  // which edges it pairs up.
   const fillList = (vertex) => {
     let list;
     try { list = api("list_resolutions", selectedId, vertex); }
     catch (e) { showModalError(e.message); return; }
+    listWrap.insertAdjacentHTML("beforeend",
+      `<p class="muted" style="margin:0 0 6px">Each resolution, as the curve it
+       produces (the new edge highlighted). Pick one.</p>`);
     const box = document.createElement("div");
-    box.className = "reslist";
+    box.className = "res-thumbs";
+    const toDraw = [];
     list.forEach(r => {
       const b = document.createElement("button");
-      b.textContent = r.label;
+      b.className = "res-thumb";
       b.disabled = r.is_crossing;
-      if (r.is_crossing) b.title = "crossing pairing — realizes as a parallelogram";
+      if (r.is_crossing) {
+        b.title = "crossing pairing — realizes as a parallelogram";
+        b.innerHTML = `<div class="res-thumb-x">crossing<br><span class="muted">realizes as a
+          parallelogram, not an edge</span></div>`;
+      } else {
+        const svg = document.createElementNS(SVGNS, "svg");
+        svg.id = "res-thumb-" + r.index;
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        b.appendChild(svg);
+        toDraw.push([svg.id, r]);
+      }
+      const cap = document.createElement("div");
+      cap.className = "res-thumb-cap";
+      cap.textContent = r.label.replace(/\s*\((edge|crossing)\)$/, "");
+      b.appendChild(cap);
       b.onclick = () => commit(() => api("resolve", selectedId, vertex, r.index));
+      b.addEventListener("pointerenter", () => showSplit(vertex, r.side_a));
+      b.addEventListener("pointerleave", () => showSplit(vertex, []));
       box.appendChild(b);
     });
     listWrap.appendChild(box);
+    toDraw.forEach(([id, r]) => {
+      try { drawPreview(id, api("render_resolution", selectedId, vertex, r.side_a), { labels: false }); }
+      catch (e) { /* leave that thumbnail blank rather than break the dialog */ }
+    });
   };
 
   // Past that the list grows fast (25 splits at valence 6), so choose a side
@@ -2017,6 +2057,8 @@ function openResolveDialog() {
     listWrap.insertAdjacentHTML("beforeend",
       `<p class="muted" style="margin:0 0 6px">Tick the edges to gather on one side
        (at least 2, at most ${d - 2} of ${d}); the rest go on the other.</p>`);
+    listWrap.insertAdjacentHTML("beforeend",
+      `<p class="muted" style="margin:0 0 6px">You can also click the edges on the picture.</p>`);
     const boxes = [];
     flags.forEach(f => {
       const lab = document.createElement("label");
@@ -2027,9 +2069,35 @@ function openResolveDialog() {
       listWrap.appendChild(lab);
       boxes.push(cb);
     });
+    // the vertex's edges on the picture toggle the same boxes
+    if (picker) {
+      const svg = picker.drawn.svg;
+      flags.forEach(f => {
+        const ln = picker.drawn.lines[f.id];
+        const cb = boxes.find(b => b.value === f.id);
+        if (!ln || !cb) return;
+        const hit = svgEl("line", { x1: ln.getAttribute("x1"), y1: ln.getAttribute("y1"),
+                                    x2: ln.getAttribute("x2"), y2: ln.getAttribute("y2"),
+                                    ...HIT_ATTRS, "stroke-width": 20, class: "pick-hit" });
+        hit.addEventListener("click", ev => {
+          ev.stopPropagation();
+          cb.checked = !cb.checked;
+          update();
+        });
+        svg.appendChild(hit);
+        edgeHits.push(hit);
+      });
+      // keep the vertex's own target on top, so it can still be clicked
+      picker.drawn.vertexPicks.forEach(v => svg.appendChild(v.hit));
+    }
     const note = document.createElement("p");
     note.className = "muted"; note.style.margin = "8px 0";
+    const preview = document.createElementNS(SVGNS, "svg");
+    preview.id = "res-preview";
+    preview.classList.add("res-preview");
+    preview.setAttribute("preserveAspectRatio", "xMidYMid meet");
     const go = document.createElement("button");
+    go.className = "primary";
     go.textContent = "Resolve"; go.disabled = true;
     const chosen = () => boxes.filter(b => b.checked).map(b => b.value);
     const update = () => {
@@ -2046,10 +2114,17 @@ function openResolveDialog() {
       }
       go.disabled = !res.ok;
       showSplit(vertex, pick);
+      // what resolving would give, drawn as you choose (an SVG element has no
+      // .hidden property, so the attribute is set directly)
+      preview.toggleAttribute("hidden", !res.ok);
+      if (res.ok) {
+        try { drawPreview("res-preview", api("render_resolution", selectedId, vertex, pick)); }
+        catch (e) { preview.setAttribute("hidden", ""); }
+      }
     };
     boxes.forEach(b => { b.onchange = update; });
     go.onclick = () => commit(() => api("resolve_subset", selectedId, vertex, chosen(), null));
-    listWrap.append(note, go);
+    listWrap.append(note, preview, row([go]));
     update();
   };
 
@@ -2072,6 +2147,8 @@ function openResolveDialog() {
 
   const fill = vertex => {
     if (current && current !== vertex) showSplit(current, []);
+    edgeHits.forEach(h => h.remove());
+    edgeHits = [];
     current = vertex;
     sel.value = vertex;
     listWrap.innerHTML = "";

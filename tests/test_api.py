@@ -309,3 +309,30 @@ def test_exporting_an_unknown_id_is_refused():
     s, root, mid, leaf = _chain_session()
     with pytest.raises(ValueError):
         s.export_subset([root, "nope"])
+
+
+def test_render_resolution_previews_without_changing_anything():
+    s = Session()
+    root = s.add_preset("caterpillar_square")["id"]
+    four = s.contract(root, "e")["id"]
+    v = [x for x, k in s.node_summary(four)["valences"].items() if k == 4][0]
+    before = s.save()
+
+    pre = s.render_resolution(four, v, ["a", "b"])
+
+    assert s.save() == before                          # nothing was created
+    assert pre["new_edge"] in {e["id"] for e in pre["curve"]["edges"]}
+    assert len(pre["curve"]["vertices"]) == 2
+    # and it is what resolving would actually give
+    child = s.resolve_subset(four, v, ["a", "b"])
+    assert s.render(child["id"])["curve"] == pre["curve"]
+
+
+def test_render_resolution_refuses_a_crossing():
+    s = Session()
+    root = s.add_preset("caterpillar_square")["id"]
+    four = s.contract(root, "e")["id"]
+    v = [x for x, k in s.node_summary(four)["valences"].items() if k == 4][0]
+    crossing = [r for r in s.list_resolutions(four, v) if r["is_crossing"]][0]
+    with pytest.raises(ValueError):
+        s.render_resolution(four, v, crossing["side_a"])

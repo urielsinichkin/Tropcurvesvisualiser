@@ -144,7 +144,11 @@ hit. Hidden labels stay out of a PNG copy.
   picture-first picker serves **Resolve** (the ringed vertices of valence >= 4;
   a click selects, the vertex's resolutions appear below, and the ticked side of
   a big vertex is coloured on the picture) and **Add marking** (a ringed vertex,
-  or any point on an edge or end).
+  or any point on an edge or end). The resolution itself is chosen from
+  pictures too: at valence 4 each of the three is shown as the curve it
+  produces, new edge highlighted, and clicked; beyond, the vertex's edges are
+  clicked on the picture to choose a side, with the resulting curve drawn live
+  (`Session.render_resolution` renders a resolution without creating it).
 - **Resolve a vertex** of valence `d >= 4`: split its flags into two groups,
   each with at least 2 (so neither new vertex is 2-valent, which would say
   nothing), joined by a new bounded edge whose direction is forced by balancing

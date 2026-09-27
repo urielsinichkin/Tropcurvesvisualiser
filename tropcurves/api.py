@@ -18,7 +18,7 @@ from .balancing import resolve_slopes
 from .newton import newton_polygon
 from .layout import embed, readable_lengths, end_ray_length
 from .subdivision import build_subdivision, SubdivisionError
-from .operations import resolutions, resolution_for_subset
+from .operations import resolutions, resolution_for_subset, apply_resolution
 from .subdivision_import import import_subdivision
 from .refined import (
     refined_multiplicity, vertex_multiplicities, balanced_split,
@@ -241,6 +241,22 @@ class Session:
         return {"ok": True, "is_crossing": False,
                 "new_edge_vec": res.new_edge_vec.to_list(),
                 "label": res.label(c)}
+
+    def render_resolution(self, node_id: str, vertex: str,
+                          subset: List[str]) -> Dict[str, Any]:
+        """Drawing data for what a resolution would produce, without making it.
+
+        The workspace is untouched. ``new_edge`` is the id of the inserted edge,
+        so a preview can pick it out. A crossing split has nothing to draw and
+        raises.
+        """
+        c = self.ws.nodes[node_id].curve
+        res = resolution_for_subset(c, vertex, subset)
+        if res.is_crossing:
+            raise ValueError("that split is a crossing (a parallelogram), not a resolution")
+        out = apply_resolution(c, res)
+        return {"curve": self._render_curve(out.curve), "new_edge": out.new_edge,
+                "new_edge_vec": res.new_edge_vec.to_list()}
 
     def resolve_subset(self, node_id: str, vertex: str, subset: List[str],
                        name: Optional[str] = None) -> Dict[str, Any]:
