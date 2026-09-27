@@ -158,6 +158,17 @@ mouse is over its edge or marking, or by a tap on a touch screen (tap again, or
 on empty space, to hide). Generous invisible targets make thin edges easy to
 hit. Hidden labels stay out of a PNG copy.
 
+The curve takes the full width of the middle column, with the dual subdivision
+below it (on every screen size), and is taller on a desktop. It can be
+**zoomed**: the mouse wheel (or a trackpad pinch) zooms about the pointer, two
+fingers pinch-zoom on a touch screen, and once zoomed a drag moves around; -/+
+buttons (desktop), a zoom level and **Fit** sit in the header. Zoom rewrites
+the viewBox, so redraws of the same type (edits, painting) keep the view and
+every click target lines up; a drag that moved the picture is never taken as a
+click. At full view a downward wheel scrolls the page instead of being
+swallowed. Choosing another type starts from the whole picture, and Copy
+always copies the whole figure.
+
 ## 3. Operations
 
 - **Contract edge** (bounded edges only): merge the two endpoints; dually erase
