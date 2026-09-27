@@ -103,11 +103,20 @@ section {
   border: 1px solid var(--line); cursor: pointer;
 }
 .type-item.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
-.type-item .tname { font-weight: 600; }
-.type-item .tmeta { font-size: 12px; color: var(--muted); }
+/* names like Known_mult_summand_short_string have no spaces to wrap at */
+.type-item .tname { font-weight: 600; overflow-wrap: anywhere; }
+.type-item .tmeta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .badge { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); }
 .badge.warn { color: var(--warn); border-color: var(--warn); }
-.tree-indent { display: inline-block; }
+.tree-indent { display: inline-block; flex: none; }
+/* the fold toggle, or an empty slot of the same width so names stay aligned */
+.twisty, .twisty-slot { flex: none; width: 26px; height: 26px; }
+.twisty {
+  padding: 0; border: none; background: transparent; color: var(--muted);
+  font-size: 14px; line-height: 26px; border-radius: 6px;
+}
+.type-item.holds-selection { border-color: var(--accent); border-style: dashed; }
+.twisty:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 
 #views { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
 @media (max-width: 700px) { #views { grid-template-columns: 1fr; } }

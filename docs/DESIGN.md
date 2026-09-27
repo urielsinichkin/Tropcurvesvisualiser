@@ -315,7 +315,10 @@ docs/                       # DESIGN.md, POSTPONED.md
   panel is collapsed by default per curve; vertices undrawn and markings drawn
   on their image, sized by valence; lengths chosen for clearance; the top bar's
   actions collapse behind a hamburger below 720px, since the row does not fit a
-  phone. Remaining:
+  phone; the types list folds: each type with derived types has a toggle and a
+  count of what it hides, plus Collapse all / Expand all (view state, per
+  browser, never exported). Selecting a type unfolds what it sits under, but a
+  deliberate fold is otherwise left alone. Remaining:
   spreading beyond clearance and label-collision avoidance, custom (graph/ends)
   curve entry, further aesthetic and a11y passes.]**
 
