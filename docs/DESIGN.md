@@ -293,6 +293,12 @@ derivation as an ordered list of such steps, normally one.
 - A **workspace** holds many types, the derivation forest, and presentation.
 - **Continuous autosave** to browser storage (localStorage + IndexedDB), plus
   **JSON export/import** to move a workspace between devices.
+- Import into a non-empty library asks whether to **add** the file's types or
+  **replace** the library (`Session.load(text, append=True)` /
+  `Workspace.merge`). Added types keep their derivations; one whose id is taken
+  is renumbered with its links rewritten, and one whose name is taken gets a
+  suffix ("root (2)"). Together with subset export this moves chosen types
+  between workspaces.
 - Export can save **a subset** of the types rather than all of them. A subset is
   not a truncation: it is the workspace with everything unselected deleted
   (section 4), so a kept type re-attaches to its nearest kept ancestor carrying

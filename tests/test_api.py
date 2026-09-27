@@ -336,3 +336,52 @@ def test_render_resolution_refuses_a_crossing():
     crossing = [r for r in s.list_resolutions(four, v) if r["is_crossing"]][0]
     with pytest.raises(ValueError):
         s.render_resolution(four, v, crossing["side_a"])
+
+
+def test_load_append_keeps_the_current_types_and_renumbers_clashes():
+    a = Session()
+    root = a.add_preset("caterpillar_square")
+    edge = next(e["id"] for e in a.render(root["id"])["curve"]["edges"] if e["kind"] == "bounded")
+    child = a.contract(root["id"], edge)
+    text = a.save()                                   # T1 -> T2
+
+    b = Session()
+    mine = b.add_preset("line")                       # takes T1 here
+    added = b.load(text, append=True)
+
+    ids = {n["id"] for n in b.list_nodes()}
+    assert mine["id"] in ids and len(ids) == 3
+    assert len(added) == 2 and mine["id"] not in added
+    by_id = {n["id"]: n for n in b.list_nodes()}
+    new_root, new_child = added
+    # the derivation came along, rewired to the new ids
+    assert by_id[new_child]["parent_id"] == new_root
+    assert by_id[new_root]["children"] == [new_child]
+    assert by_id[new_root]["name"] == "caterpillar_square"
+    # and still propagates
+    b.set_color(new_root, edge, "#00ff00")
+    assert b.render(new_root)["curve"]["edges"]
+    # the local type is untouched
+    assert by_id[mine["id"]]["name"] == "line" and by_id[mine["id"]]["parent_id"] is None
+
+
+def test_load_append_disambiguates_clashing_names():
+    a = Session()
+    a.add_preset("line")
+    text = a.save()
+    b = Session()
+    b.add_preset("line")
+    b.load(text, append=True)
+    b.load(text, append=True)
+    assert sorted(n["name"] for n in b.list_nodes()) == ["line", "line (2)", "line (3)"]
+
+
+def test_load_without_append_replaces():
+    a = Session()
+    a.add_preset("line")
+    text = a.save()
+    b = Session()
+    b.add_preset("caterpillar_square")
+    b.add_preset("caterpillar_square")
+    assert b.load(text) == ["T1"]
+    assert [n["name"] for n in b.list_nodes()] == ["line"]

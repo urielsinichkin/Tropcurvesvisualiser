@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "33";
+const APP_VERSION = "34";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -587,21 +587,58 @@ function exportFilename(ids, nodes, byId) {
   return `tropical-subset-${ids.length}.json`;
 }
 
+// Import a workspace file. Into an empty library it simply loads; otherwise
+// the file's types can be added alongside the current ones or replace them.
 function importJSON(ev) {
   const file = ev.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    try {
-      api("load", reader.result);
-      refreshAll();
-      const nodes = api("list_nodes");
-      if (nodes.length) selectNode(nodes[0].id);
-      autosave();
-    } catch (e) { alert("Import failed: " + e.message); }
+    const text = reader.result;
+    const have = api("list_nodes").length;
+    if (!have) { finishImport(text, false); return; }
+    let count = null;
+    try { count = JSON.parse(text).nodes.length; } catch (e) { /* load reports it */ }
+    const many = n => `${n} type${n === 1 ? "" : "s"}`;
+    const body = dialogHead("Import " + file.name,
+      `${count === null ? "This file" : `This file holds ${many(count)}`}; your library
+       has ${many(have)}. Add the file's types to the library, or replace the
+       library with them?`);
+    const add = document.createElement("button");
+    add.className = "primary"; add.id = "import-append";
+    add.textContent = "Add to the library";
+    add.onclick = () => finishImport(text, true);
+    const replace = document.createElement("button");
+    replace.className = "danger"; replace.id = "import-replace";
+    replace.textContent = `Replace the library (discards the current ${many(have)})`;
+    replace.onclick = () => finishImport(text, false);
+    const note = document.createElement("p");
+    note.className = "muted"; note.style.margin = "8px 0 0";
+    note.textContent = "Added types keep their derivations. A name already in the library gets a number, e.g. “root (2)”.";
+    const box = document.createElement("div");
+    box.className = "reslist"; box.style.marginTop = "10px";
+    box.append(add, replace);
+    body.append(box, note, errBox());
+    openModal();
   };
   reader.readAsText(file);
   ev.target.value = "";
+}
+
+function finishImport(text, append) {
+  let added;
+  try { added = api("load", text, append); }
+  catch (e) {
+    const msg = "Import failed: " + e.message;
+    if (!document.getElementById("modal").hidden) showModalError(msg); else alert(msg);
+    return;
+  }
+  if (!document.getElementById("modal").hidden) closeModal();
+  refreshAll();
+  const nodes = api("list_nodes");
+  const first = added.find(id => nodes.some(n => n.id === id)) || (nodes[0] && nodes[0].id);
+  if (first) selectNode(first);
+  autosave();
 }
 
 function openNewDialog() {
