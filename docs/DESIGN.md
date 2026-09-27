@@ -138,7 +138,9 @@ hit. Hidden labels stay out of a PNG copy.
 
 - **Contract edge** (bounded edges only): merge the two endpoints; dually erase
   the shared subdivision edge and merge the two cells. Ends/markings can't be
-  contracted.
+  contracted. The edge is picked on a picture of the curve by default (a list is
+  one click away): with a mouse, hover highlights and a click contracts; on a
+  touch screen a tap selects and a second tap, or the button, confirms.
 - **Resolve a vertex** of valence `d >= 4`: split its flags into two groups,
   each with at least 2 (so neither new vertex is 2-valent, which would say
   nothing), joined by a new bounded edge whose direction is forced by balancing

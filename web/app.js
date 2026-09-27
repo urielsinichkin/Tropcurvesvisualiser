@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "26";
+const APP_VERSION = "27";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1023,8 +1023,13 @@ function clearSvg(id) {
   return svg;
 }
 
-function drawCurve(data) {
-  const svg = clearSvg("curve-svg");
+// opts.svgId draws somewhere other than the main panel; opts.pickable(edge)
+// turns on pick mode: those edges get generous click targets (returned, with
+// the drawn line each belongs to) and everything else is dimmed.
+function drawCurve(data, opts = {}) {
+  const svg = clearSvg(opts.svgId || "curve-svg");
+  const pickable = opts.pickable || null;
+  const picks = [];
   const c = data.curve;
   const pts = [];
   c.edges.forEach(e => { pts.push(e.from); pts.push(e.to); });
@@ -1045,10 +1050,15 @@ function drawCurve(data) {
     const a = T(e.from), b = T(e.to);
     const col = renderColor(e.color);
     const width = e.kind === "bounded" ? 3 : 2;
-    svg.appendChild(svgEl("line", {
+    const line = svgEl("line", {
       x1: a[0], y1: a[1], x2: b[0], y2: b[1],
       stroke: col, "stroke-width": width,
-    }));
+    });
+    svg.appendChild(line);
+    if (pickable) {
+      if (pickable(e)) picks.push({ edge: e, line: line, a: a, b: b });
+      else line.setAttribute("opacity", "0.3");
+    }
     segments.push({ a: a, b: b, half: width / 2 });
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
     if (lbl) {
@@ -1073,6 +1083,7 @@ function drawCurve(data) {
     svg.appendChild(svgEl("circle", {
       cx: p[0], cy: p[1], r: r, fill: col,
       stroke: "var(--panel)", "stroke-width": 1.5,
+      ...(pickable ? { opacity: "0.3" } : {}),
     }));
     discs.push({ p: p, r: r });
     if (m.name) {
@@ -1092,7 +1103,15 @@ function drawCurve(data) {
   // Edge targets under marking targets: a marking sits on edges and should win.
   hits.sort((x, y) => (x.tagName === "circle") - (y.tagName === "circle"));
   hits.forEach(h => svg.appendChild(h));
+  // pick targets go on top of everything, so a pickable edge always wins
+  picks.forEach(pk => {
+    pk.hit = svgEl("line", { x1: pk.a[0], y1: pk.a[1], x2: pk.b[0], y2: pk.b[1],
+                             ...HIT_ATTRS, "stroke-width": 20, class: "pick-hit",
+                             "data-pick": pk.edge.id });
+    svg.appendChild(pk.hit);
+  });
   placeLabels(svg, wanted, segments, discs);
+  return { svg: svg, picks: picks };
 }
 
 // Transparent as attributes, not via the stylesheet: a PNG copy serializes the
@@ -1757,6 +1776,11 @@ function openMarkingDialog() {
   openModal();
 }
 
+// Contracting picks an edge. The default is to pick it on a picture of the
+// curve -- the natural way to say "that one" -- with the list one click away.
+// A mouse contracts on click, with the edge highlighted on hover so the click
+// is never a surprise; touch has no hover, so a tap selects and a second tap
+// (or the button) confirms.
 function openContractDialog() {
   const data = api("render", selectedId);
   const bounded = data.curve.edges.filter(e => e.kind === "bounded");
@@ -1768,22 +1792,98 @@ function openContractDialog() {
     body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no bounded edges.</p>`);
     openModal(); return;
   }
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+
+  const contract = e => {
+    try {
+      const child = api("contract", selectedId, e.id);
+      closeModal(); refreshAll(); selectNode(child.id); autosave();
+    } catch (err) { showModalError(err.message); }
+  };
+  const describe = e => `${e.name}, direction ${fmtVec(e.vec)}` +
+    (e.weight > 1 ? `, weight ${e.weight}` : "");
+
+  // --- on the picture ---
+  const pickView = document.createElement("div");
+  const hint = document.createElement("p");
+  hint.className = "muted"; hint.style.margin = "4px 0 6px";
+  const fine = wantPresetSwatches();   // mouse or trackpad present
+  hint.textContent = fine
+    ? "Click the edge to contract. Faded parts cannot be contracted."
+    : "Tap the edge to contract, then tap it again or press Contract. Faded parts cannot be contracted.";
+  const holder = document.createElementNS(SVGNS, "svg");
+  holder.id = "pick-svg";
+  holder.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  const status = document.createElement("div");
+  status.className = "pick-status";
+  const go = document.createElement("button");
+  go.className = "primary"; go.disabled = true; go.textContent = "Contract";
+  pickView.append(hint, holder, status, row([go]));
+
+  // --- as a list ---
+  const listView = document.createElement("div");
   const list = document.createElement("div"); list.className = "reslist";
   bounded.forEach(e => {
     const b = document.createElement("button");
     b.textContent = `${e.name}   direction ${fmtVec(e.vec)}` +
       (e.weight > 1 ? `, weight ${e.weight}` : "");
-    b.onclick = () => {
-      try {
-        const child = api("contract", selectedId, e.id);
-        closeModal(); refreshAll(); selectNode(child.id); autosave();
-      } catch (err) { showModalError(err.message); }
-    };
+    b.onclick = () => contract(e);
     list.appendChild(b);
   });
-  body.appendChild(list);
-  body.appendChild(errBox());
+  listView.appendChild(list);
+  listView.hidden = true;
+
+  const toggle = document.createElement("button");
+  toggle.className = "small ghost";
+  const setView = picture => {
+    pickView.hidden = !picture; listView.hidden = picture;
+    toggle.textContent = picture ? "Choose from a list instead" : "Pick on the curve instead";
+  };
+  toggle.onclick = () => setView(listView.hidden === false);
+  setView(true);
+  body.append(toggle, pickView, listView, errBox());
   openModal();
+
+  // draw once the dialog is showing, so labels can be measured
+  const drawn = drawCurve(data, { svgId: "pick-svg", pickable: e => e.kind === "bounded" });
+  const byId = {}; drawn.picks.forEach(pk => { byId[pk.edge.id] = pk; });
+  let hovered = null, selected = null, lastPointer = "mouse";
+  const labelOf = pk => drawn.svg.querySelector(`text[data-label-key="e:${CSS.escape(pk.edge.id)}"]`);
+  const paint = () => {
+    drawn.picks.forEach(pk => {
+      const on = pk === hovered || pk === selected;
+      if (!pk.orig) pk.orig = { stroke: pk.line.getAttribute("stroke"), w: pk.line.getAttribute("stroke-width") };
+      pk.line.setAttribute("stroke", on ? "var(--accent)" : pk.orig.stroke);
+      pk.line.setAttribute("stroke-width", on ? +pk.orig.w + 3 : pk.orig.w);
+      const t = labelOf(pk);
+      if (t && t.hasAttribute("data-label-hidden")) t.setAttribute("visibility", on ? "visible" : "hidden");
+    });
+    const shown = selected || hovered;
+    status.textContent = shown ? describe(shown.edge) : "";
+    go.disabled = !selected;
+    go.textContent = selected ? `Contract ${selected.edge.name}` : "Contract";
+  };
+  drawn.svg.addEventListener("pointerdown", ev => { lastPointer = ev.pointerType || "mouse"; });
+  drawn.picks.forEach(pk => {
+    pk.hit.addEventListener("pointerenter", ev => {
+      if (ev.pointerType === "mouse") { hovered = pk; paint(); }
+    });
+    pk.hit.addEventListener("pointerleave", ev => {
+      if (ev.pointerType === "mouse" && hovered === pk) { hovered = null; paint(); }
+    });
+    pk.hit.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (lastPointer === "mouse") { contract(pk.edge); return; }
+      if (selected === pk) { contract(pk.edge); return; }
+      selected = pk; paint();
+    });
+  });
+  drawn.svg.addEventListener("click", () => {       // a tap on empty space clears it
+    if (lastPointer !== "mouse" && selected) { selected = null; paint(); }
+  });
+  go.onclick = () => { if (selected) contract(selected.edge); };
+  paint();
 }
 
 function openResolveDialog() {

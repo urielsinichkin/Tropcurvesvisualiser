@@ -70,6 +70,9 @@ button {
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button.ghost { background: transparent; }
+/* disabled buttons -- "Resolve", "Contract", greyed actions -- must look it */
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { border-color: var(--line); }
 button.small { padding: 3px 8px; font-size: 13px; }
 button.danger { color: var(--danger); }
 
@@ -112,6 +115,9 @@ section {
 /* the fold toggle, or an empty slot of the same width so names stay aligned */
 /* invisible, generous targets for revealing a hidden label on hover or tap */
 .label-hit { cursor: pointer; }
+.pick-hit { cursor: pointer; }
+#pick-svg { height: 360px; }
+.pick-status { min-height: 20px; font-size: 13px; margin: 6px 0; }
 .twisty, .twisty-slot { flex: none; width: 26px; height: 26px; }
 .twisty {
   padding: 0; border: none; background: transparent; color: var(--muted);
