@@ -110,6 +110,8 @@ section {
 .badge.warn { color: var(--warn); border-color: var(--warn); }
 .tree-indent { display: inline-block; flex: none; }
 /* the fold toggle, or an empty slot of the same width so names stay aligned */
+/* invisible, generous targets for revealing a hidden label on hover or tap */
+.label-hit { cursor: pointer; }
 .twisty, .twisty-slot { flex: none; width: 26px; height: 26px; }
 .twisty {
   padding: 0; border: none; background: transparent; color: var(--muted);
