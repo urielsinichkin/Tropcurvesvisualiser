@@ -6,7 +6,7 @@
 <title>Tropical Curves Visualiser</title>
 <!-- Bump ?v= on each deploy that changes styles.css. app.js does not need a
      manual bump: it is loaded with a time-based token at the end of <body>. -->
-<link rel="stylesheet" href="styles.css?v=20" />
+<link rel="stylesheet" href="styles.css?v=21" />
 </head>
 <body>
 <header id="topbar">
@@ -48,7 +48,18 @@
     <div class="view">
       <div class="view-head">
         <h2>Curve <span id="curve-name" class="muted"></span></h2>
-        <button id="copy-curve" class="small" title="Copy as a PNG with a transparent background">Copy</button>
+        <span class="row" style="gap:6px">
+          <button id="paint-curve" class="small" title="Color edges and markings by clicking them on the curve">🖌 Paint</button>
+          <button id="copy-curve" class="small" title="Copy as a PNG with a transparent background">Copy</button>
+        </span>
+      </div>
+      <div id="paint-bar" class="paint-bar" hidden>
+        <span class="paint-chip" id="paint-chip"></span>
+        <span id="paint-hint"></span>
+        <span class="row" style="gap:6px;margin-left:auto">
+          <button id="paint-change" class="small">Change color</button>
+          <button id="paint-cancel" class="small">Cancel</button>
+        </span>
       </div>
       <div id="curve-status" class="status"></div>
       <svg id="curve-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>

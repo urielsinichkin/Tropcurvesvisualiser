@@ -173,6 +173,9 @@ hit. Hidden labels stay out of a PNG copy.
   produces, new edge highlighted, and clicked; beyond, the vertex's edges are
   clicked on the picture to choose a side, with the resulting curve drawn live
   (`Session.render_resolution` renders a resolution without creating it).
+  Where pick targets overlap (a short edge lies inside its neighbours' wide hit
+  strips) the pointer goes to the *nearest* target under it, not the one drawn
+  last; a marking beats the edge it sits on, a vertex the edges meeting there.
 - **Resolve a vertex** of valence `d >= 4`: split its flags into two groups,
   each with at least 2 (so neither new vertex is 2-valent, which would say
   nothing), joined by a new bounded edge whose direction is forced by balancing
@@ -189,7 +192,15 @@ hit. Hidden labels stay out of a PNG copy.
   original id and name on the unbounded piece, so slope editing and the Newton
   polygon are unaffected.
 - **Rename**: ends, markings, edges (uniqueness enforced within a type).
-- **Recolor**: any end, marking, or edge.
+- **Recolor**: any end, marking, or edge -- from its row in the side panel, or
+  painted on the picture: **Paint** opens a color dialog (presets on a fine
+  pointer too) with a "keep painting until I press Cancel" checkbox. Unticked,
+  the next edge or marking clicked takes the color and painting ends; ticked,
+  every click paints until **Cancel** (or Escape). A bar over the picture shows
+  the color, a hint, **Change color** and **Cancel** in both modes. While
+  painting, markings are drawn larger with a dashed ring so they are easy to
+  hit, hovering previews the color, and copying the picture as PNG copies the
+  plain figure. The last color and checkbox state are remembered.
 
 ### 3.1 Refined multiplicity (Goettsche-Schroeter)
 
