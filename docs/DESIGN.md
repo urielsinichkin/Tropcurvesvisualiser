@@ -140,7 +140,11 @@ hit. Hidden labels stay out of a PNG copy.
   the shared subdivision edge and merge the two cells. Ends/markings can't be
   contracted. The edge is picked on a picture of the curve by default (a list is
   one click away): with a mouse, hover highlights and a click contracts; on a
-  touch screen a tap selects and a second tap, or the button, confirms.
+  touch screen a tap selects and a second tap, or the button, confirms. The same
+  picture-first picker serves **Resolve** (the ringed vertices of valence >= 4;
+  a click selects, the vertex's resolutions appear below, and the ticked side of
+  a big vertex is coloured on the picture) and **Add marking** (a ringed vertex,
+  or any point on an edge or end).
 - **Resolve a vertex** of valence `d >= 4`: split its flags into two groups,
   each with at least 2 (so neither new vertex is 2-valent, which would say
   nothing), joined by a new bounded edge whose direction is forced by balancing

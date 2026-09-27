@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "27";
+const APP_VERSION = "28";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1023,13 +1023,16 @@ function clearSvg(id) {
   return svg;
 }
 
-// opts.svgId draws somewhere other than the main panel; opts.pickable(edge)
-// turns on pick mode: those edges get generous click targets (returned, with
-// the drawn line each belongs to) and everything else is dimmed.
+// opts.svgId draws somewhere other than the main panel. Pick mode, for the
+// dialogs that ask "which one?": opts.pickEdge(edge) / opts.pickVertex(vertex)
+// give those generous click targets (returned with what they belong to), and
+// opts.dim fades the rest of the edges and markings. Vertices are not drawn
+// normally, so a pickable one gets a small ring to show it is there.
 function drawCurve(data, opts = {}) {
   const svg = clearSvg(opts.svgId || "curve-svg");
-  const pickable = opts.pickable || null;
-  const picks = [];
+  const pickEdge = opts.pickEdge || null, pickVertex = opts.pickVertex || null;
+  const dim = !!opts.dim;
+  const edgePicks = [], vertexPicks = [], lines = {};
   const c = data.curve;
   const pts = [];
   c.edges.forEach(e => { pts.push(e.from); pts.push(e.to); });
@@ -1055,10 +1058,9 @@ function drawCurve(data, opts = {}) {
       stroke: col, "stroke-width": width,
     });
     svg.appendChild(line);
-    if (pickable) {
-      if (pickable(e)) picks.push({ edge: e, line: line, a: a, b: b });
-      else line.setAttribute("opacity", "0.3");
-    }
+    lines[e.id] = line;
+    if (pickEdge && pickEdge(e)) edgePicks.push({ kind: "edge", id: e.id, edge: e, line: line, a: a, b: b });
+    else if (dim) line.setAttribute("opacity", "0.3");
     segments.push({ a: a, b: b, half: width / 2 });
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
     if (lbl) {
@@ -1083,7 +1085,7 @@ function drawCurve(data, opts = {}) {
     svg.appendChild(svgEl("circle", {
       cx: p[0], cy: p[1], r: r, fill: col,
       stroke: "var(--panel)", "stroke-width": 1.5,
-      ...(pickable ? { opacity: "0.3" } : {}),
+      ...(dim ? { opacity: "0.3" } : {}),
     }));
     discs.push({ p: p, r: r });
     if (m.name) {
@@ -1103,15 +1105,135 @@ function drawCurve(data, opts = {}) {
   // Edge targets under marking targets: a marking sits on edges and should win.
   hits.sort((x, y) => (x.tagName === "circle") - (y.tagName === "circle"));
   hits.forEach(h => svg.appendChild(h));
-  // pick targets go on top of everything, so a pickable edge always wins
-  picks.forEach(pk => {
+  if (pickVertex) {
+    c.vertices.filter(v => pickVertex(v)).forEach(v => {
+      const p = T([v.x, v.y]);
+      const ring = svgEl("circle", { cx: p[0], cy: p[1], r: 6, fill: "var(--panel)",
+                                     stroke: "var(--muted)", "stroke-width": 2 });
+      svg.appendChild(ring);
+      vertexPicks.push({ kind: "vertex", id: v.id, vertex: v, ring: ring, p: p });
+      discs.push({ p: p, r: 6 });      // labels keep clear of the ring too
+    });
+  }
+  // pick targets go on top of everything; vertices over edges, since a vertex
+  // sits where edges meet and should win there
+  edgePicks.forEach(pk => {
     pk.hit = svgEl("line", { x1: pk.a[0], y1: pk.a[1], x2: pk.b[0], y2: pk.b[1],
                              ...HIT_ATTRS, "stroke-width": 20, class: "pick-hit",
-                             "data-pick": pk.edge.id });
+                             "data-pick": pk.id });
+    svg.appendChild(pk.hit);
+  });
+  vertexPicks.forEach(pk => {
+    pk.hit = svgEl("circle", { cx: pk.p[0], cy: pk.p[1], r: 14, ...HIT_ATTRS,
+                               class: "pick-hit", "data-pick-vertex": pk.id });
     svg.appendChild(pk.hit);
   });
   placeLabels(svg, wanted, segments, discs);
-  return { svg: svg, picks: picks };
+  return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, lines: lines };
+}
+
+// A picture in a dialog whose edges and/or vertices can be pointed at. With a
+// mouse, hover highlights and names the target and a click acts on it; touch
+// has no hover, so a tap selects and a second tap on the same target acts (or
+// the dialog's button does). With clickCommits false, picking is only a first
+// step -- the dialog then shows what to do with the target -- so a click, of
+// any kind, just selects.
+function mountPicker(data, svgId, o) {
+  const drawn = drawCurve(data, { svgId: svgId, pickEdge: o.pickEdge,
+                                  pickVertex: o.pickVertex, dim: o.dim });
+  const targets = [...drawn.edgePicks, ...drawn.vertexPicks];
+  const clickCommits = o.clickCommits !== false;
+  let hovered = null, selected = null, lastPointer = "mouse";
+  const labelOf = t => t.kind === "edge"
+    ? drawn.svg.querySelector(`text[data-label-key="e:${CSS.escape(t.id)}"]`) : null;
+  targets.forEach(t => {
+    if (t.line) t.orig = { stroke: t.line.getAttribute("stroke"), w: t.line.getAttribute("stroke-width") };
+  });
+  const paint = () => {
+    targets.forEach(t => {
+      const on = t === hovered || t === selected;
+      if (t.kind === "edge") {
+        t.line.setAttribute("stroke", on ? "var(--accent)" : t.orig.stroke);
+        t.line.setAttribute("stroke-width", on ? +t.orig.w + 3 : t.orig.w);
+        const lab = labelOf(t);
+        if (lab && lab.hasAttribute("data-label-hidden")) lab.setAttribute("visibility", on ? "visible" : "hidden");
+      } else {
+        t.ring.setAttribute("r", on ? 8 : 6);
+        t.ring.setAttribute("fill", on ? "var(--accent)" : "var(--panel)");
+        t.ring.setAttribute("stroke", on ? "var(--accent)" : "var(--muted)");
+      }
+    });
+    const shown = selected || hovered;
+    if (o.status) o.status.textContent = shown ? o.describe(shown) : (o.idle || "");
+    if (o.button) {
+      o.button.disabled = !selected;
+      o.button.textContent = selected ? o.buttonText(selected) : o.buttonIdle;
+    }
+  };
+  const select = t => {
+    selected = t; paint();
+    if (o.onSelect) o.onSelect(t);
+  };
+  drawn.svg.addEventListener("pointerdown", ev => { lastPointer = ev.pointerType || "mouse"; });
+  targets.forEach(t => {
+    t.hit.addEventListener("pointerenter", ev => {
+      if (ev.pointerType === "mouse") { hovered = t; paint(); }
+    });
+    t.hit.addEventListener("pointerleave", ev => {
+      if (ev.pointerType === "mouse" && hovered === t) { hovered = null; paint(); }
+    });
+    t.hit.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (clickCommits && (lastPointer === "mouse" || selected === t)) { o.commit(t); return; }
+      select(t);
+    });
+  });
+  drawn.svg.addEventListener("click", () => {      // a tap on empty space
+    if (clickCommits && lastPointer !== "mouse" && selected) select(null);
+  });
+  if (o.button) o.button.onclick = () => { if (selected) o.commit(selected); };
+  paint();
+  return {
+    drawn: drawn,
+    select: id => select(targets.find(t => t.id === id) || null),
+    selected: () => selected,
+  };
+}
+
+// The picture-or-list frame the pick dialogs share: a toggle, the picture view
+// (a hint, the drawing, a status line, an optional button) and the list view.
+function pickFrame(body, hintText, withButton) {
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+  const pickView = document.createElement("div");
+  const hint = document.createElement("p");
+  hint.className = "muted"; hint.style.margin = "4px 0 6px";
+  hint.textContent = hintText;
+  const holder = document.createElementNS(SVGNS, "svg");
+  holder.id = "pick-svg";
+  holder.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  const status = document.createElement("div");
+  status.className = "pick-status";
+  pickView.append(hint, holder, status);
+  let button = null;
+  if (withButton) {
+    button = document.createElement("button");
+    button.className = "primary";
+    pickView.appendChild(row([button]));
+  }
+  const listView = document.createElement("div");
+  const toggle = document.createElement("button");
+  toggle.className = "small ghost";
+  let onSwitch = null;
+  const setView = picture => {
+    pickView.hidden = !picture; listView.hidden = picture;
+    toggle.textContent = picture ? "Choose from a list instead" : "Pick on the curve instead";
+    if (onSwitch) onSwitch(picture);
+  };
+  toggle.onclick = () => setView(pickView.hidden);
+  body.append(toggle, pickView, listView);
+  setView(true);
+  return { pickView, listView, status, button, onSwitch: f => { onSwitch = f; } };
 }
 
 // Transparent as attributes, not via the stylesheet: a PNG copy serializes the
@@ -1717,15 +1839,16 @@ function openSlopeDialog() {
   openModal();
 }
 
+// A marking goes at a vertex or part-way along an edge; both are picked on the
+// picture by default. Rings mark the vertices, which are otherwise not drawn.
 function openMarkingDialog() {
   const data = api("render", selectedId);
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
   const val = summ.valences || {};
   const body = dialogHead("Add a marking",
     "A marking is a contracted end (direction 0). Attach it at an existing " +
-    "vertex &mdash; named here by the edges that meet there &mdash; or part-way " +
-    "along an edge or end, which subdivides the edge, putting a new vertex " +
-    "between the two pieces and hanging the marking there.");
+    "vertex, or part-way along an edge or end, which subdivides the edge, " +
+    "putting a new vertex between the two pieces and hanging the marking there.");
   body.insertAdjacentHTML("beforeend",
     `<label>Name (optional) <input id="mk-name" type="text" placeholder="auto"></label>`);
 
@@ -1736,19 +1859,27 @@ function openMarkingDialog() {
       closeModal(); refreshAll(); autosave();
     } catch (e) { showModalError(e.message); }
   };
+  const atVertexText = id => `at the vertex where ${vertexLabel(data.curve, id)} meet`
+    + (val[id] ? ` (valence ${val[id]})` : "");
+  const onEdgeText = e => `on ${e.name || e.id} (${e.kind === "end" ? "end" : "edge"}, ` +
+    `direction ${fmtVec(e.vec)}), subdividing it`;
+
+  const frame = pickFrame(body, wantPresetSwatches()
+    ? "Click a vertex (ringed) or a point on an edge or end."
+    : "Tap a vertex (ringed) or an edge or end, then tap it again or press Add.",
+    true);
 
   const section = (title) => {
     const h = document.createElement("h3");
     h.textContent = title;
     h.style.margin = "14px 0 6px";
     h.style.fontSize = "14px";
-    body.appendChild(h);
+    frame.listView.appendChild(h);
     const list = document.createElement("div");
     list.className = "reslist";
-    body.appendChild(list);
+    frame.listView.appendChild(list);
     return list;
   };
-
   const atVertex = section("At a vertex");
   data.curve.vertices.forEach(v => {
     const b = document.createElement("button");
@@ -1757,7 +1888,6 @@ function openMarkingDialog() {
     b.onclick = () => run("add_marking", v.id);
     atVertex.appendChild(b);
   });
-
   const onEdge = section("On an edge or end (subdivides it)");
   data.curve.edges.forEach(e => {
     const b = document.createElement("button");
@@ -1765,22 +1895,21 @@ function openMarkingDialog() {
     b.onclick = () => run("add_marking_on_edge", e.id);
     onEdge.appendChild(b);
   });
-  if (!data.curve.edges.length) {
-    const p = document.createElement("p");
-    p.className = "muted"; p.style.margin = "0";
-    p.textContent = "This type has no edges or ends.";
-    onEdge.appendChild(p);
-  }
 
   body.appendChild(errBox());
   openModal();
+  mountPicker(data, "pick-svg", {
+    pickEdge: () => true, pickVertex: () => true,
+    status: frame.status, button: frame.button,
+    describe: t => t.kind === "vertex" ? atVertexText(t.id) : onEdgeText(t.edge),
+    buttonText: t => t.kind === "vertex" ? "Add marking at this vertex" : `Add marking on ${t.edge.name}`,
+    buttonIdle: "Add marking",
+    commit: t => t.kind === "vertex" ? run("add_marking", t.id) : run("add_marking_on_edge", t.id),
+  });
 }
 
 // Contracting picks an edge. The default is to pick it on a picture of the
 // curve -- the natural way to say "that one" -- with the list one click away.
-// A mouse contracts on click, with the edge highlighted on hover so the click
-// is never a surprise; touch has no hover, so a tap selects and a second tap
-// (or the button) confirms.
 function openContractDialog() {
   const data = api("render", selectedId);
   const bounded = data.curve.edges.filter(e => e.kind === "bounded");
@@ -1792,37 +1921,16 @@ function openContractDialog() {
     body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no bounded edges.</p>`);
     openModal(); return;
   }
-  const card = document.querySelector("#modal .modal-card");
-  if (card) card.classList.add("wide");
-
   const contract = e => {
     try {
       const child = api("contract", selectedId, e.id);
       closeModal(); refreshAll(); selectNode(child.id); autosave();
     } catch (err) { showModalError(err.message); }
   };
-  const describe = e => `${e.name}, direction ${fmtVec(e.vec)}` +
-    (e.weight > 1 ? `, weight ${e.weight}` : "");
-
-  // --- on the picture ---
-  const pickView = document.createElement("div");
-  const hint = document.createElement("p");
-  hint.className = "muted"; hint.style.margin = "4px 0 6px";
-  const fine = wantPresetSwatches();   // mouse or trackpad present
-  hint.textContent = fine
+  const frame = pickFrame(body, wantPresetSwatches()
     ? "Click the edge to contract. Faded parts cannot be contracted."
-    : "Tap the edge to contract, then tap it again or press Contract. Faded parts cannot be contracted.";
-  const holder = document.createElementNS(SVGNS, "svg");
-  holder.id = "pick-svg";
-  holder.setAttribute("preserveAspectRatio", "xMidYMid meet");
-  const status = document.createElement("div");
-  status.className = "pick-status";
-  const go = document.createElement("button");
-  go.className = "primary"; go.disabled = true; go.textContent = "Contract";
-  pickView.append(hint, holder, status, row([go]));
-
-  // --- as a list ---
-  const listView = document.createElement("div");
+    : "Tap the edge to contract, then tap it again or press Contract. Faded parts cannot be contracted.",
+    true);
   const list = document.createElement("div"); list.className = "reslist";
   bounded.forEach(e => {
     const b = document.createElement("button");
@@ -1831,61 +1939,24 @@ function openContractDialog() {
     b.onclick = () => contract(e);
     list.appendChild(b);
   });
-  listView.appendChild(list);
-  listView.hidden = true;
-
-  const toggle = document.createElement("button");
-  toggle.className = "small ghost";
-  const setView = picture => {
-    pickView.hidden = !picture; listView.hidden = picture;
-    toggle.textContent = picture ? "Choose from a list instead" : "Pick on the curve instead";
-  };
-  toggle.onclick = () => setView(listView.hidden === false);
-  setView(true);
-  body.append(toggle, pickView, listView, errBox());
+  frame.listView.appendChild(list);
+  body.appendChild(errBox());
   openModal();
-
-  // draw once the dialog is showing, so labels can be measured
-  const drawn = drawCurve(data, { svgId: "pick-svg", pickable: e => e.kind === "bounded" });
-  const byId = {}; drawn.picks.forEach(pk => { byId[pk.edge.id] = pk; });
-  let hovered = null, selected = null, lastPointer = "mouse";
-  const labelOf = pk => drawn.svg.querySelector(`text[data-label-key="e:${CSS.escape(pk.edge.id)}"]`);
-  const paint = () => {
-    drawn.picks.forEach(pk => {
-      const on = pk === hovered || pk === selected;
-      if (!pk.orig) pk.orig = { stroke: pk.line.getAttribute("stroke"), w: pk.line.getAttribute("stroke-width") };
-      pk.line.setAttribute("stroke", on ? "var(--accent)" : pk.orig.stroke);
-      pk.line.setAttribute("stroke-width", on ? +pk.orig.w + 3 : pk.orig.w);
-      const t = labelOf(pk);
-      if (t && t.hasAttribute("data-label-hidden")) t.setAttribute("visibility", on ? "visible" : "hidden");
-    });
-    const shown = selected || hovered;
-    status.textContent = shown ? describe(shown.edge) : "";
-    go.disabled = !selected;
-    go.textContent = selected ? `Contract ${selected.edge.name}` : "Contract";
-  };
-  drawn.svg.addEventListener("pointerdown", ev => { lastPointer = ev.pointerType || "mouse"; });
-  drawn.picks.forEach(pk => {
-    pk.hit.addEventListener("pointerenter", ev => {
-      if (ev.pointerType === "mouse") { hovered = pk; paint(); }
-    });
-    pk.hit.addEventListener("pointerleave", ev => {
-      if (ev.pointerType === "mouse" && hovered === pk) { hovered = null; paint(); }
-    });
-    pk.hit.addEventListener("click", ev => {
-      ev.stopPropagation();
-      if (lastPointer === "mouse") { contract(pk.edge); return; }
-      if (selected === pk) { contract(pk.edge); return; }
-      selected = pk; paint();
-    });
+  // drawn once the dialog shows, so labels can be measured
+  mountPicker(data, "pick-svg", {
+    pickEdge: e => e.kind === "bounded", dim: true,
+    status: frame.status, button: frame.button,
+    describe: t => `${t.edge.name}, direction ${fmtVec(t.edge.vec)}` +
+      (t.edge.weight > 1 ? `, weight ${t.edge.weight}` : ""),
+    buttonText: t => `Contract ${t.edge.name}`, buttonIdle: "Contract",
+    commit: t => contract(t.edge),
   });
-  drawn.svg.addEventListener("click", () => {       // a tap on empty space clears it
-    if (lastPointer !== "mouse" && selected) { selected = null; paint(); }
-  });
-  go.onclick = () => { if (selected) contract(selected.edge); };
-  paint();
 }
 
+// The vertex to resolve is picked on the picture by default (ringed: vertices
+// are not drawn otherwise), with a list one click away. Picking is only the
+// first step -- the vertex's resolutions then appear below -- so a click just
+// selects, and the ticked side of a big vertex is shown on the picture too.
 function openResolveDialog() {
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
   const data = api("render", selectedId);
@@ -1900,15 +1971,18 @@ function openResolveDialog() {
     body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no vertex of valence 4 or more.</p>`);
     openModal(); return;
   }
-  let sel = null;
-  if (big.length > 1) {
-    sel = selectOf(big.map(v => [v, `where ${vertexLabel(data.curve, v)} meet`]));
-    body.appendChild(labeled("vertex", sel));
-  }
+  const frame = pickFrame(body, big.length > 1
+    ? (wantPresetSwatches() ? "Click a ringed vertex to resolve it." : "Tap a ringed vertex to resolve it.")
+    : "The only vertex that can be resolved is ringed.", false);
+  const sel = selectOf(big.map(v => [v, `where ${vertexLabel(data.curve, v)} meet`]));
+  frame.listView.appendChild(labeled("vertex", sel));
   const listWrap = document.createElement("div");
   listWrap.style.marginTop = "10px";
   body.appendChild(listWrap);
   body.appendChild(errBox());
+  let picker = null;
+  let current = null;         // the vertex whose resolutions are shown
+  const describeVertex = id => `where ${vertexLabel(data.curve, id)} meet (valence ${valences[id]})`;
 
   const commit = (fn) => {
     try {
@@ -1971,6 +2045,7 @@ function openResolveDialog() {
         note.textContent = res.reason;
       }
       go.disabled = !res.ok;
+      showSplit(vertex, pick);
     };
     boxes.forEach(b => { b.onchange = update; });
     go.onclick = () => commit(() => api("resolve_subset", selectedId, vertex, chosen(), null));
@@ -1978,15 +2053,46 @@ function openResolveDialog() {
     update();
   };
 
-  const fill = () => {
-    const vertex = sel ? sel.value : big[0];
+  // the ticked side in the accent colour, the rest as drawn
+  const showSplit = (vertex, pick) => {
+    if (!picker) return;
+    const lines = picker.drawn.lines;
+    vertexFlags(data.curve, vertex).forEach(f => {
+      const ln = lines[f.id];
+      if (!ln) return;                         // a marking: nothing to colour
+      if (!ln.dataset.origStroke) {
+        ln.dataset.origStroke = ln.getAttribute("stroke");
+        ln.dataset.origWidth = ln.getAttribute("stroke-width");
+      }
+      const on = pick.includes(f.id);
+      ln.setAttribute("stroke", on ? "var(--accent)" : ln.dataset.origStroke);
+      ln.setAttribute("stroke-width", on ? +ln.dataset.origWidth + 2 : ln.dataset.origWidth);
+    });
+  };
+
+  const fill = vertex => {
+    if (current && current !== vertex) showSplit(current, []);
+    current = vertex;
+    sel.value = vertex;
     listWrap.innerHTML = "";
     showModalError("");
+    if (!vertex) return;
     if (valences[vertex] === 4) fillList(vertex); else fillPicker(vertex);
   };
-  if (sel) sel.onchange = fill;
-  fill();
+  sel.onchange = () => { fill(sel.value); if (picker) picker.select(sel.value); };
   openModal();
+  picker = mountPicker(data, "pick-svg", {
+    pickVertex: v => (valences[v.id] || 0) >= 4,
+    clickCommits: false,
+    status: frame.status, idle: "",
+    describe: t => describeVertex(t.id),
+    onSelect: t => fill(t ? t.id : null),
+  });
+  // one choice, or coming back to the list, means a vertex is already chosen
+  if (big.length === 1) picker.select(big[0]);
+  frame.onSwitch(picture => {
+    if (!picture && !current) fill(sel.value);
+  });
 }
 
 // ---- small DOM helpers ----
