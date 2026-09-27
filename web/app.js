@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "25";
+const APP_VERSION = "26";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -579,8 +579,9 @@ function openSettingsDialog() {
   bindLabelToggle("set-edge-labels", "edgeLabels");
   bindLabelToggle("set-mark-labels", "markingLabels");
 
+  // the background has its own swatches (BG_PRESETS) right below it
   const bgField = colorField(loadSettings().bgColor, (hex) => setBackground(hex),
-    { live: true, fallback: currentBgHex });
+    { live: true, fallback: currentBgHex, presets: false });
   document.getElementById("set-bg-slot").appendChild(bgField);
 
   function setBackground(hex) {
@@ -1931,7 +1932,59 @@ function normalizeHex(v) {
 // `live`: commit on every valid keystroke (good for dialogs that preview
 // instantly) vs only on Enter/blur (needed where committing rebuilds the
 // surrounding DOM and would yank the field out from under the typist).
-function colorField(value, onSet, { live = true, fallback = defaultColorHex } = {}) {
+// Preset colors for curve elements. Phone colour pickers offer swatches of
+// their own; desktop ones open a bare spectrum, so the app supplies these there.
+const COLOR_PRESETS = [
+  ["#000000", "Black"], ["#616161", "Grey"], ["#6d4c41", "Brown"], ["#ffffff", "White"],
+  ["#e53935", "Red"], ["#fb8c00", "Orange"], ["#f9a825", "Amber"], ["#43a047", "Green"],
+  ["#00897b", "Teal"], ["#00acc1", "Cyan"], ["#1e88e5", "Blue"], ["#3949ab", "Indigo"],
+  ["#8e24aa", "Purple"], ["#ff00ff", "Magenta"], ["#d81b60", "Pink"], ["#7cb342", "Lime"],
+];
+// only where the platform's own picker has no swatches: a mouse or trackpad
+const wantPresetSwatches = () => {
+  try { return window.matchMedia("(pointer: fine)").matches; } catch (e) { return true; }
+};
+
+let openPresetPop = null;
+function closePresetPop() {
+  if (openPresetPop) { openPresetPop.remove(); openPresetPop = null; }
+}
+document.addEventListener("mousedown", ev => {
+  if (openPresetPop && !openPresetPop.contains(ev.target) &&
+      !ev.target.closest(".preset-btn")) closePresetPop();
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") closePresetPop(); });
+
+// Fixed-position, so a scrolling dialog cannot clip it; placed under the
+// button and kept on screen.
+function showPresetPop(anchor, current, onPick) {
+  closePresetPop();
+  const pop = document.createElement("div");
+  pop.className = "preset-pop";
+  pop.setAttribute("role", "listbox");
+  COLOR_PRESETS.forEach(([hex, name]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "swatch" + (current && current.toLowerCase() === hex ? " on" : "");
+    b.style.background = hex;
+    b.title = `${name} ${hex}`;
+    b.setAttribute("aria-label", name);
+    b.onclick = () => { closePresetPop(); onPick(hex); };
+    pop.appendChild(b);
+  });
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = Math.min(r.left, window.innerWidth - w - 8);
+  let top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  pop.style.left = Math.max(8, left) + "px";
+  pop.style.top = top + "px";
+  openPresetPop = pop;
+}
+
+function colorField(value, onSet, { live = true, fallback = defaultColorHex,
+                                    presets = true } = {}) {
   const wrap = document.createElement("span");
   wrap.className = "color-field";
   const sw = document.createElement("input");
@@ -1965,7 +2018,21 @@ function colorField(value, onSet, { live = true, fallback = defaultColorHex } = 
   hex.onblur = commit;
   hex.onkeydown = ev => { if (ev.key === "Enter") { ev.preventDefault(); commit(); hex.blur(); } };
 
-  wrap.append(sw, hex);
+  wrap.append(sw);
+  if (presets && wantPresetSwatches()) {
+    const pb = document.createElement("button");
+    pb.type = "button";
+    pb.className = "preset-btn small ghost";
+    pb.textContent = "▾";
+    pb.title = "Preset colors";
+    pb.setAttribute("aria-label", "Preset colors");
+    pb.onclick = () => {
+      if (openPresetPop) { closePresetPop(); return; }
+      showPresetPop(pb, sw.value, h => { hex.value = h; apply(h); });
+    };
+    wrap.append(pb);
+  }
+  wrap.append(hex);
   wrap.setValue = (h) => {
     sw.value = isHex6(h) ? h : fallback();
     hex.value = isHex6(h) ? h : "";
