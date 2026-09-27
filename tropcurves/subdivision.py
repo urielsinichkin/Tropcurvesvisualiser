@@ -178,16 +178,25 @@ def _obj_intersection(o1, o2) -> Optional[FPoint]:
 # ---------------------------------------------------------------------------
 # main build
 # ---------------------------------------------------------------------------
-def build_subdivision(curve: Curve, max_attempts: int = 10) -> Subdivision:
+def build_subdivision(curve: Curve, max_attempts: int = 10,
+                      lengths: Optional[Dict[str, Fraction]] = None) -> Subdivision:
     """Build the dual mixed subdivision in a generic chamber.
 
-    Tries a few generic length seeds until one yields a non-degenerate
-    arrangement. Raises :class:`SubdivisionError` if none succeeds.
+    With ``lengths`` (the ones the curve is drawn with) that chamber is tried
+    first, so the parallelograms are exactly the crossings in the picture;
+    otherwise, or if those lengths are not generic, a few generic seeds are
+    tried until one yields a non-degenerate arrangement. Raises
+    :class:`SubdivisionError` if none succeeds.
     """
     if not curve.ends:
         raise ValueError("curve has no ends; subdivision is undefined")
     _reject_parallel_at_vertex(curve)
     last_err: Optional[Exception] = None
+    if lengths is not None:
+        try:
+            return _build_once(curve, embed(curve, lengths))
+        except SubdivisionError as exc:
+            last_err = exc
     for seed in range(1, max_attempts + 1):
         try:
             pos = embed(curve, generic_lengths(curve, seed=seed))

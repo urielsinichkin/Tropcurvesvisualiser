@@ -16,7 +16,7 @@ from .curve import Curve, EdgeKind
 from .geometry import Vec2, primitive
 from .balancing import resolve_slopes
 from .newton import newton_polygon
-from .layout import embed, readable_lengths, end_ray_length
+from .layout import embed, end_ray_length, display_lengths, layout_reference
 from .subdivision import build_subdivision, SubdivisionError
 from .operations import resolutions, resolution_for_subset, apply_resolution
 from .subdivision_import import import_subdivision
@@ -33,6 +33,37 @@ class Session:
 
     def __init__(self) -> None:
         self.ws = Workspace()
+        self._layout_cache: Dict[Any, Any] = {}
+
+    # --- layout -----------------------------------------------------------
+    @staticmethod
+    def _geometry_key(c: Curve) -> tuple:
+        """What the layout depends on: the graph and slopes, not names or colors."""
+        return (tuple(c.vertices),
+                tuple(sorted((e.id, e.kind.value, e.tail, e.head or "", e.vec.x, e.vec.y)
+                             for e in c.edges.values())))
+
+    def _node_layout(self, node_id: str) -> tuple:
+        """(lengths, cache key) for drawing a type, fitted to its parent's picture.
+
+        Recursive up the derivation tree, so each type resembles its parent as
+        drawn, and cached on the geometry of the whole chain, so an unchanged
+        ancestor is not laid out again.
+        """
+        n = self.ws.nodes[node_id]
+        parent = self.ws.nodes.get(n.parent_id) if n.parent_id else None
+        ref, pkey = None, None
+        if parent is not None:
+            plengths, pkey = self._node_layout(parent.id)
+            ref = layout_reference(parent.curve, plengths)
+        key = (self._geometry_key(n.curve), pkey)
+        hit = self._layout_cache.get(key)
+        if hit is None:
+            if len(self._layout_cache) > 512:
+                self._layout_cache.clear()
+            hit = display_lengths(n.curve, ref)
+            self._layout_cache[key] = hit
+        return hit, key
 
     # --- persistence ----------------------------------------------------
     def save(self) -> str:
@@ -255,7 +286,10 @@ class Session:
         if res.is_crossing:
             raise ValueError("that split is a crossing (a parallelogram), not a resolution")
         out = apply_resolution(c, res)
-        return {"curve": self._render_curve(out.curve), "new_edge": out.new_edge,
+        # drawn as the child would be: fitted to this type's picture
+        plengths, _ = self._node_layout(node_id)
+        lengths = display_lengths(out.curve, layout_reference(c, plengths))
+        return {"curve": self._render_curve(out.curve, lengths), "new_edge": out.new_edge,
                 "new_edge_vec": res.new_edge_vec.to_list()}
 
     def resolve_subset(self, node_id: str, vertex: str, subset: List[str],
@@ -339,11 +373,12 @@ class Session:
     def render(self, node_id: str) -> Dict[str, Any]:
         n = self.ws.nodes[node_id]
         c = n.curve
+        lengths, _ = self._node_layout(node_id)
         out: Dict[str, Any] = {
             "id": n.id,
             "name": n.name,
             "status": n.status,
-            "curve": self._render_curve(c),
+            "curve": self._render_curve(c, lengths),
         }
         try:
             out["newton"] = [v.to_list() for v in newton_polygon(c)]
@@ -351,7 +386,8 @@ class Session:
             out["newton"] = None
             out["newton_error"] = str(exc)
         try:
-            sub = build_subdivision(c)
+            # the displayed lengths first, so the parallelograms are the drawn crossings
+            sub = build_subdivision(c, lengths=lengths)
             out["subdivision"] = {
                 "cells": [[v.to_list() for v in cell.vertices] for cell in sub.cells],
             }
@@ -361,8 +397,10 @@ class Session:
             out["subdivision_error"] = str(exc)
         return out
 
-    def _render_curve(self, c: Curve) -> Dict[str, Any]:
-        pos = embed(c, readable_lengths(c))
+    def _render_curve(self, c: Curve, lengths=None) -> Dict[str, Any]:
+        if lengths is None:
+            lengths = display_lengths(c)
+        pos = embed(c, lengths)
         fpos = {v: (float(x), float(y)) for v, (x, y) in pos.items()}
         ray_len = end_ray_length(pos)   # the length the layout scored against
 

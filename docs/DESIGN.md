@@ -92,27 +92,51 @@ tree** (genus 0) — rather than rejecting interior vertices outright.
 Slopes are fixed, so only **lengths** and a root position are free. The layout
 pass chooses positive lengths (and root) to make the drawing legible.
 
-The first requirement is that the picture not *invent* structure: a vertex must
-not sit on an edge it is not part of, and two vertices must not coincide. Unit
-lengths are exactly the kind of special point where that happens (about a fifth
-of random types put some vertex precisely on an unrelated edge), and it is
-always an artifact -- the bad length vectors form a measure-zero set -- so
-`readable_lengths` searches for a good one: score a candidate by
-`min_clearance` (nearest vertex to anything it is not part of, as a fraction of
-the picture's span) and take the first that clears the target, mild jitter
-first, wider lengths only if that is not enough. Ends are scored well past the
-length they are drawn at, so a gap cannot come from the ray being cut off; the
-score is scale-invariant, so scaling the drawing cannot fake one either.
+What a readable picture needs, in order (`display_lengths` in `layout.py`):
 
-Two things are deliberately **not** targets. Crossings between edges are real
-(they dualize to parallelograms) and no lengths remove them. And a type whose
-flags at a vertex share a direction has no clear picture at all -- the same
-degeneracy `build_subdivision` reports -- so there the search reports 0 rather
-than pretending.
+1. **Edges of comparable drawn length.** Lengths used to be chosen in lattice
+   units -- L = 1 along the primitive direction -- which draws an edge in
+   direction (3,4) five times as long as one in direction (1,0); on a real
+   workspace the drawn lengths spread 7-fold for no reason. Targets are now
+   Euclidean: every edge of the underlying curve aims at drawn length 1, and an
+   edge cut into pieces by interior markings shares that 1 between its pieces,
+   so marking a point on an edge does not stretch it.
+2. **Nothing touching that does not meet** -- `min_clearance`, the distance
+   from the nearest vertex to anything it is not part of, as a fraction of the
+   picture; ends are tested well past the length they are drawn at, and the
+   measure is scale-invariant. Coincidences are artifacts of the lengths (a
+   measure-zero set) so they can always be removed, except for a type with no
+   generic embedding at all, which is reported as 0.
+3. **Few crossings**, where lengths can avoid them -- for a type drawn on its
+   own. Crossings forced by the slopes are real (they dualize to parallelograms).
+4. **A derived type looks like its parent.** Vertices the two share keep their
+   places as far as the lengths allow. Positions are linear in the lengths, so
+   this is a least-squares fit, solved by coordinate descent with lengths
+   bounded below (pure Python); the pull toward target lengths is only a
+   tie-breaker, so it settles what the parent leaves free without ever
+   competing with an exact match -- a contract-then-resolve that recreates an
+   edge gives it a fresh id, and it must still land where the old one was. A
+   child is held only to the clearance its parent achieved, so a type that
+   differs from its parent by nothing but a marking comes out *identical*.
+   Layouts are computed down the derivation tree and cached on the geometry of
+   the whole chain.
 
-Still open: spreading vertices beyond mere clearance, label collisions, and
-tuning the aspect ratio to the viewport. This same embedding machinery feeds the
-generic-chamber subdivision.
+When the fitted or even lengths are not good enough, a deterministic greedy
+climb changes one edge at a time -- the change that lowers the cost most --
+where the cost is a clearance shortfall plus crossings and unevenness (on its
+own) or displacement from the parent (derived). A bottleneck is usually one or
+two edges; changing only those keeps the rest even. Over random curves every
+non-degenerate type reaches the clearance goal, the median has no crossings,
+and the typical type keeps exactly even lengths.
+
+The **dual subdivision** is built in the chamber that is drawn (falling back to
+generic seeds if those lengths are not generic), so its parallelograms are the
+crossings in the picture, and a derived type's subdivision stays like its
+parent's too.
+
+Still open: tuning the aspect ratio to the viewport, and making a type's own
+picture stable across its own edits (an edit re-lays the type out from its
+parent, or from scratch for a root).
 
 **Drawing.** Vertices are not drawn: where edges meet already shows them.
 Markings are drawn as discs exactly at their image, with radius proportional to
@@ -285,7 +309,7 @@ tropcurves/                 # pure-Python core package
   balancing.py              # general free/dependent slope solver
   newton.py                 # Newton polygon from ends
   subdivision.py            # generic-chamber dual mixed subdivision
-  layout.py                 # readable length/embedding chooser
+  layout.py                 # display layout: even lengths, clearance, likeness to parent
   operations.py             # contract, resolve, edit slopes, markings, rename, color
   refined.py                # Goettsche-Schroeter refined multiplicity, balanced splits
   workspace.py              # forest of types + propagation engine
@@ -336,7 +360,8 @@ docs/                       # DESIGN.md, POSTPONED.md
   the splitters between the columns (mouse, pen or finger; arrow keys when
   focused; double-click resets), remembered per browser and shrunk to fit a
   narrower window without losing the saved widths. Remaining:
-  spreading beyond clearance and label-collision avoidance, custom (graph/ends)
-  curve entry, further aesthetic and a11y passes.]**
+  custom (graph/ends) curve entry, further aesthetic and a11y passes. Layout:
+  even drawn lengths, fewer crossings, derived types drawn like their parents,
+  the subdivision in the drawn chamber.]**
 
 Each phase keeps the core independently testable before the GUI depends on it.
