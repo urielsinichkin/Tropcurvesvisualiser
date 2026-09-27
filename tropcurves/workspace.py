@@ -114,6 +114,52 @@ class Workspace:
         src = self._get(node_id)
         return self.add_root(src.curve.copy(), name=name or self._fresh_node_name(src.name))
 
+    def merge(self, other: "Workspace") -> List[str]:
+        """Append every type of ``other`` to this workspace; returns their new ids.
+
+        Derivations come along intact (parents, children, steps). A type whose
+        id is already taken here gets a fresh one, with its parent/children
+        links rewritten to match; element ids need no care, since they only
+        have to be unique within one type's family. A type whose *name* is
+        already in use gets a numbered suffix, so the two stay tellable apart.
+        """
+        used_names = {n.name for n in self.nodes.values()}
+        incoming = list(other.nodes.values())
+        # reserve incoming ids that are free here before inventing fresh ones,
+        # so a renumbered type cannot take an id another incoming type keeps
+        taken = set(self.nodes)
+        keep = {n.id for n in incoming if n.id not in taken}
+        idmap: Dict[str, str] = {}
+        for n in incoming:
+            if n.id in keep:
+                idmap[n.id] = n.id
+                continue
+            while True:
+                cand = f"T{next(self._counter)}"
+                if cand not in taken and cand not in keep:
+                    break
+            idmap[n.id] = cand
+            taken.add(cand)
+        added: List[str] = []
+        for n in incoming:
+            n.id = idmap[n.id]
+            n.parent_id = idmap.get(n.parent_id) if n.parent_id else None
+            n.children = [idmap[c] for c in n.children if c in idmap]
+            if n.name in used_names:
+                n.name = self._numbered_name(n.name, used_names)
+            used_names.add(n.name)
+            self.nodes[n.id] = n
+            added.append(n.id)
+        return added
+
+    @staticmethod
+    def _numbered_name(base: str, used: set) -> str:
+        for i in itertools.count(2):
+            cand = f"{base} ({i})"
+            if cand not in used:
+                return cand
+        raise AssertionError("unreachable")
+
     def descendants(self, node_id: str) -> List[str]:
         """Every type derived from this one, transitively."""
         out: List[str] = []

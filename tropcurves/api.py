@@ -89,11 +89,20 @@ class Session:
                 copy.delete(nid)
         return schema.dumps_workspace(copy)
 
-    def load(self, text: str) -> None:
-        self.ws = schema.loads_workspace(text)
+    def load(self, text: str, append: bool = False) -> List[str]:
+        """Load a workspace file, replacing the current one -- or, with
+        ``append``, adding its types alongside the current ones (see
+        ``Workspace.merge``). Returns the ids of the types loaded."""
+        incoming = schema.loads_workspace(text)
+        if append:
+            added = self.ws.merge(incoming)
+        else:
+            self.ws = incoming
+            added = list(incoming.nodes)
         # A replay that failed when the file was written may well succeed now,
         # so give every type marked needs_attention one chance to heal.
         self.ws.retry_failed()
+        return added
 
     # --- creating types -------------------------------------------------
     def add_preset(self, name: str) -> Dict[str, Any]:
