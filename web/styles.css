@@ -165,6 +165,14 @@ input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var
 
 /* colour swatch + typable hex code */
 .color-field { display: inline-flex; align-items: center; gap: 6px; }
+.preset-btn { padding: 2px 6px; line-height: 1; }
+.preset-pop {
+  position: fixed; z-index: 50; display: grid; grid-template-columns: repeat(4, 26px);
+  gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: var(--shadow);
+}
+.preset-pop .swatch { width: 26px; height: 26px; margin: 0; }
+.preset-pop .swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hexfield {
   width: 86px; font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px; padding: 5px 6px;
