@@ -11,9 +11,10 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "23";
+const APP_VERSION = "24";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
+const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
 
 let pyodide = null;
 let callFn = null;
@@ -811,30 +812,108 @@ function refreshAll() {
   }
 }
 
+// Which types have their derived types folded away. This is how the list is
+// being looked at, not part of the workspace, so it lives in this browser only
+// and is never exported.
+function loadCollapsed() {
+  try { return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "[]")); }
+  catch (e) { return new Set(); }
+}
+function saveCollapsed(set) {
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...set])); } catch (e) { /* ignore */ }
+}
+
+// Selecting a type unfolds whatever it sits under (a new child made from a
+// folded parent, say) so the highlight is visible. Only selecting does this: a
+// deliberate fold -- "Collapse all" included -- is left as the user made it.
+function revealInTypeList(id) {
+  const byId = {}; api("list_nodes").forEach(n => byId[n.id] = n);
+  const set = loadCollapsed();
+  let changed = false;
+  for (let cur = byId[id]; cur && cur.parent_id; cur = byId[cur.parent_id]) {
+    if (set.delete(cur.parent_id)) changed = true;
+  }
+  if (changed) saveCollapsed(set);
+}
+
 function renderTypeList() {
   const nodes = api("list_nodes");
   const byId = {}; nodes.forEach(n => byId[n.id] = n);
   const roots = nodes.filter(n => !n.parent_id);
+  const collapsed = loadCollapsed();
+
+  // forget types that no longer exist, or no longer have anything to fold
+  let changed = false;
+  for (const id of [...collapsed]) {
+    if (!byId[id] || !(byId[id].children || []).some(c => byId[c])) { collapsed.delete(id); changed = true; }
+  }
+  if (changed) saveCollapsed(collapsed);
+
+  const countBelow = n => (n.children || []).reduce(
+    (k, cid) => byId[cid] ? k + 1 + countBelow(byId[cid]) : k, 0);
+  // a folded row that hides the selected type is marked, so it is not lost
+  const hidesSelection = n => {
+    for (let cur = byId[selectedId]; cur && cur.parent_id; cur = byId[cur.parent_id]) {
+      if (cur.parent_id === n.id) return true;
+    }
+    return false;
+  };
+
   const ul = document.getElementById("type-list");
   ul.innerHTML = "";
   const walk = (n, depth) => {
+    const kids = (n.children || []).filter(cid => byId[cid]);
+    const folded = kids.length > 0 && collapsed.has(n.id);
     const li = document.createElement("li");
-    li.className = "type-item" + (n.id === selectedId ? " selected" : "");
+    li.className = "type-item" + (n.id === selectedId ? " selected" : "")
+      + (folded && hidesSelection(n) ? " holds-selection" : "");
     li.onclick = () => selectNode(n.id);
     const warn = n.status !== "ok" ? `<span class="badge warn">needs attention</span>` : "";
+    const hidden = folded ? `<span class="badge" title="derived types folded away">+${countBelow(n)}</span>` : "";
     li.innerHTML = `<span class="tree-indent" style="width:${depth * 14}px"></span>
+      <span class="twisty-slot"></span>
       <span style="flex:1;min-width:0">
-        <span class="tname">${escapeHtml(n.name)}</span> ${warn}<br/>
+        <span class="tname">${escapeHtml(n.name)}</span> ${warn} ${hidden}<br/>
         <span class="tmeta">${n.num_ends} ends · ${n.num_bounded} edges · ${n.num_markings} marks${n.parent_id ? (n.follow_parent ? " · follows" : " · detached") : ""}</span>
       </span>`;
+    if (kids.length) {
+      const tw = document.createElement("button");
+      tw.className = "twisty";
+      tw.textContent = folded ? "▸" : "▾";
+      tw.title = folded ? "Show derived types" : "Hide derived types";
+      tw.setAttribute("aria-expanded", folded ? "false" : "true");
+      tw.onclick = ev => {
+        ev.stopPropagation();           // folding is not selecting
+        const set = loadCollapsed();
+        if (folded) set.delete(n.id); else set.add(n.id);
+        saveCollapsed(set);
+        renderTypeList();
+      };
+      li.querySelector(".twisty-slot").replaceWith(tw);
+    }
     ul.appendChild(li);
-    (n.children || []).forEach(cid => byId[cid] && walk(byId[cid], depth + 1));
+    if (!folded) kids.forEach(cid => walk(byId[cid], depth + 1));
   };
   roots.forEach(r => walk(r, 0));
+
+  // fold / unfold everything at once
+  const parents = nodes.filter(n => (n.children || []).some(c => byId[c])).map(n => n.id);
+  const tools = document.getElementById("types-tools");
+  if (tools) {
+    tools.hidden = parents.length === 0;
+    const allFolded = parents.length > 0 && parents.every(id => collapsed.has(id));
+    const btn = document.getElementById("types-fold-all");
+    btn.textContent = allFolded ? "Expand all" : "Collapse all";
+    btn.onclick = () => {
+      saveCollapsed(allFolded ? new Set() : new Set(parents));
+      renderTypeList();
+    };
+  }
 }
 
 function selectNode(id) {
   selectedId = id;
+  revealInTypeList(id);
   const details = document.getElementById("sub-details");
   if (details) details.open = false; // each curve's subdivision starts collapsed
   renderTypeList();
