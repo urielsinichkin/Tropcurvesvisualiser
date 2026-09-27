@@ -11,10 +11,11 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "29";
+const APP_VERSION = "30";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
+const LAYOUT_KEY = "tropcurves.layout.v1";         // side-panel widths, per browser
 
 let pyodide = null;
 let callFn = null;
@@ -34,6 +35,7 @@ async function boot() {
   const ver = document.getElementById("app-version");
   if (ver) ver.textContent = "v" + APP_VERSION;
   applyBackgroundTheme(loadSettings().bgColor); // before anything is painted
+  applyPanelWidths(loadLayout());
   const msg = document.getElementById("boot-msg");
   msg.textContent = "Loading Python runtime…";
   pyodide = await loadPyodide();
@@ -66,6 +68,7 @@ def call(name, args_json):
 
   document.getElementById("boot").hidden = true;
   document.getElementById("app").hidden = false;
+  applyPanelWidths(loadLayout());
   wireGlobalButtons();
 
   const nodes = api("list_nodes");
@@ -276,8 +279,119 @@ function wireMenu() {
   document.addEventListener("keydown", ev => { if (ev.key === "Escape") setOpen(false); });
 }
 
+// ---------------------------------------------------------------------------
+// resizable side panels
+//
+// The splitters between the columns drag with any pointer -- mouse, pen, or a
+// finger on a tablet -- and the widths are kept per browser. Each side panel
+// has sensible bounds, and the curve in the middle is never squeezed below a
+// usable width. Double-click (or double-tap) a splitter to restore the
+// default; with focus on one, the arrow keys nudge it.
+// ---------------------------------------------------------------------------
+const PANEL_WIDTHS = {            // [min, max, default] in CSS px
+  types: [160, 560, 240],
+  controls: [220, 640, 300],
+};
+const MIN_VIEWS_WIDTH = 360;
+
+// The live layout is held in memory -- a drag updates it on every move -- and
+// written to storage when the drag ends, so a release never snaps back to the
+// last saved width.
+let liveLayout = null;
+function loadLayout() {
+  if (!liveLayout) {
+    try { liveLayout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}"); }
+    catch (e) { liveLayout = {}; }
+  }
+  return liveLayout;
+}
+function saveLayout(layout) {
+  liveLayout = layout;
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (e) { /* ignore */ }
+}
+function panelWidth(which) {
+  const w = loadLayout()[which];
+  return typeof w === "number" ? w : PANEL_WIDTHS[which][2];
+}
+// Show the saved widths -- shrunk, if the window is now too narrow for them,
+// so the curve keeps its room. The saved preference is not touched, so
+// widening the window again brings the chosen widths back.
+function applyPanelWidths(layout) {
+  const root = document.documentElement.style;
+  const want = w => (typeof layout[w] === "number" ? layout[w] : PANEL_WIDTHS[w][2]);
+  let t = want("types"), c = want("controls");
+  const app = document.getElementById("app");
+  if (app && app.clientWidth && window.innerWidth > 900) {
+    const avail = app.clientWidth - 48 - MIN_VIEWS_WIDTH;
+    const over = t + c - avail;
+    if (over > 0) {
+      const tt = Math.max(PANEL_WIDTHS.types[0], Math.round(t - over * t / (t + c)));
+      c = Math.max(PANEL_WIDTHS.controls[0], avail - tt);
+      t = tt;
+    }
+  }
+  root.setProperty("--types-w", t + "px");
+  root.setProperty("--controls-w", c + "px");
+}
+window.addEventListener("resize", () => applyPanelWidths(loadLayout()));
+// the widest this panel may be, leaving the other panel and the curve their room
+function clampPanel(which, w) {
+  const [lo, hi] = PANEL_WIDTHS[which];
+  const app = document.getElementById("app");
+  const other = which === "types" ? "controls" : "types";
+  const room = app ? app.clientWidth - 24 /* padding */ - 24 /* splitters */
+                   - panelWidth(other) - MIN_VIEWS_WIDTH : hi;
+  return Math.round(Math.max(lo, Math.min(hi, room, w)));
+}
+function setPanel(which, w, save) {
+  const layout = loadLayout();
+  layout[which] = clampPanel(which, w);
+  applyPanelWidths(layout);
+  if (save) saveLayout(layout);
+}
+
+function wireSplitter(id, which, sign) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let startX = 0, startW = 0, dragging = false;
+  el.addEventListener("pointerdown", ev => {
+    if (ev.button !== undefined && ev.button !== 0) return;
+    dragging = true; startX = ev.clientX; startW = panelWidth(which);
+    el.setPointerCapture(ev.pointerId);
+    el.classList.add("dragging"); document.body.classList.add("resizing");
+    ev.preventDefault();
+  });
+  el.addEventListener("pointermove", ev => {
+    if (!dragging) return;
+    // dragging right widens the left panel and narrows the right one
+    setPanel(which, startW + sign * (ev.clientX - startX), false);
+  });
+  const end = ev => {
+    if (!dragging) return;
+    dragging = false;
+    try { el.releasePointerCapture(ev.pointerId); } catch (e) { /* already gone */ }
+    el.classList.remove("dragging"); document.body.classList.remove("resizing");
+    setPanel(which, panelWidth(which), true);
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  el.addEventListener("dblclick", () => {
+    const layout = { ...loadLayout() }; delete layout[which];
+    saveLayout(layout); applyPanelWidths(layout);
+  });
+  el.addEventListener("keydown", ev => {
+    const step = ev.shiftKey ? 64 : 16;
+    if (ev.key === "ArrowLeft") setPanel(which, panelWidth(which) - sign * step, true);
+    else if (ev.key === "ArrowRight") setPanel(which, panelWidth(which) + sign * step, true);
+    else return;
+    ev.preventDefault();
+  });
+}
+
 function wireGlobalButtons() {
   wireMenu();
+  wireSplitter("split-types", "types", +1);
+  wireSplitter("split-controls", "controls", -1);
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
