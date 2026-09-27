@@ -158,6 +158,15 @@ section {
   padding: 0; border: none; background: transparent; color: var(--muted);
   font-size: 14px; line-height: 26px; border-radius: 6px;
 }
+/* per-row delete: faint until the row is pointed at or selected (always
+   shown in full on touch, where there is no hover) */
+.row-del {
+  flex: none; width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
+  background: transparent; font-size: 14px; line-height: 28px; opacity: .35;
+}
+.type-item:hover .row-del, .type-item.selected .row-del, .row-del:focus-visible { opacity: 1; }
+.row-del:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
+@media (hover: none) { .row-del { opacity: .8; } }
 .type-item.holds-selection { border-color: var(--accent); border-style: dashed; }
 .twisty:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 
