@@ -84,14 +84,34 @@ button.danger { color: var(--danger); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Side panels take their widths from custom properties, set by dragging the
+   splitters between the columns (and remembered per browser). */
 #app {
-  display: grid; gap: 12px; padding: 12px;
-  grid-template-columns: 240px 1fr 300px;
-  grid-template-areas: "types views controls";
+  display: grid; row-gap: 12px; column-gap: 0; padding: 12px;
+  grid-template-columns: var(--types-w, 240px) 12px minmax(0, 1fr) 12px var(--controls-w, 300px);
+  grid-template-areas: "types split-types views split-controls controls";
   align-items: start;
 }
+#types { grid-area: types; }
+#views { grid-area: views; }
+#controls { grid-area: controls; }
+#split-types { grid-area: split-types; }
+#split-controls { grid-area: split-controls; }
+.splitter {
+  align-self: stretch; cursor: col-resize; touch-action: none; position: relative;
+  border-radius: 6px; outline: none;
+}
+.splitter::after {
+  content: ""; position: absolute; top: 12px; bottom: 12px; left: 5px; width: 2px;
+  border-radius: 2px; background: transparent; transition: background .12s;
+}
+.splitter:hover::after, .splitter:focus-visible::after, .splitter.dragging::after {
+  background: var(--accent);
+}
+body.resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 900px) {
   #app { grid-template-columns: 1fr; grid-template-areas: "types" "views" "controls"; }
+  .splitter { display: none; }
 }
 
 section {

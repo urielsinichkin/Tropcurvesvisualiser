@@ -6,7 +6,7 @@
 <title>Tropical Curves Visualiser</title>
 <!-- Bump ?v= on each deploy that changes styles.css. app.js does not need a
      manual bump: it is loaded with a time-based token at the end of <body>. -->
-<link rel="stylesheet" href="styles.css?v=19" />
+<link rel="stylesheet" href="styles.css?v=20" />
 </head>
 <body>
 <header id="topbar">
@@ -41,6 +41,9 @@
     <ul id="type-list"></ul>
   </section>
 
+  <div class="splitter" id="split-types" role="separator" aria-orientation="vertical"
+       aria-label="Resize the types panel" title="Drag to resize; double-click to reset" tabindex="0"></div>
+
   <section id="views">
     <div class="view">
       <div class="view-head">
@@ -62,6 +65,9 @@
       </details>
     </div>
   </section>
+
+  <div class="splitter" id="split-controls" role="separator" aria-orientation="vertical"
+       aria-label="Resize the edit panel" title="Drag to resize; double-click to reset" tabindex="0"></div>
 
   <section id="controls">
     <div class="section-head"><h2>Edit</h2></div>

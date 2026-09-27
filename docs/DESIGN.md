@@ -332,7 +332,10 @@ docs/                       # DESIGN.md, POSTPONED.md
   phone; the types list folds: each type with derived types has a toggle and a
   count of what it hides, plus Collapse all / Expand all (view state, per
   browser, never exported). Selecting a type unfolds what it sits under, but a
-  deliberate fold is otherwise left alone. Remaining:
+  deliberate fold is otherwise left alone; the side panels resize by dragging
+  the splitters between the columns (mouse, pen or finger; arrow keys when
+  focused; double-click resets), remembered per browser and shrunk to fit a
+  narrower window without losing the saved widths. Remaining:
   spreading beyond clearance and label-collision avoidance, custom (graph/ends)
   curve entry, further aesthetic and a11y passes.]**
 
