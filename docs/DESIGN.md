@@ -270,9 +270,13 @@ derivation as an ordered list of such steps, normally one.
   this) is repaired on replay when the correspondence is forced -- exactly one
   recorded flag gone and one unaccounted for -- and loading a workspace retries
   everything marked needs attention.
-- **Deleting** a type removes that type and nothing else. It asks once to
-  confirm (there is no undo), saying where the derived types will end up rather
-  than offering a choice about them. They take its place: each moves up to the deleted type's
+- **Deleting** a type (from its details panel, or the 🗑 on its row in the
+  types list) by default removes that type and nothing else. It asks once to
+  confirm (there is no undo), saying where the derived types will end up. The
+  dialog has a checkbox, unticked by default, to delete every type derived from
+  it as well, transitively (`Session.delete(id, with_descendants=True)`); the
+  dialog's text and button then say how many go. Unticked, the derived types
+  take its place: each moves up to the deleted type's
   parent with the deleted type's steps prepended to its own, so it is still the
   same derivation, expressed from one type further up, and edits keep reaching
   it. The children of a deleted **root** become roots, there being nothing left

@@ -127,8 +127,12 @@ class Workspace:
             stack.extend(node.children)
         return out
 
-    def delete(self, node_id: str) -> str:
-        """Remove one type. Nothing else is ever removed with it.
+    def delete(self, node_id: str, with_descendants: bool = False) -> List[str]:
+        """Remove a type; returns the ids removed, the type's own first.
+
+        With ``with_descendants`` its whole subtree goes too -- every type
+        derived from it, transitively -- and nothing moves anywhere. Otherwise
+        only the type itself is removed, as follows.
 
         Its derived types take its place rather than being cut loose: each one
         moves up to the deleted type's parent, with the deleted type's steps
@@ -144,6 +148,13 @@ class Workspace:
         """
         node = self._get(node_id)
         parent = self.nodes.get(node.parent_id) if node.parent_id else None
+        if with_descendants:
+            removed = [node_id, *self.descendants(node_id)]
+            if parent is not None:
+                parent.children = [c for c in parent.children if c != node_id]
+            for nid in removed:
+                self.nodes.pop(nid, None)
+            return removed
         for cid in node.children:
             child = self.nodes.get(cid)
             if child is None:
@@ -164,7 +175,7 @@ class Workspace:
             at = parent.children.index(node_id)
             parent.children[at:at + 1] = node.children
         self.nodes.pop(node_id, None)
-        return node_id
+        return [node_id]
 
     def _fresh_node_name(self, base: str) -> str:
         used = {n.name for n in self.nodes.values()}

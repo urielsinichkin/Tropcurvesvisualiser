@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "32";
+const APP_VERSION = "33";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1015,6 +1015,13 @@ function renderTypeList() {
       };
       li.querySelector(".twisty-slot").replaceWith(tw);
     }
+    const del = document.createElement("button");
+    del.className = "row-del";
+    del.textContent = "🗑";
+    del.title = `Delete ${n.name}…`;
+    del.setAttribute("aria-label", `Delete ${n.name}`);
+    del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
+    li.appendChild(del);
     ul.appendChild(li);
     if (!folded) kids.forEach(cid => walk(byId[cid], depth + 1));
   };
@@ -1820,7 +1827,7 @@ function renderControls() {
     del.className = "small danger";
     del.textContent = "Delete…";
     del.title = "Remove this type; anything derived from it moves up to its parent";
-    del.onclick = openDeleteDialog;
+    del.onclick = () => openDeleteDialog();
     wrap.appendChild(row([dup, del]));
     return wrap;
   }));
@@ -2057,12 +2064,16 @@ function openMultiplicityDialog() {
   openModal();
 }
 
-function openDeleteDialog() {
+// Delete a type -- by default alone, its derived types moving up to take its
+// place; a checkbox (off unless ticked) removes every derived type with it.
+function openDeleteDialog(id = selectedId) {
   const nodes = api("list_nodes");
-  const summ = nodes.find(n => n.id === selectedId);
+  const summ = nodes.find(n => n.id === id);
   if (!summ) return;
   const kids = (summ.children || []).length;
+  const below = api("descendants", id).length;
   const parent = summ.parent_id ? nodes.find(n => n.id === summ.parent_id) : null;
+  const name = `<strong>${escapeHtml(summ.name)}</strong>`;
 
   let fate = "";
   if (kids) {
@@ -2074,22 +2085,44 @@ function openDeleteDialog() {
          ${kids > 1 ? "independent roots" : "an independent root"}, since nothing
          would be left to derive ${kids > 1 ? "them" : "it"} from.`;
   }
-  const body = dialogHead("Delete this type",
-    `<strong>${escapeHtml(summ.name)}</strong> will be removed from the workspace,
-     and nothing else.${fate} This cannot be undone.`);
+  const body = dialogHead("Delete this type", "");
+  const blurb = body.querySelector("p");
 
   const go = document.createElement("button");
   go.className = "danger";
-  go.textContent = "Delete " + summ.name;
+  let all = null;
+  const describe = () => {
+    const withAll = !!(all && all.checked);
+    blurb.innerHTML = withAll
+      ? `${name} will be removed from the workspace together with all
+         ${below} type${below > 1 ? "s" : ""} derived from it. This cannot be undone.`
+      : `${name} will be removed from the workspace, and nothing else.${fate}
+         This cannot be undone.`;
+    go.textContent = withAll
+      ? `Delete ${summ.name} and ${below} derived type${below > 1 ? "s" : ""}`
+      : "Delete " + summ.name;
+  };
+  if (below) {
+    const lab = document.createElement("label");
+    lab.className = "check"; lab.style.margin = "4px 0";
+    all = document.createElement("input");
+    all.type = "checkbox"; all.id = "delete-all";
+    all.onchange = describe;
+    lab.append(all, document.createTextNode(
+      `Also delete all ${below} derived type${below > 1 ? "s" : ""} (and theirs, all the way down)`));
+    body.appendChild(lab);
+  }
+  describe();
   go.onclick = () => {
-    const parentId = summ.parent_id;
+    let removed;
     try {
-      api("delete", selectedId);
+      removed = api("delete", id, !!(all && all.checked)).removed;
     } catch (e) { showModalError(e.message); return; }
     closeModal();
     const remaining = api("list_nodes");
     let next = null;
-    if (parentId && remaining.some(n => n.id === parentId)) next = parentId;
+    if (selectedId && !removed.includes(selectedId)) next = selectedId;
+    else if (summ.parent_id && remaining.some(n => n.id === summ.parent_id)) next = summ.parent_id;
     else if (remaining.length) next = remaining[0].id;
     refreshAll();
     if (next) selectNode(next);

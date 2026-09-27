@@ -132,7 +132,7 @@ def test_duplicate_names_avoid_collisions():
 
 def test_delete_leaf_removes_it_and_unlinks_from_parent():
     ws, root, child = _root_and_contracted()
-    assert ws.delete(child.id) == child.id
+    assert ws.delete(child.id) == [child.id]
     assert child.id not in ws.nodes
     assert child.id not in root.children
     assert root.id in ws.nodes
@@ -144,7 +144,7 @@ def test_deleting_a_root_leaves_its_children_as_roots():
     grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
     before = {e.id: e.vec for e in child.curve.bounded}
 
-    assert ws.delete(root.id) == root.id
+    assert ws.delete(root.id) == [root.id]
 
     assert root.id not in ws.nodes
     # the derived types survive; nothing is left to derive the child from
@@ -156,6 +156,28 @@ def test_deleting_a_root_leaves_its_children_as_roots():
     # the grandchild still hangs off the child, which is untouched
     assert grand.parent_id == child.id
     assert grand.id in child.children
+
+
+def test_delete_with_descendants_removes_the_whole_subtree():
+    ws, root, child = _root_and_contracted()
+    v = child.curve.vertices[0]
+    grand = ws.resolve(child.id, resolutions(child.curve, v)[0])
+    sibling = ws.duplicate(root.id)
+
+    removed = ws.delete(child.id, with_descendants=True)
+
+    assert removed[0] == child.id and set(removed) == {child.id, grand.id}
+    assert child.id not in ws.nodes and grand.id not in ws.nodes
+    assert root.children == []
+    assert set(ws.nodes) == {root.id, sibling.id}
+    ws.set_color(root.id, "a", "#ff0000")      # nothing dangling to propagate to
+
+
+def test_delete_root_with_descendants_leaves_other_roots():
+    ws, root, child = _root_and_contracted()
+    other = ws.duplicate(root.id)
+    assert set(ws.delete(root.id, with_descendants=True)) == {root.id, child.id}
+    assert list(ws.nodes) == [other.id]
 
 
 def test_deleting_a_middle_type_moves_its_children_up():
