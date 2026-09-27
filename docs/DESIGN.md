@@ -128,7 +128,11 @@ nearest first, and takes the first that hits nothing and stays inside the panel.
 A picture crowded enough to have no clear spot falls back to the least-bad one
 rather than flinging the label somewhere unattached. Edge names and marking
 names can each be turned off in Display settings (stored per browser, like the
-colors).
+colors). A hidden label is still placed -- after the shown ones, and clear of
+everything -- so it can be revealed without landing on anything: while the
+mouse is over its edge or marking, or by a tap on a touch screen (tap again, or
+on empty space, to hide). Generous invisible targets make thin edges easy to
+hit. Hidden labels stay out of a PNG copy.
 
 ## 3. Operations
 

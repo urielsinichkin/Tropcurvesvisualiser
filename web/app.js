@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "24";
+const APP_VERSION = "25";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1037,6 +1037,8 @@ function drawCurve(data) {
   const segments = [];   // drawn edges, as obstacles
   const discs = [];      // drawn markings, as obstacles
   const wanted = [];     // labels still to place
+  const hits = [];       // invisible, generous targets for revealing hidden labels
+  const showEdges = showEdgeLabels(settings), showMarks = showMarkingLabels(settings);
 
   c.edges.forEach(e => {
     const a = T(e.from), b = T(e.to);
@@ -1048,8 +1050,13 @@ function drawCurve(data) {
     }));
     segments.push({ a: a, b: b, half: width / 2 });
     const lbl = e.name + (e.weight > 1 ? " (w" + e.weight + ")" : "");
-    if (showEdgeLabels(settings) && lbl) {
-      wanted.push({ text: lbl, color: col, kind: "edge", a: a, b: b });
+    if (lbl) {
+      wanted.push({ text: lbl, color: col, kind: "edge", a: a, b: b,
+                    key: "e:" + e.id, hidden: !showEdges });
+      if (!showEdges) {
+        hits.push(svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+                                  ...HIT_ATTRS, "data-key": "e:" + e.id }));
+      }
     }
   });
   // Vertices are not drawn: where edges meet already shows them, and a dot at
@@ -1067,12 +1074,61 @@ function drawCurve(data) {
       stroke: "var(--panel)", "stroke-width": 1.5,
     }));
     discs.push({ p: p, r: r });
-    if (showMarkingLabels(settings) && m.name) {
-      wanted.push({ text: m.name, color: col, kind: "mark", p: p, r: r });
+    if (m.name) {
+      wanted.push({ text: m.name, color: col, kind: "mark", p: p, r: r,
+                    key: "m:" + m.id, hidden: !showMarks });
+      if (!showMarks) {
+        hits.push(svgEl("circle", { cx: p[0], cy: p[1], r: r + 8,
+                                    ...HIT_ATTRS, "data-key": "m:" + m.id }));
+      }
     }
   });
 
+  // Hidden labels are still placed -- after the shown ones, so those keep the
+  // best spots -- and against everything, so revealing one never lands it on
+  // anything else, even with several revealed at once on a touch screen.
+  wanted.sort((x, y) => (x.hidden ? 1 : 0) - (y.hidden ? 1 : 0));
+  // Edge targets under marking targets: a marking sits on edges and should win.
+  hits.sort((x, y) => (x.tagName === "circle") - (y.tagName === "circle"));
+  hits.forEach(h => svg.appendChild(h));
   placeLabels(svg, wanted, segments, discs);
+}
+
+// Transparent as attributes, not via the stylesheet: a PNG copy serializes the
+// SVG without the stylesheet, and an unstyled circle is filled black.
+const HIT_ATTRS = { class: "label-hit", stroke: "transparent", fill: "transparent",
+                    "stroke-width": 16, "pointer-events": "all" };
+
+// A hidden label shows while the mouse is over its edge or marking, and a tap
+// toggles it on a touch screen, where there is no hover; tapping empty space
+// hides whatever was revealed. Visibility is an attribute rather than a CSS
+// class so that copying the picture as PNG -- which serializes the SVG away
+// from the stylesheet -- leaves hidden labels hidden.
+function wireLabelReveal(svg) {
+  if (svg.dataset.revealWired) return;
+  svg.dataset.revealWired = "1";
+  let lastPointer = "mouse";
+  const labelFor = t => {
+    const key = t && t.getAttribute && t.getAttribute("data-key");
+    return key ? svg.querySelector(`text[data-label-key="${CSS.escape(key)}"]`) : null;
+  };
+  const show = (el, on) => { if (el) el.setAttribute("visibility", on ? "visible" : "hidden"); };
+  svg.addEventListener("pointerdown", ev => { lastPointer = ev.pointerType || "mouse"; });
+  svg.addEventListener("pointerover", ev => {
+    if (ev.pointerType === "mouse") show(labelFor(ev.target), true);
+  });
+  svg.addEventListener("pointerout", ev => {
+    if (ev.pointerType === "mouse") show(labelFor(ev.target), false);
+  });
+  svg.addEventListener("click", ev => {
+    if (lastPointer === "mouse") return;
+    const el = labelFor(ev.target);
+    if (el) {
+      show(el, el.getAttribute("visibility") !== "visible");
+    } else {
+      svg.querySelectorAll("text[data-label-hidden]").forEach(t => show(t, false));
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1089,9 +1145,12 @@ const LBL_EDGE = 3;     // keep labels off the very edge of the panel
 
 function placeLabels(svg, wanted, segments, discs) {
   const placed = [];
+  wireLabelReveal(svg);
   wanted.forEach(req => {
     const el = text(0, 0, req.text, req.color);
     el.setAttribute("dominant-baseline", "middle");
+    el.setAttribute("pointer-events", "none");
+    if (req.key) el.setAttribute("data-label-key", req.key);
     svg.appendChild(el);
     const box = measureLabel(el, req.text);
     const candidates = req.kind === "edge"
@@ -1107,6 +1166,10 @@ function placeLabels(svg, wanted, segments, discs) {
     }
     el.setAttribute("x", best.at[0]);
     el.setAttribute("y", best.at[1]);
+    if (req.hidden) {
+      el.setAttribute("visibility", "hidden");
+      el.setAttribute("data-label-hidden", "1");
+    }
     placed.push(best.rect);
   });
 }
