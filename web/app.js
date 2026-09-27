@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "31";
+const APP_VERSION = "32";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -395,13 +395,22 @@ function wireGlobalButtons() {
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
+  bind("paint-curve", "onclick", openPaintDialog);
+  bind("paint-change", "onclick", openPaintDialog);
+  bind("paint-cancel", "onclick", stopPainting);
   bind("btn-save", "onclick", openExportDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("file-input", "onchange", importJSON);
   bind("modal-cancel", "onclick", closeModal);
   // the curve copies transparent (drop it on any background); the subdivision
   // copies with its panel background, since its cells are translucent fills
-  bind("copy-curve", "onclick", ev => copyPanelPng("curve-svg", null, ev.target, "curve.png"));
+  // copy the plain figure: paint mode's rings and targets are not part of it
+  bind("copy-curve", "onclick", async ev => {
+    const held = painting;
+    if (held) { painting = null; renderSelected(); }
+    try { await copyPanelPng("curve-svg", null, ev.target, "curve.png"); }
+    finally { if (held) { painting = held; renderSelected(); } }
+  });
   bind("copy-sub", "onclick", ev =>
     copyPanelPng("sub-svg", resolvedVar("--panel", "#ffffff"), ev.target, "subdivision.png"));
 }
@@ -1035,6 +1044,110 @@ function selectNode(id) {
   renderSelected();
 }
 
+// ---------------------------------------------------------------------------
+// painting colors straight onto the curve
+//
+// Pick a color, then click edges, ends or markings on the figure to give them
+// that color -- once, or until Cancel. The bar above the figure (with Cancel)
+// shows for either choice, so a change of mind is always one click away.
+// While painting, markings are drawn larger and ringed to make them easy to
+// hit, and hovering previews the new color. Each click is an ordinary color
+// edit: saved, and propagated to derived types like any other.
+// ---------------------------------------------------------------------------
+let painting = null;              // { color, sticky } while active
+
+function openPaintDialog() {
+  const s0 = loadSettings();
+  let color = isHex6(s0.paintColor) ? s0.paintColor : "#e53935";
+  const body = dialogHead("Paint edges and markings",
+    "Choose a color, then click edges, ends or markings on the curve to give " +
+    "them that color.");
+  const field = colorField(color, h => { color = h; }, { live: true });
+  body.appendChild(labeled("Color", field));
+  const keep = document.createElement("label");
+  keep.className = "check";
+  keep.innerHTML = `<input type="checkbox" id="paint-sticky"> Keep painting until I press Cancel`;
+  body.appendChild(keep);
+  const box = keep.querySelector("input");
+  box.checked = !!(painting ? painting.sticky : s0.paintSticky);
+  const note = document.createElement("p");
+  note.className = "muted"; note.style.margin = "4px 0 10px";
+  const sync = () => {
+    note.textContent = box.checked
+      ? "Every edge or marking you click takes the color, until you press Cancel."
+      : "The next edge or marking you click takes the color; then painting stops. " +
+        "Cancel is there too if you change your mind.";
+  };
+  box.onchange = sync; sync();
+  body.appendChild(note);
+  const go = document.createElement("button");
+  go.className = "primary";
+  go.textContent = painting ? "Use this color" : "Start painting";
+  go.onclick = () => {
+    const s2 = loadSettings(); s2.paintColor = color; s2.paintSticky = box.checked; saveSettings(s2);
+    closeModal();
+    startPainting(color, box.checked);
+  };
+  body.appendChild(row([go]));
+  openModal();
+}
+
+function startPainting(color, sticky) {
+  painting = { color: color, sticky: sticky };
+  showPaintBar();
+  if (selectedId) renderSelected();
+}
+
+function stopPainting() {
+  painting = null;
+  showPaintBar();
+  if (selectedId) renderSelected();
+}
+
+function showPaintBar() {
+  const bar = document.getElementById("paint-bar");
+  const view = document.getElementById("curve-svg").closest(".view");
+  if (!bar) return;
+  bar.hidden = !painting;
+  if (view) view.classList.toggle("painting", !!painting);
+  if (!painting) return;
+  document.getElementById("paint-chip").style.background = painting.color;
+  document.getElementById("paint-hint").textContent = painting.sticky
+    ? "Painting: click edges and markings to color them."
+    : "Painting: click an edge or marking to color it.";
+}
+
+// hover previews the color; a click (or tap) applies it
+function wirePainting(drawn) {
+  const targets = [...drawn.edgePicks, ...drawn.markPicks];
+  targets.forEach(t => {
+    const el = t.kind === "edge" ? t.line : t.disc;
+    const attr = t.kind === "edge" ? "stroke" : "fill";
+    const orig = { col: el.getAttribute(attr), w: el.getAttribute("stroke-width") };
+    t.hit.addEventListener("pick-enter", ev => {
+      if (ev.detail.pointerType !== "mouse" || !painting) return;
+      el.setAttribute(attr, painting.color);
+      if (t.kind === "edge") el.setAttribute("stroke-width", +orig.w + 2);
+    });
+    t.hit.addEventListener("pick-leave", () => {
+      el.setAttribute(attr, orig.col);
+      if (t.kind === "edge") el.setAttribute("stroke-width", orig.w);
+    });
+    t.hit.addEventListener("pick-click", () => {
+      if (!painting) return;
+      try { api("set_color", selectedId, t.id, painting.color); }
+      catch (e) { alert(e.message); return; }
+      autosave();
+      if (!painting.sticky) stopPainting();       // redraws, without targets
+      else renderSelected();
+    });
+  });
+}
+
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && painting && document.getElementById("modal").hidden) stopPainting();
+});
+
 function renderSelected() {
   const data = api("render", selectedId);
   document.getElementById("curve-name").textContent = data.name;
@@ -1053,7 +1166,12 @@ function renderSelected() {
     };
     st.appendChild(again);
   }
-  drawCurve(data);
+  if (painting) {
+    const drawn = drawCurve(data, { pickEdge: () => true, pickMarking: () => true });
+    wirePainting(drawn);
+  } else {
+    drawCurve(data);
+  }
   drawSubdivision(data);
   renderControls();
 }
@@ -1145,6 +1263,8 @@ function clearSvg(id) {
 function drawCurve(data, opts = {}) {
   const svg = clearSvg(opts.svgId || "curve-svg");
   const pickEdge = opts.pickEdge || null, pickVertex = opts.pickVertex || null;
+  const pickMarking = opts.pickMarking || null;
+  const markPicks = [];
   const dim = !!opts.dim;
   const withLabels = opts.labels !== false;   // off for thumbnails too small to read
   const edgePicks = [], vertexPicks = [], lines = {};
@@ -1197,12 +1317,22 @@ function drawCurve(data, opts = {}) {
     const p = T(m.at);
     const col = renderColor(m.color);
     const r = MARK_UNIT_R * Math.max(1, (m.valence || 3) - 2);
-    svg.appendChild(svgEl("circle", {
-      cx: p[0], cy: p[1], r: r, fill: col,
+    const picked = pickMarking && pickMarking(m);
+    // a pickable marking is drawn larger and ringed, so it is easy to see and hit
+    const rr = picked ? r + 3 : r;
+    if (picked) {
+      svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: rr + 5, fill: "none",
+                                        stroke: "var(--accent)", "stroke-width": 1.5,
+                                        "stroke-dasharray": "3 3" }));
+    }
+    const disc = svgEl("circle", {
+      cx: p[0], cy: p[1], r: rr, fill: col,
       stroke: "var(--panel)", "stroke-width": 1.5,
-      ...(dim ? { opacity: "0.3" } : {}),
-    }));
-    discs.push({ p: p, r: r });
+      ...(dim && !picked ? { opacity: "0.3" } : {}),
+    });
+    svg.appendChild(disc);
+    if (picked) markPicks.push({ kind: "mark", id: m.id, marking: m, disc: disc, p: p, r: rr });
+    discs.push({ p: p, r: picked ? rr + 5 : r });
     if (m.name && withLabels) {
       wanted.push({ text: m.name, color: col, kind: "mark", p: p, r: r,
                     key: "m:" + m.id, hidden: !showMarks });
@@ -1243,8 +1373,65 @@ function drawCurve(data, opts = {}) {
                                class: "pick-hit", "data-pick-vertex": pk.id });
     svg.appendChild(pk.hit);
   });
+  markPicks.forEach(pk => {       // over edges: a marking sits on them
+    pk.hit = svgEl("circle", { cx: pk.p[0], cy: pk.p[1], r: pk.r + 9, ...HIT_ATTRS,
+                               class: "pick-hit", "data-pick-mark": pk.id });
+    svg.appendChild(pk.hit);
+  });
+  routePicks(svg, [...edgePicks, ...vertexPicks, ...markPicks]);
   placeLabels(svg, wanted, segments, discs);
-  return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, lines: lines };
+  return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, markPicks: markPicks,
+           lines: lines };
+}
+
+// Pick targets overlap -- a short edge lies inside its neighbours' wide hit
+// strips -- so whichever was drawn last would win wherever they do. Instead the
+// pointer goes to the nearest target among those under it, and each target's
+// hit element receives "pick-enter", "pick-leave" and "pick-click" events
+// (detail.pointerType) in place of the native ones. A marking beats the edge
+// it sits on, and a vertex the edges meeting there, until the pointer is
+// clearly off it.
+function routePicks(svg, picks) {
+  if (!picks.length) return;
+  const byHit = new Map(picks.map(pk => [pk.hit, pk]));
+  const score = (pk, x, y) => {
+    if (pk.kind === "edge") return segmentDistance([x, y], pk.a, pk.b);
+    const d = Math.hypot(x - pk.p[0], y - pk.p[1]);
+    return pk.kind === "mark" ? d - pk.r - 6 : d - 8;
+  };
+  const at = ev => {
+    const under = document.elementsFromPoint(ev.clientX, ev.clientY)
+      .map(el => byHit.get(el)).filter(Boolean);
+    if (under.length < 2) return under[0] || null;
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return under.reduce((best, pk) => score(pk, q.x, q.y) < score(best, q.x, q.y) ? pk : best);
+  };
+  const fire = (pk, type, ev) => pk.hit.dispatchEvent(
+    new CustomEvent(type, { detail: { pointerType: ev.pointerType || "mouse" } }));
+  let current = null;
+  const moveTo = (pk, ev) => {
+    if (pk === current) return;
+    if (current) fire(current, "pick-leave", ev);
+    current = pk;
+    if (pk) fire(pk, "pick-enter", ev);
+  };
+  svg.addEventListener("pointermove", ev => moveTo(at(ev), ev));
+  svg.addEventListener("pointerleave", ev => moveTo(null, ev));
+  svg.addEventListener("click", ev => {
+    const pk = at(ev);
+    if (!pk) return;
+    ev.stopImmediatePropagation();          // not a tap on empty space
+    fire(pk, "pick-click", ev);
+  });
+}
+
+function segmentDistance(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
 }
 
 // Draw a curve that does not exist yet -- what an operation would produce --
@@ -1303,14 +1490,13 @@ function mountPicker(data, svgId, o) {
   };
   drawn.svg.addEventListener("pointerdown", ev => { lastPointer = ev.pointerType || "mouse"; });
   targets.forEach(t => {
-    t.hit.addEventListener("pointerenter", ev => {
-      if (ev.pointerType === "mouse") { hovered = t; paint(); }
+    t.hit.addEventListener("pick-enter", ev => {
+      if (ev.detail.pointerType === "mouse") { hovered = t; paint(); }
     });
-    t.hit.addEventListener("pointerleave", ev => {
-      if (ev.pointerType === "mouse" && hovered === t) { hovered = null; paint(); }
+    t.hit.addEventListener("pick-leave", ev => {
+      if (ev.detail.pointerType === "mouse" && hovered === t) { hovered = null; paint(); }
     });
-    t.hit.addEventListener("click", ev => {
-      ev.stopPropagation();
+    t.hit.addEventListener("pick-click", () => {
       if (clickCommits && (lastPointer === "mouse" || selected === t)) { o.commit(t); return; }
       select(t);
     });

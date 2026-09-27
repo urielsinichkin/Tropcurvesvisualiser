@@ -136,6 +136,14 @@ section {
 /* invisible, generous targets for revealing a hidden label on hover or tap */
 .label-hit { cursor: pointer; }
 .pick-hit { cursor: pointer; }
+.paint-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 8px; margin-bottom: 6px; border: 1px solid var(--accent);
+  border-radius: 8px; font-size: 13px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.paint-chip { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--line); flex: none; }
+.painting #curve-svg { cursor: crosshair; }
 #pick-svg { height: 360px; }
 .res-thumbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .res-thumb { display: flex; flex-direction: column; gap: 4px; padding: 6px; text-align: center; }
