@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "34";
+const APP_VERSION = "35";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -392,6 +392,7 @@ function wireGlobalButtons() {
   wireMenu();
   wireSplitter("split-types", "types", +1);
   wireSplitter("split-controls", "controls", -1);
+  wireZoom();
   bind("btn-new", "onclick", openNewDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
@@ -443,7 +444,8 @@ async function svgToPngBlob(svgId, background) {
     }
   }
 
-  const vb = (clone.getAttribute("viewBox") || `0 0 ${VBW} ${VBH}`).split(/[\s,]+/).map(Number);
+  clone.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);   // the whole figure, not the zoomed part
+  const vb = [0, 0, VBW, VBH];
   const [vx, vy, w, h] = vb;
   clone.setAttribute("width", w);
   clone.setAttribute("height", h);
@@ -1080,12 +1082,164 @@ function renderTypeList() {
 }
 
 function selectNode(id) {
+  if (id !== selectedId) resetZoom(false);
   selectedId = id;
   revealInTypeList(id);
   const details = document.getElementById("sub-details");
   if (details) details.open = false; // each curve's subdivision starts collapsed
   renderTypeList();
   renderSelected();
+}
+
+// ---------------------------------------------------------------------------
+// zooming the curve
+//
+// The mouse wheel (or a trackpad pinch, which arrives as a ctrl+wheel) zooms
+// about the pointer; two fingers pinch-zoom and move the picture together;
+// once zoomed in, dragging moves around. Zoom works on the viewBox, so a
+// redraw of the same type (an edit, painting) keeps the view, and every
+// click target still lines up. A drag that moved the picture is not a click,
+// so it never picks or paints. Choosing another type starts from the whole
+// picture, and Copy always copies the whole figure.
+// ---------------------------------------------------------------------------
+const ZOOM_MIN = 1, ZOOM_MAX = 16;
+let zoom = { k: 1, x: 0, y: 0 };          // viewBox = x y VBW/k VBH/k
+
+function zoomViewBox() {
+  return `${zoom.x} ${zoom.y} ${VBW / zoom.k} ${VBH / zoom.k}`;
+}
+
+function applyZoom() {
+  const svg = document.getElementById("curve-svg");
+  if (!svg) return;
+  svg.setAttribute("viewBox", zoomViewBox());
+  svg.classList.toggle("zoomable", zoom.k > 1.001);
+  const lvl = document.getElementById("zoom-level");
+  if (lvl) lvl.textContent = zoom.k > 1.001 ? Math.round(zoom.k * 100) + "%" : "";
+  const fit = document.getElementById("zoom-fit");
+  if (fit) fit.hidden = zoom.k <= 1.001;
+  const out = document.getElementById("zoom-out");
+  if (out) out.disabled = zoom.k <= 1.001;
+  const inn = document.getElementById("zoom-in");
+  if (inn) inn.disabled = zoom.k >= ZOOM_MAX - 1e-6;
+}
+
+// keep at least half of the picture's width/height in view
+function clampZoom() {
+  zoom.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.k));
+  if (zoom.k <= 1.001) { zoom = { k: 1, x: 0, y: 0 }; return; }
+  const w = VBW / zoom.k, h = VBH / zoom.k;
+  zoom.x = Math.min(VBW - w / 2, Math.max(-w / 2, zoom.x));
+  zoom.y = Math.min(VBH - h / 2, Math.max(-h / 2, zoom.y));
+}
+
+// zoom by `factor`, keeping the picture point `at` ([x, y] in viewBox units)
+// where it is on screen
+function zoomBy(factor, at) {
+  const k2 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.k * factor));
+  const c = at || [zoom.x + VBW / zoom.k / 2, zoom.y + VBH / zoom.k / 2];
+  zoom.x = c[0] - (c[0] - zoom.x) * zoom.k / k2;
+  zoom.y = c[1] - (c[1] - zoom.y) * zoom.k / k2;
+  zoom.k = k2;
+  clampZoom(); applyZoom();
+}
+
+function resetZoom(apply = true) {
+  zoom = { k: 1, x: 0, y: 0 };
+  if (apply) applyZoom();
+}
+
+// client (screen) point -> viewBox point, under the current zoom
+function svgPoint(svg, cx, cy) {
+  const pt = svg.createSVGPoint();
+  pt.x = cx; pt.y = cy;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [q.x, q.y];
+}
+
+function wireZoom() {
+  const svg = document.getElementById("curve-svg");
+  svg.addEventListener("wheel", ev => {
+    if (!selectedId) return;
+    // pixels, lines or pages; a trackpad pinch comes as small ctrl+wheel steps
+    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
+    const dy = ev.deltaY * unit * (ev.ctrlKey ? 4 : 1);
+    // nothing to zoom out of: let the page scroll on past the picture
+    if (dy > 0 && zoom.k <= 1.001 && !ev.ctrlKey) return;
+    ev.preventDefault();
+    zoomBy(Math.exp(-dy * 0.0015), svgPoint(svg, ev.clientX, ev.clientY));
+  }, { passive: false });
+
+  const pointers = new Map();        // pointerId -> [clientX, clientY]
+  let gesture = null, moved = false;
+  const begin = () => {
+    const pts = [...pointers.values()];
+    if (pts.length >= 2) {
+      const [a, b] = pts;
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      gesture = { kind: "pinch", d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, k0: zoom.k,
+                  anchor: svgPoint(svg, mid[0], mid[1]) };
+    } else if (pts.length === 1) {
+      gesture = { kind: "pan", last: pts[0], start: pts[0] };
+    } else gesture = null;
+  };
+  svg.addEventListener("pointerdown", ev => {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if (pointers.size === 1) moved = false;
+    begin();
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!pointers.has(ev.pointerId) || !gesture) return;
+    pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    if (gesture.kind === "pinch" && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      zoom.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
+        gesture.k0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / gesture.d0));
+      // put the anchor back under the fingers' midpoint
+      // with "meet" the drawing fills the same box at any zoom; s is px per unit
+      const r = svg.getBoundingClientRect();
+      const fit = Math.min(r.width / VBW, r.height / VBH), s = fit * zoom.k;
+      const ox = r.left + (r.width - VBW * fit) / 2;
+      const oy = r.top + (r.height - VBH * fit) / 2;
+      zoom.x = gesture.anchor[0] - (mid[0] - ox) / s;
+      zoom.y = gesture.anchor[1] - (mid[1] - oy) / s;
+      moved = true;
+      clampZoom(); applyZoom();
+    } else if (gesture.kind === "pan" && zoom.k > 1.001) {
+      const p = [ev.clientX, ev.clientY];
+      if (!moved && Math.hypot(p[0] - gesture.start[0], p[1] - gesture.start[1]) < 5) return;
+      if (!moved) {
+        moved = true; svg.classList.add("panning");
+        // only now: capturing at pointerdown would retarget the click itself
+        try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+      }
+      const r = svg.getBoundingClientRect();
+      const s = Math.min(r.width / VBW, r.height / VBH) * zoom.k;
+      zoom.x -= (p[0] - gesture.last[0]) / s;
+      zoom.y -= (p[1] - gesture.last[1]) / s;
+      gesture.last = p;
+      clampZoom(); applyZoom();
+    }
+  });
+  const end = ev => {
+    if (!pointers.delete(ev.pointerId)) return;
+    svg.classList.remove("panning");
+    begin();                         // a pinch left with one finger goes on as a pan
+    if (gesture && gesture.kind === "pan") gesture.start = gesture.last;
+  };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+  // a drag that moved the picture is not a click on whatever it ended over
+  svg.addEventListener("click", ev => {
+    if (moved) { ev.stopImmediatePropagation(); ev.preventDefault(); moved = false; }
+  }, true);
+
+  bind("zoom-in", "onclick", () => zoomBy(1.5));
+  bind("zoom-out", "onclick", () => zoomBy(1 / 1.5));
+  bind("zoom-fit", "onclick", () => resetZoom());
+  applyZoom();
 }
 
 // ---------------------------------------------------------------------------
@@ -1294,7 +1448,7 @@ function svgEl(tag, attrs) {
 }
 function clearSvg(id) {
   const svg = document.getElementById(id);
-  svg.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);
+  svg.setAttribute("viewBox", id === "curve-svg" ? zoomViewBox() : `0 0 ${VBW} ${VBH}`);
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   return svg;
 }
