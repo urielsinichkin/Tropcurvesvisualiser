@@ -21,7 +21,7 @@ from .subdivision import build_subdivision, SubdivisionError
 from .operations import resolutions, resolution_for_subset, apply_resolution
 from .subdivision_import import import_subdivision
 from .refined import (
-    refined_multiplicity, vertex_multiplicities, balanced_split,
+    refined_multiplicity, vertex_multiplicities, balanced_split, balanced_split_numbers,
     MultiplicityError, MAX_SPLIT_ITEMS,
 )
 from .workspace import Workspace
@@ -352,11 +352,13 @@ class Session:
         ids = list(self.ws.nodes) if node_ids is None else node_ids
         return [self.refined_multiplicity(nid) for nid in ids]
 
-    def balanced_split(self, node_ids: List[str]) -> Dict[str, Any]:
+    def balanced_split(self, node_ids: List[str], at_q_1: bool = False) -> Dict[str, Any]:
         """Can these types be split in two halves of equal total multiplicity?
 
         Returns the halves when one exists. Every chosen type needs a defined
-        multiplicity, since otherwise there is nothing to add up.
+        multiplicity, since otherwise there is nothing to add up. With
+        ``at_q_1`` only the values at q = 1 (the Mikhalkin multiplicities)
+        have to balance, not the whole refined multiplicities.
         """
         values, undefined = [], []
         for nid in node_ids:
@@ -370,14 +372,18 @@ class Session:
         if len(node_ids) > MAX_SPLIT_ITEMS:
             return {"ok": False, "reason": f"pick at most {MAX_SPLIT_ITEMS} types "
                                            f"(this is a subset search over 2^n splits)"}
+        if at_q_1:
+            values = [v.at_q(Fraction(1)) for v in values]
         total = values[0] if values else None
         for v in values[1:]:
             total = total + v
-        chosen = balanced_split(values)
+        text = (lambda v: str(v)) if at_q_1 else (lambda v: v.text())
+        chosen = balanced_split_numbers(values) if at_q_1 else balanced_split(values)
         out: Dict[str, Any] = {
             "ok": True,
             "found": chosen is not None,
-            "total": total.text() if total is not None else "0",
+            "at_q_1": at_q_1,
+            "total": text(total) if total is not None else "0",
         }
         if chosen is not None:
             picked = [node_ids[i] for i in chosen]
@@ -386,7 +392,7 @@ class Session:
                 half = half + values[i]
             out["subset"] = picked
             out["complement"] = [n for n in node_ids if n not in set(picked)]
-            out["value"] = half.text() if half is not None else "0"
+            out["value"] = text(half) if half is not None else "0"
         return out
 
     # --- render data ----------------------------------------------------
