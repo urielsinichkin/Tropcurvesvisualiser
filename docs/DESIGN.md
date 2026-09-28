@@ -261,7 +261,8 @@ followed by its derived types, depth first; `typeTreeOrder`, also used by the
 Export dialog) and nested the same way. Subtrees fold, starting as they are
 folded in the menu; folding in the dialog does not change the menu. A folded
 row shows how many types it hides and how many of those are ticked -- ticked
-types count in the split check whether or not they are showing.
+types count in the split check whether or not they are showing. Nothing is
+ticked when the dialog opens.
 
 ## 4. Derivation tree and propagation
 
@@ -332,7 +333,10 @@ derivation as an ordered list of such steps, normally one.
   (section 4), so a kept type re-attaches to its nearest kept ancestor carrying
   the skipped steps in front of its own, or becomes a root when it has none.
   What comes out reads back as the same curves, still derived from one another
-  wherever both ends were included.
+  wherever both ends were included. The dialog starts with nothing ticked (as
+  does the Multiplicity dialog), lists the types in the types menu's order, and
+  each type with derived types has a "Select with N derived" button that ticks
+  it and its whole subtree (or, when all of those are ticked, unticks them).
 - A versioned JSON schema is the single source of truth for save/load.
 
 ## 6. Architecture

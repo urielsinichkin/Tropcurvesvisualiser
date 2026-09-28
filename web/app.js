@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "38";
+const APP_VERSION = "39";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -528,41 +528,63 @@ function openExportDialog() {
     openModal(); return;
   }
 
+  // nothing ticked to begin with; a row with derived types can tick (or
+  // untick) itself together with all of them in one go
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
   const byId = {}; nodes.forEach(n => byId[n.id] = n);
   const list = document.createElement("div");
+  list.className = "export-list";
   list.style.margin = "10px 0";
-  const boxes = [];
-  const depthOf = n => {
-    let d = 0, cur = n;
-    while (cur.parent_id && byId[cur.parent_id]) { d++; cur = byId[cur.parent_id]; }
-    return d;
-  };
-  typeTreeOrder(nodes).forEach(({ node: n }) => {
-    const lab = document.createElement("label");
-    lab.className = "mult-row";
+  const boxes = [], subtreeBtns = [];
+  const boxOf = id => boxes.find(b => b.value === id);
+  typeTreeOrder(nodes).forEach(({ node: n, depth }) => {
+    const line = document.createElement("div");
+    line.className = "export-row";
     const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = n.id; cb.checked = true;
-    const name = document.createElement("span");
-    name.className = "tname";
-    name.style.paddingLeft = (depthOf(n) * 14) + "px";
+    cb.type = "checkbox"; cb.value = n.id; cb.checked = false;
+    cb.id = "export-cb-" + n.id;
+    const name = document.createElement("label");
+    name.className = "tname"; name.htmlFor = cb.id;
+    name.style.paddingLeft = (depth * 14) + "px";
     name.textContent = n.name;
     const meta = document.createElement("span");
     meta.className = "muted";
     meta.textContent = `${n.num_ends} ends · ${n.num_bounded} edges · ${n.num_markings} marks`;
-    lab.append(cb, name, meta);
-    list.appendChild(lab);
+    const below = api("descendants", n.id).filter(id => byId[id]);
+    const cell = document.createElement("span");
+    if (below.length) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "small subtree-btn";
+      const ids = [n.id, ...below];
+      b.onclick = () => {
+        const on = !ids.every(id => boxOf(id).checked);
+        ids.forEach(id => { boxOf(id).checked = on; });
+        sync();
+      };
+      subtreeBtns.push({ b, ids, count: below.length });
+      cell.appendChild(b);
+    }
+    line.append(cb, name, meta, cell);
+    list.appendChild(line);
     boxes.push(cb);
   });
   body.appendChild(list);
 
   const go = document.createElement("button");
+  go.className = "primary";
   const all = document.createElement("button"); all.className = "small"; all.textContent = "Select all";
   const none = document.createElement("button"); none.className = "small"; none.textContent = "Select none";
   const picked = () => boxes.filter(b => b.checked).map(b => b.value);
   const sync = () => {
     const n = picked().length;
-    go.textContent = n === nodes.length ? `Export all ${n}` : `Export ${n} of ${nodes.length}`;
+    go.textContent = n === 0 ? "Export" : n === nodes.length ? `Export all ${n}` : `Export ${n} of ${nodes.length}`;
     go.disabled = n === 0;
+    subtreeBtns.forEach(({ b, ids, count }) => {
+      const allOn = ids.every(id => boxOf(id).checked);
+      b.textContent = (allOn ? "Unselect" : "Select") + ` with ${count} derived`;
+      b.title = (allOn ? "Untick" : "Tick") + " this type and every type derived from it";
+    });
   };
   boxes.forEach(b => { b.onchange = sync; });
   all.onclick = () => { boxes.forEach(b => { b.checked = true; }); sync(); };
@@ -2388,7 +2410,7 @@ function openMultiplicityDialog() {
       lead.appendChild(slot);
     }
     const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.value = r.id; cb.checked = r.defined; cb.disabled = !r.defined;
+    cb.type = "checkbox"; cb.value = r.id; cb.checked = false; cb.disabled = !r.defined;
     cb.id = "mult-cb-" + r.id;
     lead.appendChild(cb);
     const name = document.createElement("label");

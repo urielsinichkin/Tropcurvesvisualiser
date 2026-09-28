@@ -217,6 +217,21 @@ svg.panning { cursor: grabbing; }
   padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
 }
 .layout-row label.check { margin: 0; font-size: 14px; }
+/* the export list: tick, name, size, and the select-with-derived button */
+.export-list {
+  display: grid; grid-template-columns: auto max-content 1fr auto;
+  column-gap: 10px; row-gap: 6px; align-items: center; font-size: 13px;
+}
+.export-row { display: contents; }
+.export-list .tname { display: block; cursor: pointer; }
+.export-list .muted { white-space: nowrap; }
+.subtree-btn { white-space: nowrap; }
+/* phones: no size column, and names wrap rather than push the button off */
+@media (max-width: 520px) {
+  .export-list { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .export-list .muted { display: none; }
+  .export-list .tname { overflow-wrap: anywhere; }
+}
 /* one grid for the whole tree, so the values line up in one column */
 .mult-tree {
   display: grid; grid-template-columns: auto minmax(90px, max-content) 1fr;
