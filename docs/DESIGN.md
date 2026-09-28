@@ -172,6 +172,13 @@ and Resolve vertex dialogs zoom the same way (`makeZoomable`, one controller
 per picture, with the same level / -/+ / Fit controls beside the hint); each
 dialog opens at full view, and re-highlighting after a pick keeps the zoom.
 
+The **edit panel**'s parts (Type, Refined multiplicity, Actions, Markings,
+Edges & ends) fold open and shut from their headings, and **Layout** on the
+panel's title line opens a dialog to reorder them (up/down) and show or hide
+each, with a reset. Like the other view preferences this is per browser
+(`panelLayout` in the settings), never exported; a folded or hidden part is not
+built, so the refined multiplicity is only computed while its part is open.
+
 ## 3. Operations
 
 - **Contract edge** (bounded edges only): merge the two endpoints; dually erase
