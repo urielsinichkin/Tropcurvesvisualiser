@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "41";
+const APP_VERSION = "42";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -2499,6 +2499,17 @@ function openMultiplicityDialog() {
   go.textContent = "Check for a balanced split";
   const result = document.createElement("div");
   result.style.marginTop = "10px";
+  // balance only the values at q = 1 (the Mikhalkin multiplicities)?
+  const q1Label = document.createElement("label");
+  q1Label.className = "check";
+  const q1 = document.createElement("input");
+  q1.type = "checkbox"; q1.id = "split-q1";
+  q1.checked = !!loadSettings().splitAtQ1;
+  q1.onchange = () => {
+    const s = loadSettings(); s.splitAtQ1 = q1.checked; saveSettings(s);
+    result.textContent = "";
+  };
+  q1Label.append(q1, document.createTextNode("Only the values at q = 1 have to balance"));
 
   go.onclick = () => {
     const picked = boxes.filter(b => b.checked).map(b => b.value);
@@ -2509,7 +2520,7 @@ function openMultiplicityDialog() {
       return;
     }
     let out;
-    try { out = api("balanced_split", picked); }
+    try { out = api("balanced_split", picked, q1.checked); }
     catch (e) { showModalError(e.message); return; }
     if (!out.ok) {
       result.className = "muted";
@@ -2519,19 +2530,21 @@ function openMultiplicityDialog() {
       return;
     }
     const nameOf = id => (rows.find(r => r.id === id) || {}).name || id;
+    const atOne = out.at_q_1 ? " at q = 1" : "";
     result.className = "";
     if (!out.found) {
-      result.innerHTML = `<p class="muted" style="margin:0">No subset balances.
-        The total is <span class="mult">${escapeHtml(out.total)}</span>, and no
+      result.innerHTML = `<p class="muted" style="margin:0">No subset balances${atOne}.
+        The total${atOne} is <span class="mult">${escapeHtml(out.total)}</span>, and no
         way of splitting these ${picked.length} types gives two halves with the
         same total.</p>`;
       return;
     }
-    result.innerHTML = `<p style="margin:0 0 4px">Balanced, each half totalling
+    result.innerHTML = `<p style="margin:0 0 4px">Balanced${atOne}, each half totalling
       <span class="mult">${escapeHtml(out.value)}</span>:</p>
       <p class="muted" style="margin:0">{${out.subset.map(nameOf).map(escapeHtml).join(", ")}}
       &nbsp;|&nbsp; {${out.complement.map(nameOf).map(escapeHtml).join(", ")}}</p>`;
   };
+  body.appendChild(q1Label);
   body.appendChild(row([go, all, none]));
   body.appendChild(result);
   body.appendChild(errBox());

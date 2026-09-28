@@ -254,7 +254,11 @@ nothing but `1 + t^2` can ever appear in a denominator, so a value is carried as
 subset whose total multiplicity equals its complement's. Both halves are equal
 exactly when one half is half of everything, so the search halves the total (no
 subset can work if some coefficient is odd) and meets in the middle, `2^(n/2)`
-work rather than `2^n`.
+work rather than `2^n`. A checkbox in the dialog (remembered per browser)
+restricts the check to the values at q = 1, the Mikhalkin multiplicities
+(`Session.balanced_split(ids, at_q_1=True)`, `balanced_split_numbers`): the
+same search over plain numbers, so a set can balance there without its refined
+multiplicities balancing.
 
 The Multiplicity dialog lists the types in the types menu's order (each root
 followed by its derived types, depth first; `typeTreeOrder`, also used by the

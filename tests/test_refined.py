@@ -238,3 +238,36 @@ def test_an_empty_set_splits_trivially():
 def test_too_many_curves_is_refused_rather_than_hung_on():
     with pytest.raises(ValueError):
         balanced_split([q_integer_minus(1)] * 40)
+
+
+def test_balanced_split_numbers():
+    from fractions import Fraction
+    from tropcurves.refined import balanced_split_numbers
+    chosen = balanced_split_numbers([Fraction(3), Fraction(1), Fraction(2)])
+    assert sorted(chosen) in ([0], [1, 2])
+    assert balanced_split_numbers([Fraction(3), Fraction(2)]) is None
+    assert balanced_split_numbers([]) == []
+
+
+def test_split_at_q_1_only_needs_the_classical_values_to_balance():
+    from tropcurves.api import Session
+    s = Session()
+    # one vertex of multiplicity 4 ...
+    a = s.add_curve({"vertices": ["v"], "bounded": [],
+                     "ends": [{"id": "a", "tail": "v", "vec": [-2, 0]},
+                              {"id": "b", "tail": "v", "vec": [0, -2]},
+                              {"id": "c", "tail": "v", "vec": [2, 2]}]}, name="A")
+    # ... against two of multiplicity 2: equal at q = 1, different refined
+    b = s.add_curve({"vertices": ["v0", "v1"],
+                     "bounded": [{"id": "e", "tail": "v0", "head": "v1"}],
+                     "ends": [{"id": "a", "tail": "v0", "vec": [-1, 0]},
+                              {"id": "b", "tail": "v0", "vec": [1, -2]},
+                              {"id": "c", "tail": "v1", "vec": [-1, 1]},
+                              {"id": "d", "tail": "v1", "vec": [1, 1]}]}, name="B")
+    ids = [a["id"], b["id"]]
+    assert s.refined_multiplicity(a["id"])["at_q_1"] == s.refined_multiplicity(b["id"])["at_q_1"] == "4"
+    refined = s.balanced_split(ids)
+    assert refined["ok"] and not refined["found"]
+    classical = s.balanced_split(ids, True)
+    assert classical["ok"] and classical["found"] and classical["at_q_1"]
+    assert classical["value"] == "4" and classical["total"] == "8"

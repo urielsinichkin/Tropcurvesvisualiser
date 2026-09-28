@@ -393,6 +393,33 @@ def balanced_split(values: Sequence[RefinedValue]) -> Optional[List[int]]:
     return None
 
 
+def balanced_split_numbers(values: Sequence[Fraction]) -> Optional[List[int]]:
+    """``balanced_split`` for plain numbers -- e.g. the values at q = 1, the
+    Mikhalkin multiplicities: indices of a subset totalling half of all."""
+    n = len(values)
+    if n > MAX_SPLIT_ITEMS:
+        raise ValueError(f"too many curves to search ({n}; the limit is {MAX_SPLIT_ITEMS})")
+    if n == 0:
+        return []
+    nums = [Fraction(v) for v in values]
+    target = sum(nums, Fraction(0)) / 2
+    half = n // 2
+    table: Dict[Fraction, int] = {}
+    for mask in range(1 << half):
+        s = sum((nums[i] for i in range(half) if mask >> i & 1), Fraction(0))
+        table.setdefault(s, mask)
+    rest = n - half
+    for mask in range(1 << rest):
+        s = sum((nums[half + i] for i in range(rest) if mask >> i & 1), Fraction(0))
+        found = table.get(target - s)
+        if found is None:
+            continue
+        chosen = [i for i in range(half) if found >> i & 1]
+        chosen += [half + i for i in range(rest) if mask >> i & 1]
+        return chosen
+    return None
+
+
 def _sum_laurent(items: Sequence[Laurent]) -> Laurent:
     out = Laurent(0, ())
     for p in items:
