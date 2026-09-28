@@ -334,9 +334,11 @@ derivation as an ordered list of such steps, normally one.
   the skipped steps in front of its own, or becomes a root when it has none.
   What comes out reads back as the same curves, still derived from one another
   wherever both ends were included. The dialog starts with nothing ticked (as
-  does the Multiplicity dialog), lists the types in the types menu's order, and
-  each type with derived types has a "Select with N derived" button that ticks
-  it and its whole subtree (or, when all of those are ticked, unticks them).
+  does the Multiplicity dialog), lists the types in the types menu's order with
+  the same folding as the Multiplicity dialog (`foldableTypeTree`, shared by
+  both), and each type with derived types has a "Select with N derived" button
+  that ticks it and its whole subtree (or, when all of those are ticked,
+  unticks them). Folded types that are ticked are still exported.
 - A versioned JSON schema is the single source of truth for save/load.
 
 ## 6. Architecture
