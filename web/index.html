@@ -6,7 +6,7 @@
 <title>Tropical Curves Visualiser</title>
 <!-- Bump ?v= on each deploy that changes styles.css. app.js does not need a
      manual bump: it is loaded with a time-based token at the end of <body>. -->
-<link rel="stylesheet" href="styles.css?v=23" />
+<link rel="stylesheet" href="styles.css?v=24" />
 </head>
 <body>
 <header id="topbar">
@@ -51,8 +51,8 @@
         <span class="row" style="gap:6px">
           <span class="zoom-tools" id="zoom-tools" title="Zoom: mouse wheel or pinch; drag to move around">
             <span class="zoom-level" id="zoom-level"></span>
-            <button id="zoom-out" class="small" aria-label="Zoom out">−</button>
-            <button id="zoom-in" class="small" aria-label="Zoom in">+</button>
+            <button id="zoom-out" class="small zoom-step" aria-label="Zoom out">−</button>
+            <button id="zoom-in" class="small zoom-step" aria-label="Zoom in">+</button>
             <button id="zoom-fit" class="small" title="Show the whole curve" hidden>Fit</button>
           </span>
           <button id="paint-curve" class="small" title="Color edges and markings by clicking them on the curve">🖌 Paint</button>
