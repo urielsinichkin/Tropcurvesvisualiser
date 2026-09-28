@@ -6,12 +6,12 @@
 const PKG_FILES = [
   "geometry.py", "curve.py", "balancing.py", "newton.py", "layout.py",
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
-  "refined.py", "schema.py", "builders.py", "api.py", "__init__.py",
+  "refined.py", "evaluation.py", "schema.py", "builders.py", "api.py", "__init__.py",
 ];
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "40";
+const APP_VERSION = "41";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -505,12 +505,7 @@ async function copyPanelPng(svgId, background, btn, filename) {
 }
 
 function downloadJSON(text, filename) {
-  const blob = new Blob([text], { type: "application/json" });
-  const a = document.getElementById("download-anchor");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  downloadBlob(new Blob([text], { type: "application/json" }), filename);
 }
 
 // Export asks which types to save. A subset is not a truncation: whatever is
@@ -2211,6 +2206,8 @@ function renderControls() {
          "this type has no bounded edges to contract", openContractDialog),
       mk("Resolve vertex…", v4.length >= 1,
          "this type has no vertex of valence 4 or more to resolve", openResolveDialog),
+      mk("Evaluation matrix…", c.vertices.length >= 1,
+         "this type has no vertices", openEvalDialog),
     ]));
     return g;
   };
@@ -2539,6 +2536,329 @@ function openMultiplicityDialog() {
   body.appendChild(result);
   body.appendChild(errBox());
   openModal();
+}
+
+// ---------------------------------------------------------------------------
+// evaluation matrix
+//
+// The matrix of n linear evaluation functions on the type's cell, whose
+// coordinates are the root vertex's position (x0, y0) and the lengths of the
+// bounded edges (tropcurves/evaluation.py has the conventions). n is fixed at
+// #bounded + 2, and the matrix can only be made with exactly that many. The
+// choices made for a type are kept for this session, so reopening the dialog
+// picks up where it was left.
+// ---------------------------------------------------------------------------
+const evalState = new Map();      // node id -> { root, fns }
+
+const EVAL_FORMATS = {
+  python: { label: "Python", fmt: m => "[" + m.map(r => "[" + r.join(", ") + "]").join(",\n ") + "]" },
+  mathematica: { label: "Mathematica", fmt: m => "{" + m.map(r => "{" + r.join(", ") + "}").join(",\n ") + "}" },
+  sage: { label: "Sage", fmt: m => "matrix(ZZ, [" + m.map(r => "[" + r.join(", ") + "]").join(",\n           ") + "])" },
+  matlab: { label: "MATLAB / Octave", fmt: m => "[" + m.map(r => r.join(" ")).join(";\n ") + "]" },
+  latex: { label: "LaTeX", fmt: m => "\\begin{pmatrix}\n" + m.map(r => "  " + r.join(" & ")).join(" \\\\\n") + "\n\\end{pmatrix}" },
+  plain: { label: "Plain (tab-separated)", fmt: m => m.map(r => r.join("\t")).join("\n") },
+};
+
+function openEvalDialog() {
+  const nodeId = selectedId;
+  const setup = api("evaluation_setup", nodeId);
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+  const body = dialogHead("Evaluation matrix",
+    `The matrix of ${setup.n} evaluation functions on this type's cell (the number
+     of bounded edges plus 2). Its coordinates are the position (x0, y0) of the
+     root vertex and the length of every bounded edge; an edge of length ℓ and
+     direction vector u, weight included, moves its head by ℓ·u from its tail. A
+     cross ratio cr(p1, p2, p3, p4) is the signed length of the intersection of
+     the path from p1 to p3 with the path from p2 to p4: + where they run the
+     same way, − where they run opposite ways (markings count as contracted ends).`);
+
+  const markingName = {}; setup.markings.forEach(m => markingName[m.id] = m.name);
+  const legIds = new Set(setup.legs.map(l => l.id));
+  const valid = f => f.kind === "cross_ratio"
+    ? (f.points || []).length === 4 && f.points.every(p => legIds.has(p))
+    : markingName[f.marking] !== undefined;
+  const saved = evalState.get(nodeId);
+  let root = saved && setup.roots.some(r => r.vertex === saved.root) ? saved.root
+           : (setup.roots[0] ? setup.roots[0].vertex : null);
+  let fns = (saved ? saved.fns : setup.default_functions)
+    .filter(valid).map(f => JSON.parse(JSON.stringify(f)));
+  const remember = () => evalState.set(nodeId, { root, fns: JSON.parse(JSON.stringify(fns)) });
+
+  // root: markings first, then the other vertices, each alphabetically
+  const rootSel = document.createElement("select");
+  rootSel.id = "eval-root";
+  const group = (label, items) => {
+    if (!items.length) return;
+    const og = document.createElement("optgroup"); og.label = label;
+    items.forEach(r => og.appendChild(new Option(r.label, r.vertex)));
+    rootSel.appendChild(og);
+  };
+  group("Markings", setup.roots.filter(r => r.kind === "marking"));
+  group("Other vertices", setup.roots.filter(r => r.kind === "vertex"));
+  if (root) rootSel.value = root;
+  rootSel.onchange = () => { root = rootSel.value; remember(); stale(); };
+  body.appendChild(labeled("Root vertex", rootSel));
+
+  const head = document.createElement("h3");
+  head.className = "eval-head";
+  head.textContent = "Evaluation functions";
+  const list = document.createElement("div");
+  list.className = "eval-fns";
+  const status = document.createElement("div");
+  status.className = "status";
+  const add = document.createElement("button");
+  add.className = "small"; add.textContent = "+ Add function";
+  const reset = document.createElement("button");
+  reset.className = "small"; reset.textContent = "Reset to x, y of every marking";
+  const go = document.createElement("button");
+  go.className = "primary"; go.id = "eval-go";
+  go.textContent = "Make the matrix";
+  const result = document.createElement("div");
+  result.className = "eval-result";
+
+  const legSelect = (value, onchange) => {
+    const s = document.createElement("select");
+    const mk = setup.legs.filter(l => l.kind === "marking"), en = setup.legs.filter(l => l.kind === "end");
+    [["Markings", mk], ["Ends", en]].forEach(([label, items]) => {
+      if (!items.length) return;
+      const og = document.createElement("optgroup"); og.label = label;
+      items.forEach(l => og.appendChild(new Option(l.name, l.id)));
+      s.appendChild(og);
+    });
+    s.value = value;
+    s.onchange = () => onchange(s.value);
+    return s;
+  };
+  const newFunction = () => {
+    if (setup.legs.length >= 4) return { kind: "cross_ratio", points: setup.legs.slice(0, 4).map(l => l.id) };
+    return setup.markings.length ? { kind: "x", marking: setup.markings[0].id } : null;
+  };
+  const problem = f => f.kind === "cross_ratio" && new Set(f.points).size !== 4
+    ? "a cross ratio needs four different markings or ends" : null;
+
+  const draw = () => {
+    list.innerHTML = "";
+    fns.forEach((f, i) => {
+      const r = document.createElement("div");
+      r.className = "eval-fn";
+      const num = document.createElement("span");
+      num.className = "muted eval-num"; num.textContent = (i + 1) + ".";
+      const kind = document.createElement("select");
+      kind.className = "eval-kind";
+      [["x", "x of marking"], ["y", "y of marking"], ["cross_ratio", "cross ratio"]].forEach(([v, t]) => {
+        const o = new Option(t, v);
+        if (v !== "cross_ratio" && !setup.markings.length) o.disabled = true;
+        if (v === "cross_ratio" && setup.legs.length < 4) o.disabled = true;
+        kind.appendChild(o);
+      });
+      kind.value = f.kind;
+      kind.onchange = () => {
+        const k = kind.value;
+        if (k === "cross_ratio") fns[i] = newFunction();
+        else fns[i] = { kind: k, marking: f.marking || setup.markings[0].id };
+        changed();
+      };
+      const args = document.createElement("span");
+      args.className = "eval-args";
+      if (f.kind === "cross_ratio") {
+        args.append("(");
+        f.points.forEach((p, j) => {
+          if (j) args.append(", ");
+          args.appendChild(legSelect(p, v => { f.points[j] = v; changed(); }));
+        });
+        args.append(")");
+      } else {
+        const s = document.createElement("select");
+        setup.markings.forEach(m => s.appendChild(new Option(m.name, m.id)));
+        s.value = f.marking;
+        s.onchange = () => { f.marking = s.value; changed(); };
+        args.appendChild(s);
+      }
+      const btn = (t, label, fn, disabled) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "small"; b.textContent = t;
+        b.setAttribute("aria-label", label); b.title = label;
+        b.disabled = !!disabled; b.onclick = fn;
+        return b;
+      };
+      const tools = document.createElement("span");
+      tools.className = "eval-tools";
+      tools.append(
+        btn("↑", "Move up", () => { [fns[i - 1], fns[i]] = [fns[i], fns[i - 1]]; changed(); }, i === 0),
+        btn("↓", "Move down", () => { [fns[i + 1], fns[i]] = [fns[i], fns[i + 1]]; changed(); }, i === fns.length - 1),
+        btn("✕", "Remove", () => { fns.splice(i, 1); changed(); }));
+      r.append(num, kind, args, tools);
+      const bad = problem(f);
+      if (bad) {
+        const w = document.createElement("span");
+        w.className = "eval-bad"; w.textContent = bad;
+        r.appendChild(w);
+      }
+      list.appendChild(r);
+    });
+    const k = fns.length, n = setup.n;
+    const bad = fns.some(problem);
+    status.className = "status" + (k === n && !bad ? "" : " warn");
+    status.textContent = k === n
+      ? (bad ? "Fix the functions marked above." : `${k} of ${n} functions — ready.`)
+      : k < n ? `${k} of ${n} functions — add ${n - k} more.` : `${k} of ${n} functions — remove ${k - n}.`;
+    go.disabled = !(k === n && !bad && root);
+    add.disabled = !newFunction();
+  };
+  const stale = () => { result.innerHTML = ""; };
+  const changed = () => { remember(); stale(); draw(); };
+  add.onclick = () => { const f = newFunction(); if (f) { fns.push(f); changed(); } };
+  reset.onclick = () => { fns = JSON.parse(JSON.stringify(setup.default_functions)); changed(); };
+  go.onclick = () => {
+    let out;
+    try { out = api("evaluation_matrix", nodeId, root, fns); }
+    catch (e) { showModalError(e.message); return; }
+    showModalError("");
+    renderEvalResult(result, out);
+  };
+
+  body.append(head, list, status, row([add, reset]), row([go]), result, errBox());
+  draw();
+  openModal();
+}
+
+function renderEvalResult(box, out) {
+  box.innerHTML = "";
+  const table = document.createElement("table");
+  table.className = "eval-table";
+  const thead = document.createElement("tr");
+  thead.appendChild(document.createElement("th"));
+  out.columns.forEach(c => { const th = document.createElement("th"); th.textContent = c; thead.appendChild(th); });
+  table.appendChild(thead);
+  out.matrix.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th"); th.className = "eval-rowlabel"; th.textContent = out.rows[i];
+    tr.appendChild(th);
+    r.forEach(v => { const td = document.createElement("td"); td.textContent = fmtEntry(v); tr.appendChild(td); });
+    table.appendChild(tr);
+  });
+  const wrap = document.createElement("div");
+  wrap.className = "eval-table-wrap";
+  wrap.appendChild(table);
+  const det = document.createElement("p");
+  det.className = "eval-det";
+  det.innerHTML = out.det === 0
+    ? `det = 0 &nbsp;<span class="muted">(singular: rank ${out.rank} of ${out.matrix.length})</span>`
+    : `det = ${fmtEntry(out.det)} &nbsp;<span class="muted">(|det| = ${Math.abs(out.det)})</span>`;
+
+  // text for code
+  const s0 = loadSettings();
+  const fmtSel = document.createElement("select");
+  fmtSel.id = "eval-format";
+  Object.entries(EVAL_FORMATS).forEach(([k, f]) => fmtSel.appendChild(new Option(f.label, k)));
+  fmtSel.value = EVAL_FORMATS[s0.evalFormat] ? s0.evalFormat : "python";
+  const text = document.createElement("textarea");
+  text.className = "eval-text"; text.readOnly = true; text.spellcheck = false;
+  const fill = () => {
+    text.value = EVAL_FORMATS[fmtSel.value].fmt(out.matrix);
+    text.rows = Math.min(14, out.matrix.length + (fmtSel.value === "latex" ? 2 : 0) + 1);
+  };
+  fmtSel.onchange = () => { const s = loadSettings(); s.evalFormat = fmtSel.value; saveSettings(s); fill(); };
+  fill();
+  const copyText = document.createElement("button");
+  copyText.className = "small"; copyText.textContent = "Copy text";
+  copyText.onclick = async () => {
+    try { await navigator.clipboard.writeText(text.value); flashButton(copyText, "Copied ✓"); }
+    catch (e) { text.select(); flashButton(copyText, "Press Ctrl/⌘+C"); }
+  };
+
+  // image for pasting (Notability and the like)
+  const labels = document.createElement("label");
+  labels.className = "check";
+  const withLabels = document.createElement("input");
+  withLabels.type = "checkbox"; withLabels.checked = s0.evalImageLabels !== false;
+  withLabels.onchange = () => { const s = loadSettings(); s.evalImageLabels = withLabels.checked; saveSettings(s); };
+  labels.append(withLabels, document.createTextNode("Row and column labels"));
+  const copyImg = document.createElement("button");
+  copyImg.className = "small"; copyImg.textContent = "Copy image";
+  copyImg.id = "eval-copy-image";
+  copyImg.onclick = () => copyBlobPng(matrixPngBlob(out, withLabels.checked), copyImg, "evaluation-matrix.png");
+  const saveImg = document.createElement("button");
+  saveImg.className = "small"; saveImg.textContent = "Download image";
+  saveImg.onclick = async () => {
+    try { downloadBlob(await matrixPngBlob(out, withLabels.checked), "evaluation-matrix.png"); }
+    catch (e) { flashButton(saveImg, "Failed"); }
+  };
+
+  const textHead = document.createElement("h3"); textHead.className = "eval-head"; textHead.textContent = "As text";
+  const imgHead = document.createElement("h3"); imgHead.className = "eval-head"; imgHead.textContent = "As an image";
+  box.append(wrap, det, textHead, row([fmtSel, copyText]), text, imgHead, labels, row([copyImg, saveImg]));
+}
+
+// a true minus sign reads better than a hyphen
+function fmtEntry(v) { return v < 0 ? "−" + (-v) : String(v); }
+
+// The matrix drawn on a canvas: white background, black entries in brackets,
+// labels (optional) in grey above the columns and left of the rows.
+function matrixPngBlob(out, withLabels) {
+  const S = 2;                                       // pixel scale, for crispness
+  const cv = document.createElement("canvas");
+  const ctx = cv.getContext("2d");
+  const numFont = `${18 * S}px "Latin Modern Math", "STIX Two Math", "Cambria Math", Georgia, serif`;
+  const labFont = `${13 * S}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  const m = out.matrix, rows = m.length, cols = out.columns.length;
+  const width = (font, t) => { ctx.font = font; return ctx.measureText(t).width; };
+  const gap = 18 * S, rowH = 30 * S, margin = 16 * S, bracket = 10 * S, inset = 12 * S;
+  const colW = out.columns.map((c, j) => Math.max(
+    ...m.map(r => width(numFont, fmtEntry(r[j]))),
+    withLabels ? width(labFont, c) : 0));
+  const labelW = withLabels ? Math.max(...out.rows.map(t => width(labFont, t))) + 14 * S : 0;
+  const headH = withLabels ? 24 * S : 0;
+  const bodyW = colW.reduce((a, b) => a + b, 0) + gap * (cols - 1);
+  cv.width = Math.ceil(margin * 2 + labelW + bracket * 2 + inset * 2 + bodyW);
+  cv.height = Math.ceil(margin * 2 + headH + rowH * rows + 8 * S);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  const top = margin + headH, left = margin + labelW + bracket + inset;
+  const xs = []; let x = left;
+  colW.forEach(w => { xs.push(x + w); x += w + gap; });   // right edges
+  ctx.textBaseline = "middle";
+  if (withLabels) {
+    ctx.fillStyle = "#6b6b70"; ctx.font = labFont; ctx.textAlign = "center";
+    out.columns.forEach((c, j) => ctx.fillText(c, xs[j] - colW[j] / 2, margin + headH / 2));
+    ctx.textAlign = "right";
+    out.rows.forEach((t, i) => ctx.fillText(t, margin + labelW - 14 * S, top + 4 * S + rowH * (i + 0.5)));
+  }
+  ctx.fillStyle = "#111111"; ctx.font = numFont; ctx.textAlign = "right";
+  m.forEach((r, i) => r.forEach((v, j) => ctx.fillText(fmtEntry(v), xs[j], top + 4 * S + rowH * (i + 0.5))));
+  // square brackets
+  ctx.strokeStyle = "#111111"; ctx.lineWidth = 1.6 * S;
+  const bTop = top, bBot = top + rowH * rows + 8 * S;
+  const bl = margin + labelW + bracket, br = left + bodyW + inset;
+  ctx.beginPath();
+  ctx.moveTo(bl, bTop); ctx.lineTo(bl - bracket * 0.6, bTop); ctx.lineTo(bl - bracket * 0.6, bBot); ctx.lineTo(bl, bBot);
+  ctx.moveTo(br, bTop); ctx.lineTo(br + bracket * 0.6, bTop); ctx.lineTo(br + bracket * 0.6, bBot); ctx.lineTo(br, bBot);
+  ctx.stroke();
+  return new Promise((resolve, reject) =>
+    cv.toBlob(b => b ? resolve(b) : reject(new Error("could not draw the matrix")), "image/png"));
+}
+
+// Copy a PNG (given as a promise, so the clipboard write starts while the
+// click still counts as a user gesture -- Safari insists) or, failing that,
+// save it.
+async function copyBlobPng(blobPromise, btn, filename) {
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) throw new Error("no clipboard");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
+    flashButton(btn, "Copied ✓");
+  } catch (e) {
+    try { downloadBlob(await blobPromise, filename); flashButton(btn, "Saved ↓"); }
+    catch (e2) { flashButton(btn, "Failed"); }
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.getElementById("download-anchor");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // Delete a type -- by default alone, its derived types moving up to take its
