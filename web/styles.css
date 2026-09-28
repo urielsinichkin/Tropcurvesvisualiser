@@ -298,3 +298,26 @@ input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var
 details.dbg { margin-top: 8px; }
 details.dbg summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .copy-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+
+/* evaluation matrix dialog */
+.eval-head { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.eval-fns { display: grid; gap: 6px; }
+.eval-fn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.eval-num { width: 2em; text-align: right; flex: none; }
+.eval-args { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.eval-fn select { padding: 4px 6px; }
+.eval-tools { display: inline-flex; gap: 4px; margin-left: auto; }
+.eval-bad { color: var(--warn); font-size: 12px; flex-basis: 100%; padding-left: 2.6em; }
+.eval-result { margin-top: 12px; }
+.eval-table-wrap { overflow-x: auto; max-width: 100%; }
+.eval-table { border-collapse: collapse; font-size: 13px; }
+.eval-table th { font-weight: 500; color: var(--muted); padding: 2px 8px; text-align: center; white-space: nowrap; }
+.eval-table th.eval-rowlabel { text-align: right; }
+.eval-table td { font-family: ui-monospace, Menlo, Consolas, monospace; text-align: right; padding: 2px 8px; }
+.eval-table tr:not(:first-child) td:nth-child(2) { border-left: 1.5px solid var(--ink); }
+.eval-table tr:not(:first-child) td:last-child { border-right: 1.5px solid var(--ink); }
+.eval-det { margin: 8px 0 0; font-size: 14px; }
+.eval-text {
+  width: 100%; box-sizing: border-box; margin-top: 6px; font: 13px ui-monospace, Menlo, Consolas, monospace;
+  padding: 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical;
+}

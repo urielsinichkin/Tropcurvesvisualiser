@@ -25,7 +25,7 @@ from .refined import (
     MultiplicityError, MAX_SPLIT_ITEMS,
 )
 from .workspace import Workspace
-from . import schema, builders
+from . import schema, builders, evaluation
 
 
 class Session:
@@ -337,6 +337,16 @@ class Session:
             "vertices": [{"vertex": v.vertex, "mu": v.mu, "marked": v.marked,
                           "interior": v.interior, "factor": v.label()} for v in vms],
         }
+
+    # --- evaluation matrix -----------------------------------------------
+    def evaluation_setup(self, node_id: str) -> Dict[str, Any]:
+        """Root choices, legs and default functions for the evaluation matrix."""
+        return evaluation.setup(self.ws.nodes[node_id].curve)
+
+    def evaluation_matrix(self, node_id: str, root_vertex: str,
+                          functions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """The matrix of ``functions`` on the type's cell (see ``evaluation``)."""
+        return evaluation.evaluation_matrix(self.ws.nodes[node_id].curve, root_vertex, functions)
 
     def refined_multiplicities(self, node_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         ids = list(self.ws.nodes) if node_ids is None else node_ids

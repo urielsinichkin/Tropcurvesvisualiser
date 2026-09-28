@@ -264,6 +264,33 @@ row shows how many types it hides and how many of those are ticked -- ticked
 types count in the split check whether or not they are showing. Nothing is
 ticked when the dialog opens.
 
+### 3.2 Evaluation matrix
+
+The cell of the moduli space of parametrized rational curves of a type has
+coordinates `(x0, y0, l_e for each bounded edge e)`: the root vertex's image
+and the edge lengths, so dimension `#bounded + 2`. An edge of length `l` with
+direction vector `u` (weight included -- `Edge.vec`) moves its head by `l*u`
+from its tail. The evaluation matrix (`evaluation.py`, `Session.evaluation_*`)
+is the matrix of `n = #bounded + 2` linear functions on the cell, one row each,
+columns `x0, y0` then the bounded edges by name:
+
+- `x(m)`, `y(m)` of a marking: `x0` (or `y0`) plus `u_e` along the path from
+  the root to the marking, `u_e` taken in the direction of travel;
+- a cross ratio `cr(p1, p2, p3, p4)` of four markings/ends (markings being
+  contracted ends), as in Tyomkin (arXiv:1509.07453): the signed length of the
+  intersection of the oriented path `p1 -> p3` with the oriented path
+  `p2 -> p4`, `+l_e` where they cross `e` the same way, `-l_e` otherwise.
+
+The dialog (Actions -> Evaluation matrix...) picks the root from a list of the
+markings, then the unmarked vertices (named by the edges meeting there), each
+sorted by name, the first marking by default; the functions start as x and y
+of every marking and can be added, removed, reordered and changed. The matrix
+can only be made with exactly `n` functions (and cross ratios of four different
+legs). It shows with its exact determinant, and exports as text (Python,
+Mathematica, Sage, MATLAB, LaTeX, plain) or as a PNG image with optional
+row/column labels, copied to the clipboard for pasting into e.g. Notability
+or downloaded. The choices for a type are kept for the session.
+
 ## 4. Derivation tree and propagation
 
 Types form a **forest**: contraction/resolution create a **child** with a
@@ -367,6 +394,7 @@ tropcurves/                 # pure-Python core package
   layout.py                 # display layout: even lengths, clearance, likeness to parent
   operations.py             # contract, resolve, edit slopes, markings, rename, color
   refined.py                # Goettsche-Schroeter refined multiplicity, balanced splits
+  evaluation.py             # evaluation matrix: x/y of markings, cross ratios
   workspace.py              # forest of types + propagation engine
   schema.py                 # versioned JSON (de)serialization
 tests/                      # headless unit tests for the core
