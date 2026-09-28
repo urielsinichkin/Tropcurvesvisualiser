@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "39";
+const APP_VERSION = "40";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -538,15 +538,16 @@ function openExportDialog() {
   list.style.margin = "10px 0";
   const boxes = [], subtreeBtns = [];
   const boxOf = id => boxes.find(b => b.value === id);
-  typeTreeOrder(nodes).forEach(({ node: n, depth }) => {
+  const fold = foldableTypeTree(typeTreeOrder(nodes), (n, depth, lead) => {
     const line = document.createElement("div");
     line.className = "export-row";
+    line.dataset.id = n.id;
     const cb = document.createElement("input");
     cb.type = "checkbox"; cb.value = n.id; cb.checked = false;
     cb.id = "export-cb-" + n.id;
+    lead.appendChild(cb);
     const name = document.createElement("label");
     name.className = "tname"; name.htmlFor = cb.id;
-    name.style.paddingLeft = (depth * 14) + "px";
     name.textContent = n.name;
     const meta = document.createElement("span");
     meta.className = "muted";
@@ -565,10 +566,12 @@ function openExportDialog() {
       subtreeBtns.push({ b, ids, count: below.length });
       cell.appendChild(b);
     }
-    line.append(cb, name, meta, cell);
+    line.append(lead, name, meta, cell);
     list.appendChild(line);
     boxes.push(cb);
+    return { line: line, box: cb };
   });
+  body.appendChild(row([fold.foldAll]));
   body.appendChild(list);
 
   const go = document.createElement("button");
@@ -585,6 +588,7 @@ function openExportDialog() {
       b.textContent = (allOn ? "Unselect" : "Select") + ` with ${count} derived`;
       b.title = (allOn ? "Untick" : "Tick") + " this type and every type derived from it";
     });
+    fold.refold();                 // folded rows count their ticked types
   };
   boxes.forEach(b => { b.onchange = sync; });
   all.onclick = () => { boxes.forEach(b => { b.checked = true; }); sync(); };
@@ -1033,6 +1037,85 @@ function typeTreeOrder(nodes) {
   };
   nodes.filter(n => !n.parent_id || !byId[n.parent_id]).forEach(r => walk(r, 0));
   return out;
+}
+
+// A list of types (typeTreeOrder's output) whose subtrees fold, as in the
+// types menu, for the dialogs that list types. `makeRow(node, depth, lead)`
+// builds one row and returns { line, box }: `lead` holds the indent and the
+// fold toggle (the row puts its checkbox there too), `line` is the row, and
+// `box` its checkbox, if any. Folds start as the menu has them, but folding
+// here is the dialog's own business and never changes the menu. A folded row
+// says how many types it hides and how many of those are ticked -- they still
+// count. Returns { refold, foldAll }: refold() after changing ticks from
+// code, and foldAll is a Collapse all / Expand all button to place.
+function foldableTypeTree(tree, makeRow) {
+  const inTree = new Set(tree.map(t => t.node.id));
+  const folded = new Set([...loadCollapsed()].filter(id => inTree.has(id)));
+  const parentOf = {}, lines = {}, order = [];
+  tree.forEach(({ node, depth }) => {
+    parentOf[node.id] = node.parent_id;
+    const kids = (node.children || []).filter(cid => inTree.has(cid));
+    const lead = document.createElement("span");
+    lead.className = "fold-lead";
+    const indent = document.createElement("span");
+    indent.className = "tree-indent"; indent.style.width = (depth * 14) + "px";
+    lead.appendChild(indent);
+    let tw = null;
+    if (kids.length) {
+      tw = document.createElement("button");
+      tw.type = "button"; tw.className = "twisty";
+      tw.onclick = () => {
+        if (folded.has(node.id)) folded.delete(node.id); else folded.add(node.id);
+        refold();
+      };
+      lead.appendChild(tw);
+    } else {
+      const slot = document.createElement("span"); slot.className = "twisty-slot";
+      lead.appendChild(slot);
+    }
+    const made = makeRow(node, depth, lead);
+    lines[node.id] = { kids: kids, tw: tw, line: made.line, box: made.box || null };
+    order.push(node.id);
+  });
+  const subtree = id => lines[id].kids.flatMap(c => [c, ...subtree(c)]);
+  const parents = order.filter(id => lines[id].kids.length);
+
+  const foldAll = document.createElement("button");
+  foldAll.type = "button"; foldAll.className = "small";
+  foldAll.onclick = () => {
+    const allFolded = parents.every(id => folded.has(id));
+    folded.clear();
+    if (!allFolded) parents.forEach(id => folded.add(id));
+    refold();
+  };
+  const refold = () => {
+    order.forEach(id => {
+      const l = lines[id];
+      let hidden = false;
+      for (let a = parentOf[id]; a && inTree.has(a); a = parentOf[a]) if (folded.has(a)) { hidden = true; break; }
+      l.line.hidden = hidden;
+      if (!l.tw) return;
+      const isFolded = folded.has(id);
+      l.tw.textContent = isFolded ? "▸" : "▾";
+      l.tw.title = isFolded ? "Show derived types" : "Hide derived types";
+      l.tw.setAttribute("aria-expanded", isFolded ? "false" : "true");
+      let badge = l.line.querySelector(".fold-badge");
+      if (isFolded) {
+        const below = subtree(id);
+        const ticked = below.filter(c => lines[c].box && lines[c].box.checked).length;
+        if (!badge) {
+          badge = document.createElement("span"); badge.className = "badge fold-badge";
+          badge.title = "derived types folded away";
+          l.line.querySelector(".tname").appendChild(badge);
+        }
+        badge.textContent = `+${below.length}` + (ticked ? ` (${ticked} ticked)` : "");
+      } else if (badge) badge.remove();
+    });
+    foldAll.hidden = !parents.length;
+    foldAll.textContent = parents.length && parents.every(id => folded.has(id)) ? "Expand all" : "Collapse all";
+  };
+  refold();
+  return { refold: refold, foldAll: foldAll };
 }
 
 function renderTypeList() {
@@ -2376,39 +2459,18 @@ function openMultiplicityDialog() {
     openModal(); return;
   }
 
-  // the types menu's order and nesting; subtrees fold as they do there, and
-  // start folded where the menu has them folded (folding here is this
-  // dialog's own business and does not change the menu)
+  // the types menu's order and nesting, with the same folding
   const rowById = {}; rows.forEach(r => rowById[r.id] = r);
   const tree = typeTreeOrder(api("list_nodes")).filter(t => rowById[t.node.id]);
-  const folded = new Set([...loadCollapsed()].filter(id => tree.some(t => t.node.id === id)));
   const list = document.createElement("div");
   list.className = "mult-tree";
   list.style.margin = "6px 0 10px";
-  const boxes = [], lines = [];
-  tree.forEach(({ node, depth }) => {
+  const boxes = [];
+  const fold = foldableTypeTree(tree, (node, depth, lead) => {
     const r = rowById[node.id];
-    const kids = (node.children || []).filter(cid => rowById[cid]);
     const line = document.createElement("div");
     line.className = "mult-row";
     line.dataset.id = r.id;
-    const lead = document.createElement("span");
-    lead.className = "mult-lead";
-    const indent = document.createElement("span");
-    indent.className = "tree-indent"; indent.style.width = (depth * 14) + "px";
-    lead.appendChild(indent);
-    if (kids.length) {
-      const tw = document.createElement("button");
-      tw.type = "button"; tw.className = "twisty";
-      tw.onclick = () => {
-        if (folded.has(r.id)) folded.delete(r.id); else folded.add(r.id);
-        refold();
-      };
-      lead.appendChild(tw);
-    } else {
-      const slot = document.createElement("span"); slot.className = "twisty-slot";
-      lead.appendChild(slot);
-    }
     const cb = document.createElement("input");
     cb.type = "checkbox"; cb.value = r.id; cb.checked = false; cb.disabled = !r.defined;
     cb.id = "mult-cb-" + r.id;
@@ -2420,56 +2482,12 @@ function openMultiplicityDialog() {
     val.textContent = r.defined ? r.text : "undefined — " + r.reason;
     line.append(lead, name, val);
     list.appendChild(line);
-    lines.push({ id: r.id, node: node, line: line, kids: kids });
     if (r.defined) boxes.push(cb);
+    return { line: line, box: cb };
   });
-  const parentOf = {}; tree.forEach(t => { parentOf[t.node.id] = t.node.parent_id; });
-  const below = id => {
-    const t = lines.find(l => l.id === id);
-    return t.kids.reduce((k, cid) => k + 1 + below(cid), 0);
-  };
-  // a row shows unless something above it is folded; a folded row says how
-  // many it hides, and how many of those are ticked (they still count)
-  const refold = () => {
-    lines.forEach(l => {
-      let hidden = false;
-      for (let a = parentOf[l.id]; a && rowById[a]; a = parentOf[a]) if (folded.has(a)) { hidden = true; break; }
-      l.line.hidden = hidden;
-      const tw = l.line.querySelector(".twisty");
-      if (!tw) return;
-      const isFolded = folded.has(l.id);
-      tw.textContent = isFolded ? "▸" : "▾";
-      tw.title = isFolded ? "Show derived types" : "Hide derived types";
-      tw.setAttribute("aria-expanded", isFolded ? "false" : "true");
-      let badge = l.line.querySelector(".fold-badge");
-      if (isFolded) {
-        const ids = []; const collect = id => lines.find(x => x.id === id).kids.forEach(c => { ids.push(c); collect(c); });
-        collect(l.id);
-        const ticked = ids.filter(id => { const b = document.getElementById("mult-cb-" + id); return b && b.checked; }).length;
-        if (!badge) {
-          badge = document.createElement("span"); badge.className = "badge fold-badge";
-          l.line.querySelector(".tname").appendChild(badge);
-        }
-        badge.textContent = `+${below(l.id)}` + (ticked ? ` (${ticked} ticked)` : "");
-        badge.title = "derived types folded away";
-      } else if (badge) badge.remove();
-    });
-    const parents = lines.filter(l => l.kids.length).map(l => l.id);
-    foldAll.hidden = !parents.length;
-    foldAll.textContent = parents.length && parents.every(id => folded.has(id)) ? "Expand all" : "Collapse all";
-  };
-  const foldAll = document.createElement("button");
-  foldAll.type = "button"; foldAll.className = "small";
-  foldAll.onclick = () => {
-    const parents = lines.filter(l => l.kids.length).map(l => l.id);
-    const allFolded = parents.every(id => folded.has(id));
-    folded.clear();
-    if (!allFolded) parents.forEach(id => folded.add(id));
-    refold();
-  };
+  const refold = fold.refold;
   boxes.forEach(b => b.addEventListener("change", refold));
-  refold();
-  body.appendChild(row([foldAll]));
+  body.appendChild(row([fold.foldAll]));
   body.appendChild(list);
 
   const all = document.createElement("button");
