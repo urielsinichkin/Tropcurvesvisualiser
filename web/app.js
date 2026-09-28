@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "36";
+const APP_VERSION = "37";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -394,6 +394,7 @@ function wireGlobalButtons() {
   wireSplitter("split-controls", "controls", -1);
   wireZoom();
   bind("btn-new", "onclick", openNewDialog);
+  bind("panel-layout", "onclick", openPanelLayoutDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
   bind("paint-curve", "onclick", openPaintDialog);
@@ -2014,7 +2015,8 @@ function renderControls() {
   const body = document.getElementById("controls-body");
   body.innerHTML = "";
 
-  body.appendChild(group("Type", () => {
+  const parts = {};
+  parts.type = () => {
     const wrap = document.createElement("div");
     wrap.className = "ctrl-group";
     const nm = labeled("Name", inputText(summ.name, val => { api("rename_node", selectedId, val); refreshAll(); autosave(); }));
@@ -2044,9 +2046,9 @@ function renderControls() {
     del.onclick = () => openDeleteDialog();
     wrap.appendChild(row([dup, del]));
     return wrap;
-  }));
+  };
 
-  body.appendChild(group("Refined multiplicity", () => {
+  parts.mult = () => {
     const wrap = document.createElement("div");
     wrap.className = "ctrl-group";
     const info = api("refined_multiplicity", selectedId);
@@ -2066,13 +2068,13 @@ function renderControls() {
       wrap.appendChild(line);
     }
     return wrap;
-  }));
+  };
 
   // actions: each opens a dedicated dialog
   const ends = c.edges.filter(e => e.kind === "end");
   const bounded = c.edges.filter(e => e.kind === "bounded");
   const v4 = Object.entries(summ.valences).filter(([v, k]) => k >= 4).map(([v]) => v);
-  body.appendChild(group("Actions", () => {
+  parts.actions = () => {
     const g = document.createElement("div"); g.className = "ctrl-group";
     const mk = (label, enabled, why, onclick) => {
       const b = document.createElement("button");
@@ -2093,10 +2095,10 @@ function renderControls() {
          "this type has no vertex of valence 4 or more to resolve", openResolveDialog),
     ]));
     return g;
-  }));
+  };
 
   // markings
-  body.appendChild(group("Markings", () => {
+  parts.markings = () => {
     const g = document.createElement("div"); g.className = "ctrl-group";
     c.markings.forEach(m => {
       const rr = document.createElement("div"); rr.className = "edge-row";
@@ -2114,10 +2116,10 @@ function renderControls() {
       g.appendChild(p);
     }
     return g;
-  }));
+  };
 
   // edges & ends: rename + color
-  body.appendChild(group("Edges & ends", () => {
+  parts.edges = () => {
     const g = document.createElement("div"); g.className = "ctrl-group";
     c.edges.forEach(e => {
       const rr = document.createElement("div"); rr.className = "edge-row";
@@ -2130,7 +2132,138 @@ function renderControls() {
       g.appendChild(rr);
     });
     return g;
-  }));
+  };
+
+  renderPanelParts(body, parts);
+}
+
+// ---------------------------------------------------------------------------
+// the edit panel's layout
+//
+// Its parts fold open and shut from their headings, and the Layout dialog
+// (from the panel's title line) sets their order and which are shown. All of
+// it is how this browser looks at the panel, not part of the workspace, so it
+// lives in the settings (panelLayout) and is never exported. A part that is
+// hidden or folded is not built at all -- the refined multiplicity is not
+// computed until it is opened.
+// ---------------------------------------------------------------------------
+const PANEL_PARTS = [
+  { key: "type", title: "Type" },
+  { key: "mult", title: "Refined multiplicity" },
+  { key: "actions", title: "Actions" },
+  { key: "markings", title: "Markings" },
+  { key: "edges", title: "Edges & ends" },
+];
+
+function loadPanelLayout() {
+  const saved = loadSettings().panelLayout || {};
+  const known = PANEL_PARTS.map(p => p.key);
+  // saved order first (dropping stale keys), then any part it does not know
+  const order = (Array.isArray(saved.order) ? saved.order : []).filter(k => known.includes(k));
+  known.forEach(k => { if (!order.includes(k)) order.push(k); });
+  const list = v => (Array.isArray(v) ? v : []).filter(k => known.includes(k));
+  return { order, hidden: list(saved.hidden), collapsed: list(saved.collapsed) };
+}
+function savePanelLayout(layout) {
+  const s = loadSettings();
+  s.panelLayout = layout;
+  saveSettings(s);
+}
+
+function renderPanelParts(body, builders) {
+  const layout = loadPanelLayout();
+  const shown = layout.order.filter(k => !layout.hidden.includes(k));
+  shown.forEach(key => {
+    const part = PANEL_PARTS.find(p => p.key === key);
+    const det = document.createElement("details");
+    det.className = "panel-part";
+    det.dataset.part = key;
+    det.open = !layout.collapsed.includes(key);
+    const sum = document.createElement("summary");
+    const h = document.createElement("h3");
+    h.textContent = part.title;
+    sum.appendChild(h);
+    det.appendChild(sum);
+    const fill = () => { if (det.children.length === 1) det.appendChild(builders[key]()); };
+    if (det.open) fill();
+    det.addEventListener("toggle", () => {
+      if (det.open) fill();
+      const l = loadPanelLayout();
+      l.collapsed = l.collapsed.filter(k => k !== key);
+      if (!det.open) l.collapsed.push(key);
+      savePanelLayout(l);
+    });
+    body.appendChild(det);
+  });
+  if (!shown.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Every part of this panel is hidden; use Layout above to show some.";
+    body.appendChild(p);
+  }
+}
+
+function openPanelLayoutDialog() {
+  const body = dialogHead("Edit panel layout",
+    "Choose which parts the edit panel shows, and in what order. This is saved in this browser.");
+  const list = document.createElement("div");
+  list.className = "layout-list";
+  const apply = layout => {
+    savePanelLayout(layout);
+    if (selectedId) renderControls();
+    draw();
+  };
+  const draw = () => {
+    const layout = loadPanelLayout();
+    list.innerHTML = "";
+    layout.order.forEach((key, i) => {
+      const part = PANEL_PARTS.find(p => p.key === key);
+      const r = document.createElement("div");
+      r.className = "layout-row";
+      r.dataset.part = key;
+      const lab = document.createElement("label");
+      lab.className = "check";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !layout.hidden.includes(key);
+      cb.onchange = () => {
+        const l = loadPanelLayout();
+        l.hidden = l.hidden.filter(k => k !== key);
+        if (!cb.checked) l.hidden.push(key);
+        apply(l);
+      };
+      lab.append(cb, document.createTextNode(part.title));
+      const move = (d, text, label) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "small"; b.textContent = text;
+        b.setAttribute("aria-label", `Move ${part.title} ${label}`);
+        b.title = `Move ${label}`;
+        const j = i + d;
+        if (j < 0 || j >= layout.order.length) b.disabled = true;
+        b.onclick = () => {
+          const l = loadPanelLayout();
+          [l.order[i], l.order[j]] = [l.order[j], l.order[i]];
+          apply(l);
+          // keep the keyboard on the part that moved
+          const again = list.querySelector(`.layout-row[data-part="${key}"] button[aria-label="${b.getAttribute("aria-label")}"]`);
+          if (again && !again.disabled) again.focus();
+        };
+        return b;
+      };
+      const btns = document.createElement("span");
+      btns.className = "row"; btns.style.gap = "4px";
+      btns.append(move(-1, "↑", "up"), move(+1, "↓", "down"));
+      r.append(lab, btns);
+      list.appendChild(r);
+    });
+  };
+  draw();
+  const reset = document.createElement("button");
+  reset.className = "small";
+  reset.textContent = "Reset to default";
+  reset.onclick = () => apply({ order: PANEL_PARTS.map(p => p.key), hidden: [], collapsed: [] });
+  body.append(list, row([reset]));
+  openModal();
 }
 
 // ---------------------------------------------------------------------------
@@ -2720,12 +2853,6 @@ function openResolveDialog() {
 }
 
 // ---- small DOM helpers ----
-function group(title, buildFn) {
-  const wrap = document.createElement("div");
-  const h = document.createElement("h3"); h.textContent = title;
-  wrap.appendChild(h); wrap.appendChild(buildFn());
-  return wrap;
-}
 function labeled(txt, el) {
   const l = document.createElement("label"); l.textContent = txt; l.appendChild(el); return l;
 }
