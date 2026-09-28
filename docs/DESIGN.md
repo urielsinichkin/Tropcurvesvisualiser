@@ -167,7 +167,10 @@ the viewBox, so redraws of the same type (edits, painting) keep the view and
 every click target lines up; a drag that moved the picture is never taken as a
 click. At full view a downward wheel scrolls the page instead of being
 swallowed. Choosing another type starts from the whole picture, and Copy
-always copies the whole figure.
+always copies the whole figure. The pictures in the Add marking, Contract edge
+and Resolve vertex dialogs zoom the same way (`makeZoomable`, one controller
+per picture, with the same level / -/+ / Fit controls beside the hint); each
+dialog opens at full view, and re-highlighting after a pick keeps the zoom.
 
 ## 3. Operations
 

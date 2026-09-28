@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "35";
+const APP_VERSION = "36";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1082,7 +1082,7 @@ function renderTypeList() {
 }
 
 function selectNode(id) {
-  if (id !== selectedId) resetZoom(false);
+  if (id !== selectedId && curveZoom) curveZoom.reset(false);
   selectedId = id;
   revealInTypeList(id);
   const details = document.getElementById("sub-details");
@@ -1092,80 +1092,64 @@ function selectNode(id) {
 }
 
 // ---------------------------------------------------------------------------
-// zooming the curve
+// zooming a picture
 //
 // The mouse wheel (or a trackpad pinch, which arrives as a ctrl+wheel) zooms
 // about the pointer; two fingers pinch-zoom and move the picture together;
 // once zoomed in, dragging moves around. Zoom works on the viewBox, so a
-// redraw of the same type (an edit, painting) keeps the view, and every
-// click target still lines up. A drag that moved the picture is not a click,
-// so it never picks or paints. Choosing another type starts from the whole
-// picture, and Copy always copies the whole figure.
+// redraw into the same element (an edit, painting, a dialog re-highlighting)
+// keeps the view, and every click target still lines up. A drag that moved
+// the picture is not a click, so it never picks or paints. The main curve and
+// the pick dialogs' pictures each get their own; choosing another type starts
+// the main one from the whole picture, and Copy always copies the whole figure.
 // ---------------------------------------------------------------------------
 const ZOOM_MIN = 1, ZOOM_MAX = 16;
-let zoom = { k: 1, x: 0, y: 0 };          // viewBox = x y VBW/k VBH/k
 
-function zoomViewBox() {
-  return `${zoom.x} ${zoom.y} ${VBW / zoom.k} ${VBH / zoom.k}`;
-}
+// Make `svg` zoomable; `ui` holds the optional level/fit/out/in controls.
+// The controller is kept on the element (svg._zoom), where clearSvg finds it.
+function makeZoomable(svg, ui = {}) {
+  let z = { k: 1, x: 0, y: 0 };                 // viewBox = x y VBW/k VBH/k
+  const viewBox = () => `${z.x} ${z.y} ${VBW / z.k} ${VBH / z.k}`;
+  const apply = () => {
+    svg.setAttribute("viewBox", viewBox());
+    const zoomed = z.k > 1.001;
+    svg.classList.toggle("zoomable", zoomed);
+    if (ui.level) ui.level.textContent = zoomed ? Math.round(z.k * 100) + "%" : "";
+    if (ui.fit) ui.fit.hidden = !zoomed;
+    if (ui.out) ui.out.disabled = !zoomed;
+    if (ui.in) ui.in.disabled = z.k >= ZOOM_MAX - 1e-6;
+  };
+  // keep at least half of the picture's width/height in view
+  const clamp = () => {
+    z.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z.k));
+    if (z.k <= 1.001) { z = { k: 1, x: 0, y: 0 }; return; }
+    const w = VBW / z.k, h = VBH / z.k;
+    z.x = Math.min(VBW - w / 2, Math.max(-w / 2, z.x));
+    z.y = Math.min(VBH - h / 2, Math.max(-h / 2, z.y));
+  };
+  // zoom by `factor`, keeping the picture point `at` ([x, y] in viewBox
+  // units) where it is on screen
+  const zoomBy = (factor, at) => {
+    const k2 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z.k * factor));
+    const c = at || [z.x + VBW / z.k / 2, z.y + VBH / z.k / 2];
+    z.x = c[0] - (c[0] - z.x) * z.k / k2;
+    z.y = c[1] - (c[1] - z.y) * z.k / k2;
+    z.k = k2;
+    clamp(); apply();
+  };
+  const reset = (redraw = true) => { z = { k: 1, x: 0, y: 0 }; if (redraw) apply(); };
+  // with "meet" the drawing fills the same box at any zoom
+  const fitScale = () => {
+    const r = svg.getBoundingClientRect();
+    return { r, fit: Math.min(r.width / VBW, r.height / VBH) };
+  };
 
-function applyZoom() {
-  const svg = document.getElementById("curve-svg");
-  if (!svg) return;
-  svg.setAttribute("viewBox", zoomViewBox());
-  svg.classList.toggle("zoomable", zoom.k > 1.001);
-  const lvl = document.getElementById("zoom-level");
-  if (lvl) lvl.textContent = zoom.k > 1.001 ? Math.round(zoom.k * 100) + "%" : "";
-  const fit = document.getElementById("zoom-fit");
-  if (fit) fit.hidden = zoom.k <= 1.001;
-  const out = document.getElementById("zoom-out");
-  if (out) out.disabled = zoom.k <= 1.001;
-  const inn = document.getElementById("zoom-in");
-  if (inn) inn.disabled = zoom.k >= ZOOM_MAX - 1e-6;
-}
-
-// keep at least half of the picture's width/height in view
-function clampZoom() {
-  zoom.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.k));
-  if (zoom.k <= 1.001) { zoom = { k: 1, x: 0, y: 0 }; return; }
-  const w = VBW / zoom.k, h = VBH / zoom.k;
-  zoom.x = Math.min(VBW - w / 2, Math.max(-w / 2, zoom.x));
-  zoom.y = Math.min(VBH - h / 2, Math.max(-h / 2, zoom.y));
-}
-
-// zoom by `factor`, keeping the picture point `at` ([x, y] in viewBox units)
-// where it is on screen
-function zoomBy(factor, at) {
-  const k2 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.k * factor));
-  const c = at || [zoom.x + VBW / zoom.k / 2, zoom.y + VBH / zoom.k / 2];
-  zoom.x = c[0] - (c[0] - zoom.x) * zoom.k / k2;
-  zoom.y = c[1] - (c[1] - zoom.y) * zoom.k / k2;
-  zoom.k = k2;
-  clampZoom(); applyZoom();
-}
-
-function resetZoom(apply = true) {
-  zoom = { k: 1, x: 0, y: 0 };
-  if (apply) applyZoom();
-}
-
-// client (screen) point -> viewBox point, under the current zoom
-function svgPoint(svg, cx, cy) {
-  const pt = svg.createSVGPoint();
-  pt.x = cx; pt.y = cy;
-  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
-  return [q.x, q.y];
-}
-
-function wireZoom() {
-  const svg = document.getElementById("curve-svg");
   svg.addEventListener("wheel", ev => {
-    if (!selectedId) return;
     // pixels, lines or pages; a trackpad pinch comes as small ctrl+wheel steps
     const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
     const dy = ev.deltaY * unit * (ev.ctrlKey ? 4 : 1);
-    // nothing to zoom out of: let the page scroll on past the picture
-    if (dy > 0 && zoom.k <= 1.001 && !ev.ctrlKey) return;
+    // nothing to zoom out of: let the page (or dialog) scroll on past it
+    if (dy > 0 && z.k <= 1.001 && !ev.ctrlKey) return;
     ev.preventDefault();
     zoomBy(Math.exp(-dy * 0.0015), svgPoint(svg, ev.clientX, ev.clientY));
   }, { passive: false });
@@ -1177,7 +1161,7 @@ function wireZoom() {
     if (pts.length >= 2) {
       const [a, b] = pts;
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      gesture = { kind: "pinch", d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, k0: zoom.k,
+      gesture = { kind: "pinch", d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, k0: z.k,
                   anchor: svgPoint(svg, mid[0], mid[1]) };
     } else if (pts.length === 1) {
       gesture = { kind: "pan", last: pts[0], start: pts[0] };
@@ -1195,32 +1179,27 @@ function wireZoom() {
     if (gesture.kind === "pinch" && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      zoom.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
+      z.k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
         gesture.k0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / gesture.d0));
-      // put the anchor back under the fingers' midpoint
-      // with "meet" the drawing fills the same box at any zoom; s is px per unit
-      const r = svg.getBoundingClientRect();
-      const fit = Math.min(r.width / VBW, r.height / VBH), s = fit * zoom.k;
-      const ox = r.left + (r.width - VBW * fit) / 2;
-      const oy = r.top + (r.height - VBH * fit) / 2;
-      zoom.x = gesture.anchor[0] - (mid[0] - ox) / s;
-      zoom.y = gesture.anchor[1] - (mid[1] - oy) / s;
+      // put the anchor back under the fingers' midpoint (s: px per unit)
+      const { r, fit } = fitScale(), sc = fit * z.k;
+      z.x = gesture.anchor[0] - (mid[0] - r.left - (r.width - VBW * fit) / 2) / sc;
+      z.y = gesture.anchor[1] - (mid[1] - r.top - (r.height - VBH * fit) / 2) / sc;
       moved = true;
-      clampZoom(); applyZoom();
-    } else if (gesture.kind === "pan" && zoom.k > 1.001) {
-      const p = [ev.clientX, ev.clientY];
-      if (!moved && Math.hypot(p[0] - gesture.start[0], p[1] - gesture.start[1]) < 5) return;
+      clamp(); apply();
+    } else if (gesture.kind === "pan" && z.k > 1.001) {
+      const pt = [ev.clientX, ev.clientY];
+      if (!moved && Math.hypot(pt[0] - gesture.start[0], pt[1] - gesture.start[1]) < 5) return;
       if (!moved) {
         moved = true; svg.classList.add("panning");
         // only now: capturing at pointerdown would retarget the click itself
         try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
       }
-      const r = svg.getBoundingClientRect();
-      const s = Math.min(r.width / VBW, r.height / VBH) * zoom.k;
-      zoom.x -= (p[0] - gesture.last[0]) / s;
-      zoom.y -= (p[1] - gesture.last[1]) / s;
-      gesture.last = p;
-      clampZoom(); applyZoom();
+      const sc = fitScale().fit * z.k;
+      z.x -= (pt[0] - gesture.last[0]) / sc;
+      z.y -= (pt[1] - gesture.last[1]) / sc;
+      gesture.last = pt;
+      clamp(); apply();
     }
   });
   const end = ev => {
@@ -1236,10 +1215,48 @@ function wireZoom() {
     if (moved) { ev.stopImmediatePropagation(); ev.preventDefault(); moved = false; }
   }, true);
 
-  bind("zoom-in", "onclick", () => zoomBy(1.5));
-  bind("zoom-out", "onclick", () => zoomBy(1 / 1.5));
-  bind("zoom-fit", "onclick", () => resetZoom());
-  applyZoom();
+  if (ui.in) ui.in.onclick = () => zoomBy(1.5);
+  if (ui.out) ui.out.onclick = () => zoomBy(1 / 1.5);
+  if (ui.fit) ui.fit.onclick = () => reset();
+  const ctl = { viewBox, apply, reset, zoomBy, get k() { return z.k; } };
+  svg._zoom = ctl;
+  apply();
+  return ctl;
+}
+
+// The level / − / + / Fit controls, as in the curve panel's header.
+function zoomControls() {
+  const box = document.createElement("span");
+  box.className = "zoom-tools";
+  box.title = "Zoom: mouse wheel or pinch; drag to move around";
+  const level = document.createElement("span");
+  level.className = "zoom-level";
+  const mk = (text, cls, label) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "small " + cls; b.textContent = text;
+    if (label) b.setAttribute("aria-label", label);
+    return b;
+  };
+  const out = mk("−", "zoom-step", "Zoom out"), inn = mk("+", "zoom-step", "Zoom in");
+  const fit = mk("Fit", "", null);
+  fit.title = "Show the whole curve";
+  box.append(level, out, inn, fit);
+  return { box, ui: { level, out, in: inn, fit } };
+}
+
+// client (screen) point -> viewBox point, under the current zoom
+function svgPoint(svg, cx, cy) {
+  const pt = svg.createSVGPoint();
+  pt.x = cx; pt.y = cy;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [q.x, q.y];
+}
+
+let curveZoom = null;
+function wireZoom() {
+  const $ = id => document.getElementById(id);
+  curveZoom = makeZoomable($("curve-svg"),
+    { level: $("zoom-level"), out: $("zoom-out"), in: $("zoom-in"), fit: $("zoom-fit") });
 }
 
 // ---------------------------------------------------------------------------
@@ -1448,7 +1465,7 @@ function svgEl(tag, attrs) {
 }
 function clearSvg(id) {
   const svg = document.getElementById(id);
-  svg.setAttribute("viewBox", id === "curve-svg" ? zoomViewBox() : `0 0 ${VBW} ${VBH}`);
+  svg.setAttribute("viewBox", svg._zoom ? svg._zoom.viewBox() : `0 0 ${VBW} ${VBH}`);
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   return svg;
 }
@@ -1725,7 +1742,13 @@ function pickFrame(body, hintText, withButton) {
   holder.setAttribute("preserveAspectRatio", "xMidYMid meet");
   const status = document.createElement("div");
   status.className = "pick-status";
-  pickView.append(hint, holder, status);
+  // the hint, with the zoom controls beside it
+  const zc = zoomControls();
+  const head = document.createElement("div");
+  head.className = "pick-head";
+  head.append(hint, zc.box);
+  pickView.append(head, holder, status);
+  makeZoomable(holder, zc.ui);
   let button = null;
   if (withButton) {
     button = document.createElement("button");
