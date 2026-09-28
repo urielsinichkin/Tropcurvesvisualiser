@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "37";
+const APP_VERSION = "38";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -537,7 +537,7 @@ function openExportDialog() {
     while (cur.parent_id && byId[cur.parent_id]) { d++; cur = byId[cur.parent_id]; }
     return d;
   };
-  nodes.forEach(n => {
+  typeTreeOrder(nodes).forEach(({ node: n }) => {
     const lab = document.createElement("label");
     lab.className = "mult-row";
     const cb = document.createElement("input");
@@ -998,6 +998,19 @@ function revealInTypeList(id) {
     if (set.delete(cur.parent_id)) changed = true;
   }
   if (changed) saveCollapsed(set);
+}
+
+// The types in the order the types menu shows them -- each root followed by
+// its derived types, depth first -- with their depth in the tree.
+function typeTreeOrder(nodes) {
+  const byId = {}; nodes.forEach(n => byId[n.id] = n);
+  const out = [];
+  const walk = (n, depth) => {
+    out.push({ node: n, depth: depth });
+    (n.children || []).forEach(cid => { if (byId[cid]) walk(byId[cid], depth + 1); });
+  };
+  nodes.filter(n => !n.parent_id || !byId[n.parent_id]).forEach(r => walk(r, 0));
+  return out;
 }
 
 function renderTypeList() {
@@ -2341,33 +2354,110 @@ function openMultiplicityDialog() {
     openModal(); return;
   }
 
+  // the types menu's order and nesting; subtrees fold as they do there, and
+  // start folded where the menu has them folded (folding here is this
+  // dialog's own business and does not change the menu)
+  const rowById = {}; rows.forEach(r => rowById[r.id] = r);
+  const tree = typeTreeOrder(api("list_nodes")).filter(t => rowById[t.node.id]);
+  const folded = new Set([...loadCollapsed()].filter(id => tree.some(t => t.node.id === id)));
   const list = document.createElement("div");
-  list.style.margin = "10px 0";
-  const boxes = [];
-  rows.forEach(r => {
-    const lab = document.createElement("label");
-    lab.className = "mult-row";
+  list.className = "mult-tree";
+  list.style.margin = "6px 0 10px";
+  const boxes = [], lines = [];
+  tree.forEach(({ node, depth }) => {
+    const r = rowById[node.id];
+    const kids = (node.children || []).filter(cid => rowById[cid]);
+    const line = document.createElement("div");
+    line.className = "mult-row";
+    line.dataset.id = r.id;
+    const lead = document.createElement("span");
+    lead.className = "mult-lead";
+    const indent = document.createElement("span");
+    indent.className = "tree-indent"; indent.style.width = (depth * 14) + "px";
+    lead.appendChild(indent);
+    if (kids.length) {
+      const tw = document.createElement("button");
+      tw.type = "button"; tw.className = "twisty";
+      tw.onclick = () => {
+        if (folded.has(r.id)) folded.delete(r.id); else folded.add(r.id);
+        refold();
+      };
+      lead.appendChild(tw);
+    } else {
+      const slot = document.createElement("span"); slot.className = "twisty-slot";
+      lead.appendChild(slot);
+    }
     const cb = document.createElement("input");
     cb.type = "checkbox"; cb.value = r.id; cb.checked = r.defined; cb.disabled = !r.defined;
-    const name = document.createElement("span");
-    name.className = "tname"; name.textContent = r.name;
+    cb.id = "mult-cb-" + r.id;
+    lead.appendChild(cb);
+    const name = document.createElement("label");
+    name.className = "tname"; name.htmlFor = cb.id; name.textContent = r.name;
     const val = document.createElement("span");
     val.className = r.defined ? "mult" : "muted";
     val.textContent = r.defined ? r.text : "undefined — " + r.reason;
-    lab.append(cb, name, val);
-    list.appendChild(lab);
+    line.append(lead, name, val);
+    list.appendChild(line);
+    lines.push({ id: r.id, node: node, line: line, kids: kids });
     if (r.defined) boxes.push(cb);
   });
+  const parentOf = {}; tree.forEach(t => { parentOf[t.node.id] = t.node.parent_id; });
+  const below = id => {
+    const t = lines.find(l => l.id === id);
+    return t.kids.reduce((k, cid) => k + 1 + below(cid), 0);
+  };
+  // a row shows unless something above it is folded; a folded row says how
+  // many it hides, and how many of those are ticked (they still count)
+  const refold = () => {
+    lines.forEach(l => {
+      let hidden = false;
+      for (let a = parentOf[l.id]; a && rowById[a]; a = parentOf[a]) if (folded.has(a)) { hidden = true; break; }
+      l.line.hidden = hidden;
+      const tw = l.line.querySelector(".twisty");
+      if (!tw) return;
+      const isFolded = folded.has(l.id);
+      tw.textContent = isFolded ? "▸" : "▾";
+      tw.title = isFolded ? "Show derived types" : "Hide derived types";
+      tw.setAttribute("aria-expanded", isFolded ? "false" : "true");
+      let badge = l.line.querySelector(".fold-badge");
+      if (isFolded) {
+        const ids = []; const collect = id => lines.find(x => x.id === id).kids.forEach(c => { ids.push(c); collect(c); });
+        collect(l.id);
+        const ticked = ids.filter(id => { const b = document.getElementById("mult-cb-" + id); return b && b.checked; }).length;
+        if (!badge) {
+          badge = document.createElement("span"); badge.className = "badge fold-badge";
+          l.line.querySelector(".tname").appendChild(badge);
+        }
+        badge.textContent = `+${below(l.id)}` + (ticked ? ` (${ticked} ticked)` : "");
+        badge.title = "derived types folded away";
+      } else if (badge) badge.remove();
+    });
+    const parents = lines.filter(l => l.kids.length).map(l => l.id);
+    foldAll.hidden = !parents.length;
+    foldAll.textContent = parents.length && parents.every(id => folded.has(id)) ? "Expand all" : "Collapse all";
+  };
+  const foldAll = document.createElement("button");
+  foldAll.type = "button"; foldAll.className = "small";
+  foldAll.onclick = () => {
+    const parents = lines.filter(l => l.kids.length).map(l => l.id);
+    const allFolded = parents.every(id => folded.has(id));
+    folded.clear();
+    if (!allFolded) parents.forEach(id => folded.add(id));
+    refold();
+  };
+  boxes.forEach(b => b.addEventListener("change", refold));
+  refold();
+  body.appendChild(row([foldAll]));
   body.appendChild(list);
 
   const all = document.createElement("button");
   all.className = "small";
   all.textContent = "Select all";
-  all.onclick = () => { boxes.forEach(b => { b.checked = true; }); result.textContent = ""; };
+  all.onclick = () => { boxes.forEach(b => { b.checked = true; }); result.textContent = ""; refold(); };
   const none = document.createElement("button");
   none.className = "small";
   none.textContent = "Select none";
-  none.onclick = () => { boxes.forEach(b => { b.checked = false; }); result.textContent = ""; };
+  none.onclick = () => { boxes.forEach(b => { b.checked = false; }); result.textContent = ""; refold(); };
   const go = document.createElement("button");
   go.textContent = "Check for a balanced split";
   const result = document.createElement("div");

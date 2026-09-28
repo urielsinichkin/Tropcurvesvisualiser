@@ -256,6 +256,13 @@ exactly when one half is half of everything, so the search halves the total (no
 subset can work if some coefficient is odd) and meets in the middle, `2^(n/2)`
 work rather than `2^n`.
 
+The Multiplicity dialog lists the types in the types menu's order (each root
+followed by its derived types, depth first; `typeTreeOrder`, also used by the
+Export dialog) and nested the same way. Subtrees fold, starting as they are
+folded in the menu; folding in the dialog does not change the menu. A folded
+row shows how many types it hides and how many of those are ticked -- ticked
+types count in the split check whether or not they are showing.
+
 ## 4. Derivation tree and propagation
 
 Types form a **forest**: contraction/resolution create a **child** with a

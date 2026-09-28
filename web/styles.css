@@ -217,6 +217,16 @@ svg.panning { cursor: grabbing; }
   padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
 }
 .layout-row label.check { margin: 0; font-size: 14px; }
+/* one grid for the whole tree, so the values line up in one column */
+.mult-tree {
+  display: grid; grid-template-columns: auto minmax(90px, max-content) 1fr;
+  column-gap: 10px; row-gap: 8px; align-items: start; font-size: 13px;
+}
+.mult-tree .mult-row { display: contents; }
+.mult-tree .mult-row[hidden] > * { display: none; }
+.mult-lead { display: flex; align-items: center; gap: 2px; min-height: 22px; }
+.mult-tree .tname { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; cursor: pointer; min-height: 22px; }
+.mult-tree .twisty, .mult-tree .twisty-slot { height: 22px; line-height: 22px; }
 .ctrl-group { display: grid; gap: 8px; }
 .ctrl-group h3 { font-size: 13px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 label { font-size: 13px; display: grid; gap: 3px; }
