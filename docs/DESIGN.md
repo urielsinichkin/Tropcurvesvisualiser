@@ -174,7 +174,7 @@ dialog opens at full view, and re-highlighting after a pick keeps the zoom.
 
 The **edit panel**'s parts (Type, Refined multiplicity, Actions, Markings,
 Edges & ends) fold open and shut from their headings, and **Layout** on the
-panel's title line opens a dialog to reorder them (up/down) and show or hide
+panel's title line opens a dialog to reorder them (drag and drop) and show or hide
 each, with a reset. Like the other view preferences this is per browser
 (`panelLayout` in the settings), never exported; a folded or hidden part is not
 built, so the refined multiplicity is only computed while its part is open.
@@ -288,12 +288,27 @@ columns `x0, y0` then the bounded edges by name:
 The dialog (Actions -> Evaluation matrix...) picks the root from a list of the
 markings, then the unmarked vertices (named by the edges meeting there), each
 sorted by name, the first marking by default; the functions start as x and y
-of every marking and can be added, removed, reordered and changed. The matrix
+of every marking and can be added, removed, reordered (drag and drop) and changed. The matrix
 can only be made with exactly `n` functions (and cross ratios of four different
 legs). It shows with its exact determinant, and exports as text (Python,
 Mathematica, Sage, MATLAB, LaTeX, plain) or as a PNG image with optional
 row/column labels, copied to the clipboard for pasting into e.g. Notability
 or downloaded. The choices for a type are kept for the session.
+
+### 3.3 Reordering lists
+
+Every list the user puts in order uses one component, `makeSortable` (with
+`sortGrip` and `moveInArray`) in `app.js` -- the edit-panel layout and the
+evaluation functions today, and any such list added later. Each item has a
+grip (⠿); dragging it moves the item with a mouse, a finger or a pen alike
+(Pointer Events, one code path). The grip has `touch-action: none`, so a touch
+or Pencil drag starts at once while the rest of each row still scrolls; with a
+mouse a row's empty space is a grip too. The item follows the pointer, the
+others slide aside (a short FLIP animation), the scrolling area (dialog or
+page) scrolls when the pointer nears its top or bottom edge, and Escape or a
+cancelled touch puts the item back. The grip is a focusable button, and the
+arrow keys move its item. The caller only supplies `onMove(from, to)`, which
+moves the item in its data and redraws; the list element stays the same.
 
 ## 4. Derivation tree and propagation
 

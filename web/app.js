@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "43";
+const APP_VERSION = "44";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -2622,9 +2622,170 @@ function renderPanelParts(body, builders) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// drag-and-drop reordering
+//
+// The one way the app lets the user put a list in order -- use it for any
+// list that needs reordering. Each item carries a grip (sortGrip); dragging
+// it moves the item, with a mouse, a finger or a pen alike (Pointer Events).
+// The grip does not scroll the page (touch-action: none), so a touch or pen
+// drag starts at once, while the rest of a row scrolls as usual; with a mouse,
+// a row's empty space works as a grip too. The item follows the pointer, the
+// others slide out of its way, and near the top or bottom of the scrolling
+// area (a dialog, the page) the area scrolls. Escape, or a cancelled touch,
+// puts the item back. The grip is a button: focused, the arrow keys move its
+// item, for keyboards and screen readers.
+// ---------------------------------------------------------------------------
+function sortGrip(label) {
+  const g = document.createElement("button");
+  g.type = "button";
+  g.className = "sort-grip";
+  g.textContent = "⠿";
+  g.title = "Drag to reorder";
+  g.setAttribute("aria-label", `Reorder ${label}: drag, or use the arrow keys`);
+  return g;
+}
+
+// `list`'s children with class sort-item are the items. `onMove(from, to)`
+// moves item `from` to position `to` in the caller's data and redraws; the
+// list element itself must stay the same across redraws.
+function makeSortable(list, onMove) {
+  if (list._sortable) return;
+  list._sortable = true;
+  const items = () => [...list.children].filter(el => el.classList.contains("sort-item"));
+  const interactive = el => el.closest("input, select, textarea, button:not(.sort-grip), label, a, .eval-bad");
+  let drag = null;
+
+  const scrollParent = el => {
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) return p;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  const edges = sc => {
+    if (sc === document.scrollingElement || sc === document.documentElement) return [0, window.innerHeight];
+    const r = sc.getBoundingClientRect();
+    return [r.top, r.bottom];
+  };
+  const setShift = (el, y) => { el.style.transform = y ? `translateY(${y}px)` : ""; };
+
+  // keep the dragged item under the pointer, and let it pass its neighbours
+  const place = () => {
+    const d = drag, it = d.item;
+    const centre = d.y - d.grab + it.offsetHeight / 2;
+    let moved = true;
+    while (moved) {
+      moved = false;
+      const next = it.nextElementSibling, prev = it.previousElementSibling;
+      const flip = (sib, before) => {
+        const top0 = sib.getBoundingClientRect().top;
+        if (before) list.insertBefore(it, sib); else list.insertBefore(it, sib.nextSibling);
+        const dy = top0 - sib.getBoundingClientRect().top;
+        sib.style.transition = "none"; setShift(sib, dy);
+        requestAnimationFrame(() => { sib.style.transition = ""; setShift(sib, 0); });
+        moved = true;
+      };
+      if (next && next.classList.contains("sort-item")) {
+        const r = next.getBoundingClientRect();
+        if (centre > r.top + r.height / 2) { flip(next, false); continue; }
+      }
+      if (prev && prev.classList.contains("sort-item")) {
+        const r = prev.getBoundingClientRect();
+        if (centre < r.top + r.height / 2) { flip(prev, true); continue; }
+      }
+    }
+    // where the item sits without its shift, and the shift that puts it under the pointer
+    const natural = it.getBoundingClientRect().top - d.shift;
+    d.shift = d.y - d.grab - natural;
+    setShift(it, d.shift);
+  };
+
+  const tick = () => {
+    if (!drag) return;
+    const [top, bottom] = edges(drag.scroller), zone = 48;
+    let v = 0;
+    if (drag.y < top + zone) v = -Math.ceil((top + zone - drag.y) / 4);
+    else if (drag.y > bottom - zone) v = Math.ceil((drag.y - bottom + zone) / 4);
+    if (v) {
+      const before = drag.scroller.scrollTop;
+      drag.scroller.scrollTop += Math.max(-16, Math.min(16, v));
+      if (drag.scroller.scrollTop !== before) place();
+    }
+    drag.raf = requestAnimationFrame(tick);
+  };
+
+  const finish = commit => {
+    const d = drag;
+    if (!d) return;
+    drag = null;
+    cancelAnimationFrame(d.raf);
+    try { list.releasePointerCapture(d.id); } catch (e) { /* already released */ }
+    document.body.classList.remove("sort-dragging");
+    document.removeEventListener("keydown", d.onKey, true);
+    d.item.classList.remove("sorting");
+    items().forEach(el => { el.style.transition = ""; setShift(el, 0); });
+    const to = items().indexOf(d.item);
+    if (!commit || to === d.from) {
+      list.insertBefore(d.item, d.home);        // back where it was
+      return;
+    }
+    onMove(d.from, to);
+  };
+
+  list.addEventListener("pointerdown", ev => {
+    if (drag || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    const item = ev.target.closest(".sort-item");
+    if (!item || item.parentElement !== list) return;
+    const grip = ev.target.closest(".sort-grip");
+    if (!grip && (ev.pointerType !== "mouse" || interactive(ev.target))) return;
+    ev.preventDefault();
+    const r = item.getBoundingClientRect();
+    drag = { item, id: ev.pointerId, from: items().indexOf(item), y: ev.clientY,
+             grab: ev.clientY - r.top, shift: 0, scroller: scrollParent(list),
+             home: item.nextSibling };
+    drag.onKey = e => { if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); finish(false); } };
+    document.addEventListener("keydown", drag.onKey, true);
+    try { list.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+    item.classList.add("sorting");
+    document.body.classList.add("sort-dragging");
+    drag.raf = requestAnimationFrame(tick);
+  });
+  list.addEventListener("pointermove", ev => {
+    if (!drag || ev.pointerId !== drag.id) return;
+    ev.preventDefault();
+    drag.y = ev.clientY;
+    place();
+  });
+  list.addEventListener("pointerup", ev => { if (drag && ev.pointerId === drag.id) finish(true); });
+  list.addEventListener("pointercancel", ev => { if (drag && ev.pointerId === drag.id) finish(false); });
+  list.addEventListener("lostpointercapture", ev => { if (drag && ev.pointerId === drag.id) finish(true); });
+
+  // the keyboard: arrows on a focused grip
+  list.addEventListener("keydown", ev => {
+    const grip = ev.target.closest && ev.target.closest(".sort-grip");
+    if (!grip || drag || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
+    const all = items(), from = all.indexOf(grip.closest(".sort-item"));
+    const to = from + (ev.key === "ArrowUp" ? -1 : 1);
+    if (from < 0 || to < 0 || to >= all.length) return;
+    ev.preventDefault();
+    onMove(from, to);
+    const g = items()[to] && items()[to].querySelector(".sort-grip");
+    if (g) g.focus();
+  });
+}
+
+// move one element of an array, in place
+function moveInArray(arr, from, to) {
+  const [x] = arr.splice(from, 1);
+  arr.splice(to, 0, x);
+  return arr;
+}
+
 function openPanelLayoutDialog() {
   const body = dialogHead("Edit panel layout",
-    "Choose which parts the edit panel shows, and in what order. This is saved in this browser.");
+    "Tick the parts the edit panel shows, and drag them by ⠿ into the order you want. " +
+    "This is saved in this browser.");
   const list = document.createElement("div");
   list.className = "layout-list";
   const apply = layout => {
@@ -2638,7 +2799,7 @@ function openPanelLayoutDialog() {
     layout.order.forEach((key, i) => {
       const part = PANEL_PARTS.find(p => p.key === key);
       const r = document.createElement("div");
-      r.className = "layout-row";
+      r.className = "layout-row sort-item";
       r.dataset.part = key;
       const lab = document.createElement("label");
       lab.className = "check";
@@ -2652,30 +2813,15 @@ function openPanelLayoutDialog() {
         apply(l);
       };
       lab.append(cb, document.createTextNode(part.title));
-      const move = (d, text, label) => {
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "small"; b.textContent = text;
-        b.setAttribute("aria-label", `Move ${part.title} ${label}`);
-        b.title = `Move ${label}`;
-        const j = i + d;
-        if (j < 0 || j >= layout.order.length) b.disabled = true;
-        b.onclick = () => {
-          const l = loadPanelLayout();
-          [l.order[i], l.order[j]] = [l.order[j], l.order[i]];
-          apply(l);
-          // keep the keyboard on the part that moved
-          const again = list.querySelector(`.layout-row[data-part="${key}"] button[aria-label="${b.getAttribute("aria-label")}"]`);
-          if (again && !again.disabled) again.focus();
-        };
-        return b;
-      };
-      const btns = document.createElement("span");
-      btns.className = "row"; btns.style.gap = "4px";
-      btns.append(move(-1, "↑", "up"), move(+1, "↓", "down"));
-      r.append(lab, btns);
+      r.append(sortGrip(part.title), lab);
       list.appendChild(r);
     });
   };
+  makeSortable(list, (from, to) => {
+    const l = loadPanelLayout();
+    moveInArray(l.order, from, to);
+    apply(l);
+  });
   draw();
   const reset = document.createElement("button");
   reset.className = "small";
@@ -2958,7 +3104,7 @@ function openEvalDialog() {
     list.innerHTML = "";
     fns.forEach((f, i) => {
       const r = document.createElement("div");
-      r.className = "eval-fn";
+      r.className = "eval-fn sort-item";
       const num = document.createElement("span");
       num.className = "muted eval-num"; num.textContent = (i + 1) + ".";
       const kind = document.createElement("select");
@@ -3001,11 +3147,8 @@ function openEvalDialog() {
       };
       const tools = document.createElement("span");
       tools.className = "eval-tools";
-      tools.append(
-        btn("↑", "Move up", () => { [fns[i - 1], fns[i]] = [fns[i], fns[i - 1]]; changed(); }, i === 0),
-        btn("↓", "Move down", () => { [fns[i + 1], fns[i]] = [fns[i], fns[i + 1]]; changed(); }, i === fns.length - 1),
-        btn("✕", "Remove", () => { fns.splice(i, 1); changed(); }));
-      r.append(num, kind, args, tools);
+      tools.append(btn("✕", "Remove", () => { fns.splice(i, 1); changed(); }));
+      r.append(sortGrip(`function ${i + 1}`), num, kind, args, tools);
       const bad = problem(f);
       if (bad) {
         const w = document.createElement("span");
@@ -3025,6 +3168,7 @@ function openEvalDialog() {
   };
   const stale = () => { result.innerHTML = ""; };
   const changed = () => { remember(); stale(); draw(); };
+  makeSortable(list, (from, to) => { moveInArray(fns, from, to); changed(); });
   add.onclick = () => { const f = newFunction(); if (f) { fns.push(f); changed(); } };
   reset.onclick = () => { fns = JSON.parse(JSON.stringify(setup.default_functions)); changed(); };
   go.onclick = () => {
