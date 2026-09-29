@@ -370,6 +370,18 @@ derivation as an ordered list of such steps, normally one.
   both), and each type with derived types has a "Select with N derived" button
   that ticks it and its whole subtree (or, when all of those are ticked,
   unticks them). Folded types that are ticked are still exported.
+- **Google Drive** (menu: Drive...): the library can be saved to and opened
+  from the user's Drive. There is no server, so sign-in is Google Identity
+  Services' browser token flow (client ID in `app.js`, registered for the
+  `https://urielsinichkin.github.io` origin); the access token lasts about an
+  hour and is kept in memory only. The scope is `drive.file`, so the app sees
+  only files it created or was given. Saving writes the same JSON as Export to
+  one Drive file that this browser remembers as *linked*, with its
+  modification time when last saved or opened here; if the Drive copy changed
+  since (another device), saving asks before overwriting (or saves a new file).
+  Opening lists the app's files and goes through the same Add / Replace
+  choice as Import; replacing links the library to that file. A 401 (expired
+  session) asks the user to press again, which signs back in from the click.
 - A versioned JSON schema is the single source of truth for save/load.
 
 ## 6. Architecture
