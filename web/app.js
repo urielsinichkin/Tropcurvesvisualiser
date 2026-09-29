@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "42";
+const APP_VERSION = "43";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -402,6 +402,7 @@ function wireGlobalButtons() {
   bind("paint-cancel", "onclick", stopPainting);
   bind("btn-save", "onclick", openExportDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
+  bind("btn-drive", "onclick", openDriveDialog);
   bind("file-input", "onchange", importJSON);
   bind("modal-cancel", "onclick", closeModal);
   // the curve copies transparent (drop it on any background); the subdivision
@@ -617,45 +618,51 @@ function importJSON(ev) {
   const file = ev.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
-    const text = reader.result;
-    const have = api("list_nodes").length;
-    if (!have) { finishImport(text, false); return; }
-    let count = null;
-    try { count = JSON.parse(text).nodes.length; } catch (e) { /* load reports it */ }
-    const many = n => `${n} type${n === 1 ? "" : "s"}`;
-    const body = dialogHead("Import " + file.name,
-      `${count === null ? "This file" : `This file holds ${many(count)}`}; your library
-       has ${many(have)}. Add the file's types to the library, or replace the
-       library with them?`);
-    const add = document.createElement("button");
-    add.className = "primary"; add.id = "import-append";
-    add.textContent = "Add to the library";
-    add.onclick = () => finishImport(text, true);
-    const replace = document.createElement("button");
-    replace.className = "danger"; replace.id = "import-replace";
-    replace.textContent = `Replace the library (discards the current ${many(have)})`;
-    replace.onclick = () => finishImport(text, false);
-    const note = document.createElement("p");
-    note.className = "muted"; note.style.margin = "8px 0 0";
-    note.textContent = "Added types keep their derivations. A name already in the library gets a number, e.g. “root (2)”.";
-    const box = document.createElement("div");
-    box.className = "reslist"; box.style.marginTop = "10px";
-    box.append(add, replace);
-    body.append(box, note, errBox());
-    openModal();
-  };
+  reader.onload = () => offerImport(reader.result, file.name);
   reader.readAsText(file);
   ev.target.value = "";
 }
 
+// Load `text` (a workspace file called `title`) into the library -- asking
+// whether to add or replace when the library is not empty. `onLoaded(append)`
+// runs once it has loaded.
+function offerImport(text, title, onLoaded) {
+  const done = append => { if (finishImport(text, append) && onLoaded) onLoaded(append); };
+  const have = api("list_nodes").length;
+  if (!have) { done(false); return; }
+  let count = null;
+  try { count = JSON.parse(text).nodes.length; } catch (e) { /* load reports it */ }
+  const many = n => `${n} type${n === 1 ? "" : "s"}`;
+  const body = dialogHead("Import " + title,
+    `${count === null ? "This file" : `This file holds ${many(count)}`}; your library
+     has ${many(have)}. Add the file's types to the library, or replace the
+     library with them?`);
+  const add = document.createElement("button");
+  add.className = "primary"; add.id = "import-append";
+  add.textContent = "Add to the library";
+  add.onclick = () => done(true);
+  const replace = document.createElement("button");
+  replace.className = "danger"; replace.id = "import-replace";
+  replace.textContent = `Replace the library (discards the current ${many(have)})`;
+  replace.onclick = () => done(false);
+  const note = document.createElement("p");
+  note.className = "muted"; note.style.margin = "8px 0 0";
+  note.textContent = "Added types keep their derivations. A name already in the library gets a number, e.g. “root (2)”.";
+  const box = document.createElement("div");
+  box.className = "reslist"; box.style.marginTop = "10px";
+  box.append(add, replace);
+  body.append(box, note, errBox());
+  openModal();
+}
+
+// Returns whether the file loaded.
 function finishImport(text, append) {
   let added;
   try { added = api("load", text, append); }
   catch (e) {
     const msg = "Import failed: " + e.message;
     if (!document.getElementById("modal").hidden) showModalError(msg); else alert(msg);
-    return;
+    return false;
   }
   if (!document.getElementById("modal").hidden) closeModal();
   refreshAll();
@@ -663,6 +670,303 @@ function finishImport(text, append) {
   const first = added.find(id => nodes.some(n => n.id === id)) || (nodes[0] && nodes[0].id);
   if (first) selectNode(first);
   autosave();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Google Drive
+//
+// The library can be saved to, and opened from, the user's Google Drive. The
+// site has no server, so sign-in is Google's browser flow: Google Identity
+// Services hands the page a short-lived access token (about an hour), kept
+// in memory only -- never stored -- and the page calls the Drive API with it.
+// The permission asked for is drive.file: the app sees only the files it
+// created (or the user opened with it), nothing else in the Drive.
+//
+// This browser remembers which Drive file the library is linked to, and that
+// file's modification time when it was last saved or loaded here. Saving
+// checks it first: if the Drive copy changed since (another device, say), it
+// asks before overwriting.
+// ---------------------------------------------------------------------------
+const DRIVE_CLIENT_ID = "241123548928-gun9itg48t919k874ahn31v3m1hv48mk.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_KEY = "tropcurves.drive.v1";            // the linked file, per browser
+const DRIVE_API = "https://www.googleapis.com/drive/v3";
+const DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3";
+const drive = { token: null, expires: 0, client: null, pending: null, user: null, gis: null };
+
+function loadDriveLink() {
+  try { return JSON.parse(localStorage.getItem(DRIVE_KEY) || "null"); } catch (e) { return null; }
+}
+function saveDriveLink(link) {
+  try {
+    if (link) localStorage.setItem(DRIVE_KEY, JSON.stringify(link));
+    else localStorage.removeItem(DRIVE_KEY);
+  } catch (e) { /* ignore */ }
+}
+
+function loadGis() {
+  if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+  if (!drive.gis) drive.gis = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => { drive.gis = null; reject(new Error("could not load Google sign-in (are you offline?)")); };
+    document.head.appendChild(s);
+  });
+  return drive.gis;
+}
+
+const driveSignedIn = () => !!drive.token && Date.now() < drive.expires - 60000;
+
+function driveTokenClient() {
+  if (!drive.client) {
+    const settle = (ok, value) => {
+      const p = drive.pending; drive.pending = null;
+      if (p) (ok ? p.resolve : p.reject)(value);
+    };
+    drive.client = google.accounts.oauth2.initTokenClient({
+      client_id: DRIVE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: resp => {
+        if (!resp || resp.error) { settle(false, new Error((resp && (resp.error_description || resp.error)) || "sign-in failed")); return; }
+        drive.token = resp.access_token;
+        drive.expires = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+        settle(true);
+      },
+      error_callback: err => settle(false, new Error(
+        err && err.type === "popup_closed" ? "sign-in was cancelled"
+        : err && err.type === "popup_failed_to_open" ? "the browser blocked Google's sign-in window; allow pop-ups for this site"
+        : (err && err.message) || "sign-in failed")),
+    });
+  }
+  return drive.client;
+}
+
+// A token, asking Google for one if there is none. Google's window may open,
+// which browsers allow only straight from a click -- so call this directly in
+// a click handler, before awaiting anything (Google's script must be loaded).
+function ensureDriveToken() {
+  if (driveSignedIn()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    drive.pending = { resolve, reject };
+    driveTokenClient().requestAccessToken({ prompt: "" });
+  });
+}
+
+function driveSignOut() {
+  const t = drive.token;
+  drive.token = null; drive.expires = 0; drive.user = null;
+  try { if (t) google.accounts.oauth2.revoke(t, () => {}); } catch (e) { /* ignore */ }
+}
+
+async function driveFetch(url, opts = {}) {
+  const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: "Bearer " + drive.token } });
+  if (r.status === 401) {
+    drive.token = null;
+    throw new Error("your Google session expired; press the button again to sign back in");
+  }
+  if (!r.ok) {
+    let msg = r.status + " " + r.statusText;
+    try { const j = await r.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e) { /* keep */ }
+    const err = new Error("Google Drive: " + msg);
+    err.status = r.status;
+    throw err;
+  }
+  return r;
+}
+
+const FILE_FIELDS = "id,name,modifiedTime";
+
+async function driveWhoAmI() {
+  const r = await driveFetch(`${DRIVE_API}/about?fields=user(displayName,emailAddress)`);
+  return (await r.json()).user;
+}
+async function driveListFiles() {
+  const q = encodeURIComponent("trashed=false and mimeType='application/json'");
+  const r = await driveFetch(`${DRIVE_API}/files?q=${q}&orderBy=modifiedTime%20desc&pageSize=100&spaces=drive&fields=files(${FILE_FIELDS})`);
+  return (await r.json()).files || [];
+}
+async function driveMeta(id) {
+  const r = await driveFetch(`${DRIVE_API}/files/${encodeURIComponent(id)}?fields=${FILE_FIELDS},trashed`);
+  return r.json();
+}
+async function driveDownload(id) {
+  const r = await driveFetch(`${DRIVE_API}/files/${encodeURIComponent(id)}?alt=media`);
+  return r.text();
+}
+async function driveCreate(name, text) {
+  const boundary = "tropcurves" + Math.random().toString(36).slice(2);
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify({ name: name, mimeType: "application/json" }) +
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` + text + `\r\n--${boundary}--`;
+  const r = await driveFetch(`${DRIVE_UPLOAD}/files?uploadType=multipart&fields=${FILE_FIELDS}`, {
+    method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body: body });
+  return r.json();
+}
+async function driveUpdate(id, text) {
+  const r = await driveFetch(`${DRIVE_UPLOAD}/files/${encodeURIComponent(id)}?uploadType=media&fields=${FILE_FIELDS}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: text });
+  return r.json();
+}
+
+function fmtWhen(iso) {
+  try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+}
+
+function openDriveDialog() {
+  const body = dialogHead("Google Drive",
+    "Save the library to your Google Drive, or open one saved there. The app can " +
+    "see only the files it saved itself, nothing else in your Drive.");
+  const panel = document.createElement("div");
+  panel.className = "drive-panel";
+  const status = document.createElement("div");
+  status.className = "status";
+  body.append(panel, status, errBox());
+  openModal();
+  const say = (text, warn) => { status.textContent = text || ""; status.className = "status" + (warn ? " warn" : ""); };
+  const fail = e => { say(e.message, true); draw(); };
+  const button = (text, cls, onclick) => {
+    const b = document.createElement("button");
+    b.type = "button"; if (cls) b.className = cls;
+    b.textContent = text; b.onclick = onclick;
+    return b;
+  };
+  const section = title => {
+    const h = document.createElement("h3");
+    h.className = "eval-head"; h.textContent = title;
+    panel.appendChild(h);
+  };
+  // every Drive action: token first (from the click itself), then the work
+  const act = (work, busyText) => {
+    say(busyText || "Working…");
+    ensureDriveToken()
+      .then(async () => { if (!drive.user) drive.user = await driveWhoAmI(); return work(); })
+      .catch(fail);
+  };
+
+  const saveTo = async (link, force) => {
+    const text = api("save");
+    if (!force) {
+      let meta = null;
+      try { meta = await driveMeta(link.id); }
+      catch (e) { if (e.status !== 404) throw e; }
+      if (!meta || meta.trashed) {
+        saveDriveLink(null);
+        await relist();
+        say(`“${link.name}” is no longer in your Drive; save the library as a new file instead.`, true);
+        draw(); return;
+      }
+      if (link.modifiedTime && meta.modifiedTime !== link.modifiedTime) {
+        confirmOverwrite(link, meta); return;
+      }
+    }
+    const out = await driveUpdate(link.id, text);
+    saveDriveLink({ id: out.id, name: out.name, modifiedTime: out.modifiedTime, at: new Date().toISOString() });
+    await relist();
+    say(`Saved to “${out.name}” in your Drive.`);
+    draw();
+  };
+  const confirmOverwrite = (link, meta) => {
+    panel.innerHTML = "";
+    const p = document.createElement("p");
+    p.className = "drive-warn";
+    p.textContent = `“${meta.name}” in your Drive was changed on ${fmtWhen(meta.modifiedTime)}, ` +
+      "after this browser last saved or opened it (from another device, perhaps). " +
+      "Saving now replaces that version.";
+    panel.append(p, row([
+      button("Overwrite it", "danger", () => act(() => saveTo(link, true), "Saving…")),
+      button("Save as a new file instead", "", () => act(() => saveNew(), "Saving…")),
+      button("Cancel", "", () => { say(""); draw(); }),
+    ]));
+    say("");
+  };
+  let nameInput = null;
+  const saveNew = async () => {
+    const raw = (nameInput && nameInput.value.trim()) || "tropical-library";
+    const name = /\.json$/i.test(raw) ? raw : raw + ".json";
+    const out = await driveCreate(name, api("save"));
+    saveDriveLink({ id: out.id, name: out.name, modifiedTime: out.modifiedTime, at: new Date().toISOString() });
+    await relist();
+    say(`Saved as “${out.name}” in your Drive.`);
+    draw();
+  };
+  const openFile = async f => {
+    const text = await driveDownload(f.id);
+    say("");
+    offerImport(text, f.name, append => {
+      // replacing the library makes it this file's; adding to it does not
+      if (!append) saveDriveLink({ id: f.id, name: f.name, modifiedTime: f.modifiedTime, at: new Date().toISOString() });
+    });
+  };
+  let files = null;
+  const list = async () => { files = await driveListFiles(); say(""); draw(); };
+  // after a save, a list already on show is out of date
+  const relist = async () => { if (files !== null) files = await driveListFiles(); };
+
+  const draw = () => {
+    panel.innerHTML = "";
+    if (!driveSignedIn()) {
+      const p = document.createElement("p");
+      p.className = "muted"; p.style.margin = "0 0 8px";
+      p.textContent = "Sign in with the Google account whose Drive you want to use. " +
+        "Google asks once for permission; the sign-in lasts about an hour, or until the page is reloaded.";
+      panel.append(p, row([button("Sign in with Google", "primary", () => act(list, "Signing in…"))]));
+      return;
+    }
+    const who = document.createElement("div");
+    who.className = "drive-who";
+    const u = drive.user || {};
+    who.textContent = "Signed in as " + (u.displayName ? `${u.displayName} (${u.emailAddress})` : u.emailAddress || "your Google account");
+    who.appendChild(button("Sign out", "small", () => { driveSignOut(); files = null; say("Signed out."); draw(); }));
+    panel.appendChild(who);
+
+    section("Save the library");
+    const link = loadDriveLink();
+    if (link) {
+      const p = document.createElement("p");
+      p.className = "muted"; p.style.margin = "0 0 6px";
+      p.textContent = `Linked to “${link.name}”` + (link.at ? `, last saved or opened here ${fmtWhen(link.at)}.` : ".");
+      panel.append(p, row([
+        button(`Save to “${link.name}”`, "primary", () => act(() => saveTo(link, false), "Saving…")),
+        button("Unlink", "small", () => { saveDriveLink(null); say(""); draw(); }),
+      ]));
+    }
+    nameInput = document.createElement("input");
+    nameInput.type = "text"; nameInput.id = "drive-name";
+    nameInput.value = link ? link.name.replace(/\.json$/i, "") + " copy" : "tropical-library";
+    panel.append(labeled(link ? "Or save as a new file" : "File name", nameInput),
+                 row([button("Save as a new file", link ? "" : "primary", () => act(saveNew, "Saving…"))]));
+
+    section("Open from Drive");
+    if (files === null) {
+      panel.appendChild(row([button("Show my files", "", () => act(list, "Loading…"))]));
+      return;
+    }
+    if (!files.length) {
+      const p = document.createElement("p");
+      p.className = "muted"; p.style.margin = "0";
+      p.textContent = "No library files saved by this app yet.";
+      panel.appendChild(p);
+    }
+    const ul = document.createElement("div");
+    ul.className = "drive-files";
+    files.forEach(f => {
+      const r = document.createElement("div");
+      r.className = "drive-file";
+      const name = document.createElement("span");
+      name.className = "tname"; name.textContent = f.name;
+      const when = document.createElement("span");
+      when.className = "muted"; when.textContent = fmtWhen(f.modifiedTime);
+      r.append(name, when, button("Open", "small", () => act(() => openFile(f), "Opening…")));
+      ul.appendChild(r);
+    });
+    panel.append(ul, row([button("Refresh", "small", () => act(list, "Loading…"))]));
+  };
+
+  say("Loading Google sign-in…");
+  loadGis().then(() => { say(""); draw(); }, e => say(e.message, true));
 }
 
 function openNewDialog() {

@@ -321,3 +321,10 @@ details.dbg summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   width: 100%; box-sizing: border-box; margin-top: 6px; font: 13px ui-monospace, Menlo, Consolas, monospace;
   padding: 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical;
 }
+
+/* Google Drive dialog */
+.drive-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.drive-files { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; font-size: 13px; margin-bottom: 8px; }
+.drive-file { display: contents; }
+.drive-file .tname { overflow-wrap: anywhere; }
+.drive-warn { margin: 0 0 10px; color: var(--warn); }
