@@ -141,3 +141,19 @@ def test_columns_are_sorted_by_edge_name():
     out = evaluation_matrix(c, "p", [{"kind": "x", "marking": "m"}], require_square=False)
     assert out["columns"] == ["x0", "y0", "e2", "e10"]
     assert out["matrix"] == [[1, 0, 0, 1]]
+
+
+def test_columns_can_be_reordered():
+    c = _four_ended()
+    fs = [{"kind": "x", "marking": "m1"}, {"kind": "y", "marking": "m1"}, {"kind": "x", "marking": "m2"}]
+    base = evaluation_matrix(c, "v0", fs)
+    assert base["column_keys"] == ["x0", "y0", "e"]
+    moved = evaluation_matrix(c, "v0", fs, columns=["e", "x0", "y0"])
+    assert moved["columns"] == ["e", "x0", "y0"]
+    assert moved["matrix"] == [[r[2], r[0], r[1]] for r in base["matrix"]]
+    assert moved["det"] == base["det"]            # a 3-cycle is even
+    swapped = evaluation_matrix(c, "v0", fs, columns=["y0", "x0", "e"])
+    assert swapped["det"] == -base["det"]         # a transposition flips the sign
+    assert [d["key"] for d in setup(c)["columns"]] == ["x0", "y0", "e"]
+    with pytest.raises(ValueError):
+        evaluation_matrix(c, "v0", fs, columns=["x0", "e"])

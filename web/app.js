@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "44";
+const APP_VERSION = "45";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -3046,7 +3046,15 @@ function openEvalDialog() {
            : (setup.roots[0] ? setup.roots[0].vertex : null);
   let fns = (saved ? saved.fns : setup.default_functions)
     .filter(valid).map(f => JSON.parse(JSON.stringify(f)));
-  const remember = () => evalState.set(nodeId, { root, fns: JSON.parse(JSON.stringify(fns)) });
+  // column order: keys from the setup (x0, y0, bounded edge ids)
+  const defaultCols = setup.columns.map(c => c.key);
+  const colLabel = {}; setup.columns.forEach(c => colLabel[c.key] = c.label);
+  let cols = saved && saved.cols && saved.cols.length === defaultCols.length
+             && saved.cols.every(k => colLabel[k] !== undefined) ? saved.cols.slice() : defaultCols.slice();
+  // folds: the functions open, the column order shut, unless changed this session
+  const folds = Object.assign({ fns: true, cols: false }, saved && saved.folds);
+  const remember = () => evalState.set(nodeId, {
+    root, fns: JSON.parse(JSON.stringify(fns)), cols: cols.slice(), folds: Object.assign({}, folds) });
 
   // root: markings first, then the other vertices, each alphabetically
   const rootSel = document.createElement("select");
@@ -3063,9 +3071,23 @@ function openEvalDialog() {
   rootSel.onchange = () => { root = rootSel.value; remember(); stale(); };
   body.appendChild(labeled("Root vertex", rootSel));
 
-  const head = document.createElement("h3");
-  head.className = "eval-head";
-  head.textContent = "Evaluation functions";
+  // a foldable section of the dialog; `key` names its fold state
+  const section = (key, title, id) => {
+    const det = document.createElement("details");
+    det.className = "eval-section"; det.id = id;
+    det.open = folds[key];
+    const sum = document.createElement("summary");
+    const h = document.createElement("h3");
+    h.className = "eval-head"; h.textContent = title;
+    const note = document.createElement("span");
+    note.className = "muted eval-sum-note";
+    sum.append(h, note);
+    det.appendChild(sum);
+    det.addEventListener("toggle", () => { folds[key] = det.open; remember(); });
+    return { det, note };
+  };
+  const fnSec = section("fns", "Evaluation functions", "eval-fns-section");
+  const colSec = section("cols", "Column order", "eval-cols-section");
   const list = document.createElement("div");
   list.className = "eval-fns";
   const status = document.createElement("div");
@@ -3165,22 +3187,58 @@ function openEvalDialog() {
       : k < n ? `${k} of ${n} functions — add ${n - k} more.` : `${k} of ${n} functions — remove ${k - n}.`;
     go.disabled = !(k === n && !bad && root);
     add.disabled = !newFunction();
+    fnSec.note.textContent = `${k} of ${n}`;
+  };
+  // the column order: drag the coordinates into place
+  const colList = document.createElement("div");
+  colList.className = "eval-cols";
+  const colsDefault = document.createElement("button");
+  colsDefault.className = "small"; colsDefault.textContent = "Default order";
+  colsDefault.title = "x0, y0, then the bounded edges by name";
+  const drawCols = () => {
+    colList.innerHTML = "";
+    cols.forEach((key, i) => {
+      const r = document.createElement("div");
+      r.className = "eval-col sort-item";
+      r.dataset.key = key;
+      const num = document.createElement("span");
+      num.className = "muted eval-num"; num.textContent = (i + 1) + ".";
+      const name = document.createElement("span");
+      name.className = "eval-col-name"; name.textContent = colLabel[key];
+      const what = document.createElement("span");
+      what.className = "muted";
+      what.textContent = key === "x0" ? "x of the root" : key === "y0" ? "y of the root" : "edge length";
+      r.append(sortGrip(`column ${colLabel[key]}`), num, name, what);
+      colList.appendChild(r);
+    });
+    const custom = cols.some((k, i) => k !== defaultCols[i]);
+    colSec.note.textContent = custom ? cols.map(k => colLabel[k]).join(", ") : "default";
+    colsDefault.disabled = !custom;
   };
   const stale = () => { result.innerHTML = ""; };
   const changed = () => { remember(); stale(); draw(); };
+  const colsChanged = () => { remember(); stale(); drawCols(); };
   makeSortable(list, (from, to) => { moveInArray(fns, from, to); changed(); });
+  makeSortable(colList, (from, to) => { moveInArray(cols, from, to); colsChanged(); });
+  colsDefault.onclick = () => { cols = defaultCols.slice(); colsChanged(); };
   add.onclick = () => { const f = newFunction(); if (f) { fns.push(f); changed(); } };
   reset.onclick = () => { fns = JSON.parse(JSON.stringify(setup.default_functions)); changed(); };
   go.onclick = () => {
     let out;
-    try { out = api("evaluation_matrix", nodeId, root, fns); }
+    try { out = api("evaluation_matrix", nodeId, root, fns, cols); }
     catch (e) { showModalError(e.message); return; }
     showModalError("");
     renderEvalResult(result, out);
   };
 
-  body.append(head, list, status, row([add, reset]), row([go]), result, errBox());
+  fnSec.det.append(list, row([add, reset]));
+  const colHint = document.createElement("p");
+  colHint.className = "muted"; colHint.style.margin = "0 0 6px";
+  colHint.textContent = "Drag the coordinates by ⠿ into the order the matrix's columns should have.";
+  colSec.det.append(colHint, colList, row([colsDefault]));
+  body.append(fnSec.det, colSec.det, status, row([go]), result, errBox());
   draw();
+  drawCols();
   openModal();
 }
 

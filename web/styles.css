@@ -347,3 +347,14 @@ details.dbg summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 22%, transparent);
 }
 body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+
+/* evaluation matrix: foldable sections and the column order */
+.eval-section { margin-top: 10px; }
+.eval-section > summary { cursor: pointer; list-style: revert; display: list-item; }
+.eval-section > summary::marker { color: var(--muted); }
+.eval-section > summary .eval-head { display: inline; margin: 0; }
+.eval-section[open] > summary { margin-bottom: 8px; }
+.eval-sum-note { font-size: 12px; margin-left: 8px; }
+.eval-cols { display: grid; gap: 4px; margin-bottom: 8px; }
+.eval-col { display: flex; align-items: center; gap: 8px; font-size: 13px; background: var(--panel); border-radius: 8px; }
+.eval-col-name { font-family: ui-monospace, Menlo, Consolas, monospace; min-width: 3em; }
