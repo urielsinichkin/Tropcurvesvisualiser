@@ -288,7 +288,11 @@ columns `x0, y0` then the bounded edges by name:
 The dialog (Actions -> Evaluation matrix...) picks the root from a list of the
 markings, then the unmarked vertices (named by the edges meeting there), each
 sorted by name, the first marking by default; the functions start as x and y
-of every marking and can be added, removed, reordered (drag and drop) and changed. The matrix
+of every marking and can be added, removed, reordered (drag and drop) and changed. The
+columns can be reordered too (drag and drop; `columns=` in
+`evaluation_matrix`, a permutation of `x0, y0` and the edge ids), in a
+"Column order" section that starts folded, while the functions' section
+starts open; both fold, and the choice holds for the session. The matrix
 can only be made with exactly `n` functions (and cross ratios of four different
 legs). It shows with its exact determinant, and exports as text (Python,
 Mathematica, Sage, MATLAB, LaTeX, plain) or as a PNG image with optional

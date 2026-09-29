@@ -120,6 +120,8 @@ def setup(curve: Curve) -> Dict[str, Any]:
         "legs": [{"id": e.id, "name": e.name or e.id, "kind": "marking"} for e in markings]
                 + [{"id": e.id, "name": e.name or e.id, "kind": "end"} for e in ends],
         "bounded": bounded,
+        "columns": [{"key": "x0", "label": "x0"}, {"key": "y0", "label": "y0"}]
+                   + [{"key": b["id"], "label": b["name"]} for b in bounded],
         "n": len(bounded) + 2,
         "default_functions": defaults,
     }
@@ -208,12 +210,20 @@ def rank(m: List[List[int]]) -> int:
     return rk
 
 
+def column_keys(curve: Curve) -> List[str]:
+    """The coordinates of the cell in their default order: ``x0``, ``y0``,
+    then the bounded edges (by id) sorted by name."""
+    return ["x0", "y0"] + [e.id for e in _bounded_by_name(curve)]
+
+
 def evaluation_matrix(curve: Curve, root: str, functions: List[Dict[str, Any]],
-                      require_square: bool = True) -> Dict[str, Any]:
+                      require_square: bool = True,
+                      columns: Optional[List[str]] = None) -> Dict[str, Any]:
     """The matrix of ``functions`` on the cell, with the root vertex ``root``.
 
-    Columns: ``x_0``, ``y_0``, then the bounded edges by name (so related
-    types, sharing edge names, get comparable columns). With
+    Columns: by default ``x_0``, ``y_0``, then the bounded edges by name (so
+    related types, sharing edge names, get comparable columns); ``columns``
+    gives another order, as a permutation of ``column_keys(curve)``. With
     ``require_square`` (the default) there must be exactly ``#bounded + 2``
     functions.
     """
@@ -224,11 +234,20 @@ def evaluation_matrix(curve: Curve, root: str, functions: List[Dict[str, Any]],
     if require_square and len(functions) != n:
         raise ValueError(f"need exactly {n} evaluation functions (#bounded edges + 2), "
                          f"got {len(functions)}")
-    columns = {e.id: i + 2 for i, e in enumerate(bounded)}
-    matrix = [row_of(curve, root, columns, f) for f in functions]
+    index = {e.id: i + 2 for i, e in enumerate(bounded)}
+    matrix = [row_of(curve, root, index, f) for f in functions]
+    keys = column_keys(curve)
+    labels = ["x0", "y0"] + [e.name or e.id for e in bounded]
+    if columns is not None:
+        if sorted(columns) != sorted(keys):
+            raise ValueError("the column order must list x0, y0 and every bounded edge exactly once")
+        perm = [keys.index(k) for k in columns]
+        matrix = [[r[j] for j in perm] for r in matrix]
+        keys = list(columns)
+        labels = [labels[j] for j in perm]
     out: Dict[str, Any] = {
-        "columns": ["x0", "y0"] + [e.name or e.id for e in bounded],
-        "column_ids": [None, None] + [e.id for e in bounded],
+        "columns": labels,
+        "column_keys": keys,
         "rows": [function_label(curve, f) for f in functions],
         "matrix": matrix,
         "rank": rank(matrix),

@@ -344,9 +344,12 @@ class Session:
         return evaluation.setup(self.ws.nodes[node_id].curve)
 
     def evaluation_matrix(self, node_id: str, root_vertex: str,
-                          functions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """The matrix of ``functions`` on the type's cell (see ``evaluation``)."""
-        return evaluation.evaluation_matrix(self.ws.nodes[node_id].curve, root_vertex, functions)
+                          functions: List[Dict[str, Any]],
+                          columns: Optional[List[str]] = None) -> Dict[str, Any]:
+        """The matrix of ``functions`` on the type's cell (see ``evaluation``),
+        its columns in the order ``columns`` (keys from the setup) if given."""
+        return evaluation.evaluation_matrix(self.ws.nodes[node_id].curve, root_vertex,
+                                            functions, columns=columns)
 
     def refined_multiplicities(self, node_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         ids = list(self.ws.nodes) if node_ids is None else node_ids
