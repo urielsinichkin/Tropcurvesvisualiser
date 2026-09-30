@@ -328,8 +328,11 @@ a warning line with <span class="btn">Try again</span> appears above the picture
 <ul>
   <li>Below the curve, folded by default: click its heading to open it. Each vertex of the curve
       is dual to a cell, each bounded edge to an interior edge of the subdivision.</li>
-  <li>The subdivision shown matches the lengths the curve is drawn with. Parallelogram cells
-      (crossings) are shaded orange.</li>
+  <li>The subdivision shown matches the lengths the curve is drawn with. Cells are colored by what
+      they are dual to: an ordinary vertex (green), a <strong>marked vertex</strong> (violet), or a
+      <strong>crossing</strong> of the drawing (orange, always a parallelogram). A legend under the picture
+      names the colors present. A marking part-way along an edge sits on no vertex of the plane curve, so
+      it has no cell of its own; only markings at vertices color a cell.</li>
   <li>If no subdivision can be built, a note explains why.</li>
   <li><strong>subdivision text (debug)</strong>: the cells as text, with <span class="btn">Copy</span>.
       Useful for the <a href="#new">paste box</a>.</li>

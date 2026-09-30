@@ -87,6 +87,13 @@ edges -> ends, direction = 90-degree primitive normal, weight = lattice length),
 resolve parallelograms as crossings, and validate the **parametrizing curve is a
 tree** (genus 0) — rather than rejecting interior vertices outright.
 
+Each cell records the curve vertex it is dual to (`SubdivisionCell.vertex`;
+None for a crossing's parallelogram), and the render data passes it on
+(`cell_vertices`, plus `marked` for vertices carrying a marking). The view
+colors cells by that: ordinary vertex, marked vertex (violet), crossing
+(orange) -- a 4-valent vertex's parallelogram is a vertex, not a crossing --
+with a legend when marked or crossing cells are present.
+
 ### 2.5 Layout (readability is a first-class goal)
 
 Slopes are fixed, so only **lengths** and a root position are free. The layout
