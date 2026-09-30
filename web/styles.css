@@ -358,3 +358,13 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .eval-cols { display: grid; gap: 4px; margin-bottom: 8px; }
 .eval-col { display: flex; align-items: center; gap: 8px; font-size: 13px; background: var(--panel); border-radius: 8px; }
 .eval-col-name { font-family: ui-monospace, Menlo, Consolas, monospace; min-width: 3em; }
+
+/* type descriptions */
+.type-desc {
+  font: inherit; font-size: 13px; width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2em;
+  padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.type-item .tdesc {
+  display: block; font-size: 12px; color: var(--muted); font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

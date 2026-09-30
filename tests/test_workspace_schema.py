@@ -97,3 +97,29 @@ def test_a_file_written_before_chains_still_loads():
     assert ws2.nodes[root.id].operations == []
     ws2.set_color(root.id, "a", "#0000ff")     # and still propagates
     assert ws2.nodes[child.id].curve.edges["a"].color == "#0000ff"
+
+
+
+def test_description_round_trips_and_defaults_to_empty():
+    import json
+    from tropcurves.api import Session
+    s = Session()
+    a = s.add_preset("line")
+    b = s.add_preset("caterpillar_square")
+    assert s.node_summary(a["id"])["description"] == ""
+    s.set_description(a["id"], "the line through two points\nsecond line")
+    text = s.save()
+    nodes = {n["id"]: n for n in json.loads(text)["nodes"]}
+    assert nodes[a["id"]]["description"] == "the line through two points\nsecond line"
+    assert "description" not in nodes[b["id"]]          # empty ones are not written
+    t = Session(); t.load(text)
+    assert t.node_summary(a["id"])["description"] == "the line through two points\nsecond line"
+    assert t.node_summary(b["id"])["description"] == ""
+    # a duplicate keeps it; a derived type starts empty
+    dup = t.duplicate(a["id"])
+    assert dup["description"] == "the line through two points\nsecond line"
+    edge = next(e["id"] for e in t.render(b["id"])["curve"]["edges"] if e["kind"] == "bounded")
+    child = t.contract(b["id"], edge)
+    assert child["description"] == ""
+    t.set_description(a["id"], "")
+    assert t.node_summary(a["id"])["description"] == ""
