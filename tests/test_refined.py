@@ -271,3 +271,64 @@ def test_split_at_q_1_only_needs_the_classical_values_to_balance():
     classical = s.balanced_split(ids, True)
     assert classical["ok"] and classical["found"] and classical["at_q_1"]
     assert classical["value"] == "4" and classical["total"] == "8"
+
+
+
+def _brute_maximal(vals):
+    """All maximal balanced subsets, by brute force over sign choices."""
+    import itertools
+    n = len(vals)
+    balanced = set()
+    for signs in itertools.product((0, 1, -1), repeat=n):
+        if any(signs) and sum(s * v for s, v in zip(signs, vals)) == 0:
+            balanced.add(sum(1 << i for i, s in enumerate(signs) if s))
+    return {m for m in balanced if not any(m != o and m & o == m for o in balanced)}
+
+
+def test_maximal_balanced_subsets_match_brute_force():
+    import random
+    from fractions import Fraction
+    from tropcurves.refined import maximal_balanced_subsets
+    rng = random.Random(7)
+    for _ in range(40):
+        vals = [Fraction(rng.randint(1, 12)) for _ in range(rng.randint(2, 8))]
+        got = maximal_balanced_subsets(vals)
+        assert {m for m, _ in got} == _brute_maximal(vals), vals
+        for members, plus in got:            # the witness really balances
+            a = sum(v for i, v in enumerate(vals) if plus >> i & 1)
+            b = sum(v for i, v in enumerate(vals) if members >> i & 1 and not plus >> i & 1)
+            assert plus & ~members == 0 and a == b
+        sizes = [bin(m).count("1") for m, _ in got]
+        assert sizes == sorted(sizes, reverse=True)
+
+
+def test_maximal_balanced_subsets_of_refined_values():
+    from tropcurves.refined import RefinedValue, Laurent, maximal_balanced_subsets
+    q = lambda *c: RefinedValue.of(Laurent.of(0, c))
+    a, b, c, d = q(1, 1), q(1, 1), q(2, 0, 1), q(1, 2)     # a = b; nothing else balances
+    got = maximal_balanced_subsets([a, b, c, d])
+    assert [m for m, _ in got] == [0b0011]
+    assert maximal_balanced_subsets([q(1, 1), q(2, 2), q(1, 1)])[0][0] == 0b111   # 1+1 = 2
+
+
+def test_session_maximal_balanced_subsets():
+    from tropcurves.api import Session
+    s = Session()
+    a = s.add_curve({"vertices": ["v"], "bounded": [],
+                     "ends": [{"id": "a", "tail": "v", "vec": [-2, 0]},
+                              {"id": "b", "tail": "v", "vec": [0, -2]},
+                              {"id": "c", "tail": "v", "vec": [2, 2]}]}, name="A")
+    b = s.add_curve({"vertices": ["v0", "v1"],
+                     "bounded": [{"id": "e", "tail": "v0", "head": "v1"}],
+                     "ends": [{"id": "a", "tail": "v0", "vec": [-1, 0]},
+                              {"id": "b", "tail": "v0", "vec": [1, -2]},
+                              {"id": "c", "tail": "v1", "vec": [-1, 1]},
+                              {"id": "d", "tail": "v1", "vec": [1, 1]}]}, name="B")
+    line = s.add_preset("line")
+    ids = [a["id"], b["id"], line["id"]]
+    refined = s.maximal_balanced_subsets(ids)
+    assert refined["ok"] and refined["count"] == 0         # refined values all differ
+    classical = s.maximal_balanced_subsets(ids, True)       # 4, 4, 1 at q = 1
+    assert classical["count"] == 1
+    r = classical["results"][0]
+    assert sorted(r["members"]) == sorted([a["id"], b["id"]]) and r["value"] == "4"

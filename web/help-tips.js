@@ -163,6 +163,7 @@ const HELP = {
         <li>Types in the Types panel's order; <b>▾ / ▸</b> and <b>Collapse all</b> fold subtrees (a folded row shows how many it hides and how many are ticked).</li>
         <li>Nothing is ticked at first; tick types (or click names), or <b>Select all</b> / <b>Select none</b>. Undefined ones cannot be ticked.</li>
         <li><b>Check for a balanced split</b> — is there a way to split the ticked types into two groups with equal total multiplicity? Shows the groups and the common value (2 to 26 types).</li>
+        <li><b>Find the maximal balanced sub-collections</b> — when the ticked set does not balance: every largest part of it that does, with its two halves; <b>Tick only these</b> selects one (up to 22 types).</li>
         <li><b>Only the values at q = 1 have to balance</b> — compare the classical multiplicities only.</li>
       </ul>`,
   },

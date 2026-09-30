@@ -420,6 +420,129 @@ def balanced_split_numbers(values: Sequence[Fraction]) -> Optional[List[int]]:
     return None
 
 
+MAX_MAXIMAL_ITEMS = 22       # 3^(n/2) signed sums per half
+MAX_BALANCED_PAIRS = 2_000_000
+
+
+def _as_integers(values: Sequence) -> List[int]:
+    """Encode values (RefinedValues or numbers) as integers, linearly and so
+    that a signed sum of them is zero exactly when the values' is.
+
+    Refined values are brought to a common denominator and their numerators'
+    coefficients read as the digits of one integer in a balanced base big
+    enough that no signed sum of these values can carry between digits.
+    """
+    if not values:
+        return []
+    if all(isinstance(v, RefinedValue) for v in values):
+        k = max(v.den_power for v in values)
+        nums = [v._lift(k) for v in values]
+        low = min((p.low for p in nums if p.coeffs), default=0)
+        high = max((p.low + len(p.coeffs) for p in nums if p.coeffs), default=0)
+        vectors = []
+        for p in nums:
+            vec = [0] * max(high - low, 1)
+            for i, c in enumerate(p.coeffs):
+                vec[p.low - low + i] = c
+            vectors.append(vec)
+    else:
+        fr = [Fraction(v) for v in values]
+        den = 1
+        for f in fr:
+            den = den * f.denominator // _gcd(den, f.denominator)
+        vectors = [[int(f * den)] for f in fr]
+    m = max((abs(c) for vec in vectors for c in vec), default=0) or 1
+    base = 2 * len(vectors) * m + 1
+    out = []
+    for vec in vectors:
+        x = 0
+        for c in reversed(vec):
+            x = x * base + c
+        out.append(x)
+    return out
+
+
+def _gcd(a: int, b: int) -> int:
+    while b:
+        a, b = b, a % b
+    return a
+
+
+def _signed_sums(vals: Sequence[int], offset: int):
+    """Every choice of +, - or left out for each value: parallel lists of the
+    signed sum, the chosen ones (bit mask) and the ones taken with + (mask)."""
+    sums, used, plus = [0], [0], [0]
+    for i, v in enumerate(vals):
+        b = 1 << (offset + i)
+        with_b = [u | b for u in used]
+        sums = sums + [s + v for s in sums] + [s - v for s in sums]
+        used = used + with_b + with_b
+        plus = plus + [p | b for p in plus] + plus
+    return sums, used, plus
+
+
+def maximal_balanced_subsets(values: Sequence) -> List[Tuple[int, int]]:
+    """The maximal sub-collections that split into two halves of equal total.
+
+    A sub-collection S of the values is *balanced* (splitable) when it can be
+    divided into two parts with the same sum -- when some choice of signs
+    makes its signed sum zero. It is *maximal* when no strictly larger
+    balanced sub-collection contains it. Returns ``(members, plus)`` bit
+    masks, largest first: the members, and one half of a balanced split.
+
+    Meet in the middle: each half's signed sums are tabled (3^(n/2) each);
+    a sum on one side cancelling one on the other gives a balanced set. Only
+    parts that are maximal among their half's parts with the same sum are
+    kept: a maximal balanced set's part in either half must be one (a bigger
+    part with that sum would give a bigger balanced set), and pruning the
+    rest keeps the pairing small even when balanced sets abound.
+    Raises ValueError past MAX_MAXIMAL_ITEMS values, or when the balanced
+    sets are too many to sort through (MAX_BALANCED_PAIRS).
+    """
+    n = len(values)
+    if n > MAX_MAXIMAL_ITEMS:
+        raise ValueError(f"too many curves to search ({n}; the limit here is {MAX_MAXIMAL_ITEMS})")
+    ints = _as_integers(values)
+    half = n // 2
+    side1 = _maximal_by_sum(*_signed_sums(ints[:half], 0))
+    side2 = _maximal_by_sum(*_signed_sums(ints[half:], half))
+    witness: Dict[int, int] = {}          # balanced support -> its plus half
+    pairs = 0
+    for s, parts1 in side1.items():
+        parts2 = side2.get(-s)
+        if not parts2:
+            continue
+        pairs += len(parts1) * len(parts2)
+        if pairs > MAX_BALANCED_PAIRS:
+            raise ValueError("too many balanced sub-collections to sort through; choose fewer types")
+        for u1, p1 in parts1:
+            for u2, p2 in parts2:
+                support = u1 | u2
+                if support and support not in witness:
+                    witness[support] = p1 | p2
+    return [(m, witness[m]) for m in _inclusion_maximal(witness)]
+
+
+def _inclusion_maximal(masks) -> List[int]:
+    """The masks not contained in another, largest first."""
+    out: List[int] = []
+    for m in sorted(masks, key=lambda m: -bin(m).count("1")):
+        if not any(m & o == m for o in out):
+            out.append(m)
+    return out
+
+
+def _maximal_by_sum(sums, used, plus) -> Dict[int, List[Tuple[int, int]]]:
+    """Group a half's (support, plus) by signed sum, keeping for each sum only
+    the supports not contained in another support with that sum."""
+    groups: Dict[int, Dict[int, int]] = {}
+    for s, u, p in zip(sums, used, plus):
+        g = groups.setdefault(s, {})
+        if u not in g:
+            g[u] = p
+    return {s: [(u, g[u]) for u in _inclusion_maximal(g)] for s, g in groups.items()}
+
+
 def _sum_laurent(items: Sequence[Laurent]) -> Laurent:
     out = Laurent(0, ())
     for p in items:

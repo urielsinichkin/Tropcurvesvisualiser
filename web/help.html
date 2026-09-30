@@ -507,8 +507,13 @@ classical (Mikhalkin) multiplicity. Values are exact.</p>
   <li><span class="btn">Check for a balanced split</span>: searches for a way to split the ticked types into
       two groups whose multiplicities have equal sums, and shows the two groups and the common value. If
       there is none, it says so and gives the total. At least two types are needed, and at most 26.</li>
+  <li><strong>Find the maximal balanced sub-collections</strong> (offered when the ticked set does not
+      balance): lists every part of the ticked set that <em>does</em> split into two halves of equal total
+      and is not contained in a larger such part, largest first. Each shows its two halves and their common
+      total, with <span class="btn">Tick only these</span> to make it the selection. It handles up to 22 types
+      (with many types it can take a few seconds) and lists at most 200.</li>
   <li><strong>Only the values at q = 1 have to balance</strong>: compares only the classical
-      multiplicities, not the whole polynomials. The choice is remembered.</li>
+      multiplicities, not the whole polynomials, in both searches. The choice is remembered.</li>
   <li>Ticked types count in the search even while folded away.</li>
 </ul>
 </section>
