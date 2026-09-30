@@ -213,6 +213,12 @@ built, so the refined multiplicity is only computed while its part is open.
   original id and name on the unbounded piece, so slope editing and the Newton
   polygon are unaffected.
 - **Rename**: ends, markings, edges (uniqueness enforced within a type).
+- **Describe**: a type has a free-text description (`TypeNode.description`,
+  `Session.set_description`), empty by default, edited under its name in the
+  edit panel and saved as it is typed. It is written to the workspace file
+  only when non-empty, kept by duplicates, imports and subset exports, and
+  not inherited by derived types. The types list shows its first line under
+  the type's counts, and all of it on hover.
 - **Recolor**: any end, marking, or edge -- from its row in the side panel, or
   painted on the picture: **Paint** opens a color dialog (presets on a fine
   pointer too) with a "keep painting until I press Cancel" checkbox. Unticked,

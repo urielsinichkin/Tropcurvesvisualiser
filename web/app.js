@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "45";
+const APP_VERSION = "46";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -1451,11 +1451,15 @@ function renderTypeList() {
     li.onclick = () => selectNode(n.id);
     const warn = n.status !== "ok" ? `<span class="badge warn">needs attention</span>` : "";
     const hidden = folded ? `<span class="badge" title="derived types folded away">+${countBelow(n)}</span>` : "";
+    // a description shows as one line under the counts; all of it on hover
+    const desc = (n.description || "").trim();
+    if (desc) li.title = desc;
     li.innerHTML = `<span class="tree-indent" style="width:${depth * 14}px"></span>
       <span class="twisty-slot"></span>
       <span style="flex:1;min-width:0">
         <span class="tname">${escapeHtml(n.name)}</span> ${warn} ${hidden}<br/>
         <span class="tmeta">${n.num_ends} ends · ${n.num_bounded} edges · ${n.num_markings} marks${n.parent_id ? (n.follow_parent ? " · follows" : " · detached") : ""}</span>
+        ${desc ? `<span class="tdesc">${escapeHtml(desc.split("\n")[0])}</span>` : ""}
       </span>`;
     if (kids.length) {
       const tw = document.createElement("button");
@@ -2438,6 +2442,28 @@ function renderControls() {
     wrap.className = "ctrl-group";
     const nm = labeled("Name", inputText(summ.name, val => { api("rename_node", selectedId, val); refreshAll(); autosave(); }));
     wrap.appendChild(nm);
+    // free text about the type; saved as it is typed (without redrawing the
+    // panel, which would take the cursor away) and once more on leaving it
+    const desc = document.createElement("textarea");
+    desc.id = "type-description";
+    desc.className = "type-desc";
+    desc.rows = 3;
+    desc.placeholder = "Notes about this type (optional)";
+    desc.value = summ.description || "";
+    const nodeId = selectedId;
+    let timer = null, last = desc.value;
+    const store = () => {
+      clearTimeout(timer); timer = null;
+      if (desc.value === last) return;
+      last = desc.value;
+      try { api("set_description", nodeId, desc.value); } catch (e) { return; }
+      renderTypeList();
+      autosave();
+    };
+    desc.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(store, 600); });
+    desc.addEventListener("change", store);
+    desc.addEventListener("blur", store);
+    wrap.appendChild(labeled("Description", desc));
     if (summ.parent_id) {
       const cb = document.createElement("label");
       cb.className = "edge-row";

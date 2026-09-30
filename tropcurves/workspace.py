@@ -81,6 +81,8 @@ class TypeNode:
     follow_parent: bool = True
     children: List[str] = field(default_factory=list)
     status: str = STATUS_OK
+    description: str = ""
+    """Free text the user keeps about the type; empty unless written."""
 
 
 class Workspace:
@@ -112,7 +114,9 @@ class Workspace:
         still followed the original's parent would just be re-derived away.)
         """
         src = self._get(node_id)
-        return self.add_root(src.curve.copy(), name=name or self._fresh_node_name(src.name))
+        node = self.add_root(src.curve.copy(), name=name or self._fresh_node_name(src.name))
+        node.description = src.description
+        return node
 
     def merge(self, other: "Workspace") -> List[str]:
         """Append every type of ``other`` to this workspace; returns their new ids.
@@ -361,6 +365,9 @@ class Workspace:
 
     def rename_node(self, node_id: str, name: str) -> None:
         self._get(node_id).name = name
+
+    def set_description(self, node_id: str, text: str) -> None:
+        self._get(node_id).description = text or ""
 
     # --- propagation ----------------------------------------------------
     def _propagate(self, node_id: str) -> None:

@@ -167,6 +167,7 @@ class Session:
         return {
             "id": n.id,
             "name": n.name,
+            "description": n.description,
             "parent_id": n.parent_id,
             "children": list(n.children),
             "follow_parent": n.follow_parent,
@@ -218,6 +219,11 @@ class Session:
 
     def rename_node(self, node_id: str, name: str) -> Dict[str, Any]:
         self.ws.rename_node(node_id, name)
+        return self.node_summary(node_id)
+
+    def set_description(self, node_id: str, text: str) -> Dict[str, Any]:
+        """Set a type's description (free text; empty clears it)."""
+        self.ws.set_description(node_id, text)
         return self.node_summary(node_id)
 
     def duplicate(self, node_id: str, name: Optional[str] = None) -> Dict[str, Any]:

@@ -119,23 +119,27 @@ def _operations_from_dict(nd: Dict[str, Any]):
     return [one] if one is not None else []
 
 
+def _node_to_dict(n) -> Dict[str, Any]:
+    d = {
+        "id": n.id,
+        "name": n.name,
+        "parent_id": n.parent_id,
+        "operations": [_operation_to_dict(op) for op in n.operations],
+        "follow_parent": n.follow_parent,
+        "children": list(n.children),
+        "status": n.status,
+        "curve": curve_to_dict(n.curve),
+    }
+    if n.description:            # only when written, so other files stay as they were
+        d["description"] = n.description
+    return d
+
+
 def workspace_to_dict(ws) -> Dict[str, Any]:
     return {
         "schema": SCHEMA_VERSION,
         "kind": "workspace",
-        "nodes": [
-            {
-                "id": n.id,
-                "name": n.name,
-                "parent_id": n.parent_id,
-                "operations": [_operation_to_dict(op) for op in n.operations],
-                "follow_parent": n.follow_parent,
-                "children": list(n.children),
-                "status": n.status,
-                "curve": curve_to_dict(n.curve),
-            }
-            for n in ws.nodes.values()
-        ],
+        "nodes": [_node_to_dict(n) for n in ws.nodes.values()],
     }
 
 
@@ -159,6 +163,7 @@ def workspace_from_dict(d: Dict[str, Any]):
             follow_parent=nd.get("follow_parent", True),
             children=list(nd.get("children", [])),
             status=nd.get("status", "ok"),
+            description=nd.get("description", "") or "",
         )
         ws.nodes[node.id] = node
         m = re.fullmatch(r"T(\d+)", node.id)
