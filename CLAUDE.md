@@ -19,6 +19,11 @@ served by GitHub Pages at https://urielsinichkin.github.io/Tropcurvesvisualiser/
   - zoomable pictures: `makeZoomable`;
   - dialogs listing types: `typeTreeOrder` + `foldableTypeTree`;
   - loading a workspace file: `offerImport` (asks add or replace).
+- Documentation: `web/help.html` is the user guide and `web/help-tips.js` the
+  in-app "?" help (one entry per panel and dialog, each linking to a guide
+  section). A new or changed feature updates both; a new dialog passes its
+  help key to `dialogHead(helpKey, ...)` (or calls `attachDialogHelp`), a new
+  panel adds its "?" in `wirePanelHelp`. Tests check keys and anchors match.
 - Every UI change has to work with a mouse, touch (phone, iPad) and the iPad
   Pencil; check it headless in Chromium with Playwright (CDP touch events for
   touch, `Input.dispatchMouseEvent` with `pointerType: "pen"` for the pen).
