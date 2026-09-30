@@ -320,6 +320,19 @@ cancelled touch puts the item back. The grip is a focusable button, and the
 arrow keys move its item. The caller only supplies `onMove(from, to)`, which
 moves the item in its data and redraws; the list element stays the same.
 
+### 3.4 Help and documentation
+
+`web/help.html` is the user guide: every feature, by panel and dialog, with a
+section anchor each. In the app, every panel title and dialog title carries a
+"?" button (`helpButton`); it opens a popover with the purpose and all the
+features and buttons of that panel or dialog (text in `web/help-tips.js`, keyed
+by panel/dialog), linking to the guide's section. The popover is click/tap
+based (works with touch and the Pencil), stays beside its button while
+scrolling, and closes on an outside click, its ✕, Escape or the "?" again. The
+top bar's "? Help" gives an overview of the top bar. Dialogs get their button
+through `dialogHead(helpKey, ...)`/`attachDialogHelp`; `openModal` warns if a
+dialog has none, and tests check that every key has text and a guide anchor.
+
 ## 4. Derivation tree and propagation
 
 Types form a **forest**: contraction/resolution create a **child** with a

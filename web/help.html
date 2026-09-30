@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tropical Curves — User Guide</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1e; --muted: #6b6b70; --line: #e2e2dc;
+  --accent: #2e6e4f; --warn: #a86b00; --code: #f0f0ea;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --panel: #1f2023; --ink: #ececea; --muted: #a0a0a6; --line: #34353a;
+    --accent: #7fc4a0; --warn: #e0b04a; --code: #2a2b2f;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+a { color: var(--accent); }
+header.top {
+  background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+header.top h1 { margin: 0; font-size: 20px; }
+header.top a.app { text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--bg); }
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; max-width: 1180px; margin: 0 auto; padding: 20px; }
+nav.toc { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+nav.toc strong { display: block; margin-bottom: 6px; }
+nav.toc ol { margin: 0; padding-left: 20px; }
+nav.toc ol ol { padding-left: 16px; font-size: 13px; }
+nav.toc li { margin: 2px 0; }
+nav.toc a { text-decoration: none; color: var(--ink); }
+nav.toc a:hover { color: var(--accent); }
+main { min-width: 0; }
+section.doc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 22px 14px; margin-bottom: 18px; }
+h2 { font-size: 21px; margin: 18px 0 8px; }
+h3 { font-size: 17px; margin: 18px 0 6px; }
+h4 { font-size: 15px; margin: 14px 0 4px; }
+p, li { max-width: 78ch; }
+code, kbd { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--code); border-radius: 4px; padding: 1px 5px; }
+kbd { border: 1px solid var(--line); }
+.btn { display: inline-block; font-size: 13px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; background: var(--bg); white-space: nowrap; }
+.note { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 10px 0; }
+.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); }
+table { border-collapse: collapse; margin: 8px 0; font-size: 14px; width: 100%; }
+th, td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+th { background: var(--bg); font-weight: 600; }
+.small { font-size: 13px; color: var(--muted); }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; padding: 12px; }
+  nav.toc { position: static; max-height: none; }
+  section.doc { padding: 2px 14px 10px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Tropical Curves — User Guide</h1>
+  <a class="app" href="index.html">← Back to the app</a>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#start">Getting started</a></li>
+    <li><a href="#concepts">Concepts</a></li>
+    <li><a href="#screen">The screen</a>
+      <ol>
+        <li><a href="#topbar">Top bar</a></li>
+        <li><a href="#resize">Panels, phones and tablets</a></li>
+      </ol></li>
+    <li><a href="#new">Creating types</a>
+      <ol>
+        <li><a href="#editor">Drawing a subdivision</a></li>
+      </ol></li>
+    <li><a href="#types">The types panel</a></li>
+    <li><a href="#curve">The curve view</a>
+      <ol>
+        <li><a href="#drawing">How curves are drawn</a></li>
+        <li><a href="#zoom">Zoom</a></li>
+        <li><a href="#paint">Paint mode</a></li>
+        <li><a href="#copy">Copying pictures</a></li>
+      </ol></li>
+    <li><a href="#subdivision">Dual subdivision</a></li>
+    <li><a href="#edit">The edit panel</a>
+      <ol>
+        <li><a href="#edit-type">Type</a></li>
+        <li><a href="#edit-mult">Refined multiplicity</a></li>
+        <li><a href="#edit-actions">Actions</a></li>
+        <li><a href="#edit-lists">Markings, edges &amp; ends</a></li>
+        <li><a href="#layout">Panel layout</a></li>
+      </ol></li>
+    <li><a href="#ops">Operations</a>
+      <ol>
+        <li><a href="#picking">Picking on the picture</a></li>
+        <li><a href="#slope">Edit an end's slope</a></li>
+        <li><a href="#marking">Add a marking</a></li>
+        <li><a href="#contract">Contract an edge</a></li>
+        <li><a href="#resolve">Resolve a vertex</a></li>
+        <li><a href="#delete">Delete a type</a></li>
+      </ol></li>
+    <li><a href="#propagation">Derived types &amp; propagation</a></li>
+    <li><a href="#multiplicity">Multiplicities &amp; balanced splits</a></li>
+    <li><a href="#evaluation">Evaluation matrix</a></li>
+    <li><a href="#files">Saving, files &amp; Google Drive</a>
+      <ol>
+        <li><a href="#autosave">Autosave</a></li>
+        <li><a href="#export">Export</a></li>
+        <li><a href="#import">Import</a></li>
+        <li><a href="#drive">Google Drive</a></li>
+      </ol></li>
+    <li><a href="#settings">Display settings</a></li>
+    <li><a href="#reorder">Reordering lists</a></li>
+    <li><a href="#input">Mouse, touch, Pencil &amp; keyboard</a></li>
+    <li><a href="#help">Help in the app</a></li>
+    <li><a href="#faq">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section class="doc" id="start">
+<h2>1. Getting started</h2>
+<p>This tool builds and studies <strong>combinatorial types of rational plane tropical
+curves</strong>. Each one is a tree with a direction on every edge, balanced at every vertex,
+possibly with marked points. You create types, derive new ones from them by contracting
+edges, resolving vertices and adding markings, and compute their refined multiplicities and
+evaluation matrices. Everything runs in your browser. All arithmetic is exact, and the library
+is saved automatically on your device.</p>
+<p><strong>A first session:</strong></p>
+<ol>
+  <li>The app opens with a sample curve (a 4-ended curve) selected. To start another, press
+      <span class="btn">New</span> and pick a preset or draw a subdivision (<a href="#new">Creating types</a>).</li>
+  <li>The middle of the screen shows the curve. Its <em>dual subdivision</em> sits below, folded.</li>
+  <li>The <strong>Edit</strong> panel on the right has the type's name, its refined multiplicity, and
+      <strong>Actions</strong>: edit an end's slope, add a marking, contract an edge, resolve a vertex,
+      and build the evaluation matrix.</li>
+  <li>Contracting or resolving creates a <strong>derived type</strong>. It appears under its parent in
+      the <strong>Types</strong> panel on the left, and follows later edits of the parent
+      (<a href="#propagation">Derived types &amp; propagation</a>).</li>
+  <li>Your work is kept in this browser. Use <span class="btn">Export…</span>,
+      <span class="btn">Import</span> or <span class="btn">☁ Drive…</span> to move it between devices or to share it.</li>
+</ol>
+<div class="note">Every panel and dialog has a <span class="btn">?</span> button. It explains what that
+part does and links back here.</div>
+</section>
+
+<section class="doc" id="concepts">
+<h2>2. Concepts</h2>
+<ul>
+  <li><strong>Type</strong> (combinatorial type): a tree whose vertices are joined by
+      <strong>bounded edges</strong>, with <strong>ends</strong> (unbounded rays) and
+      <strong>markings</strong> attached to vertices. The library holds many types.</li>
+  <li><strong>Direction and weight.</strong> Every bounded edge and end has an integer direction
+      vector. Its weight is the gcd of the coordinates: <code>(4, 0)</code> has weight 4 and primitive
+      direction <code>(1, 0)</code>. Weights above 1 appear in labels, e.g. <code>e1 (w4)</code>.</li>
+  <li><strong>Balancing</strong>: at every vertex, the outgoing direction vectors sum to zero.
+      Bounded edges' directions are solved from the ends by balancing.</li>
+  <li><strong>Marking</strong>: a marked point, a contracted end with direction <code>(0, 0)</code>. It
+      sits at a vertex, or part-way along an edge. In that case the edge is split in two by a new
+      vertex, and the marking hangs there.</li>
+  <li><strong>Valence</strong> of a vertex: the number of edges, ends and markings meeting there.
+      A curve is <em>trivalent</em> when every vertex has valence 3. A vertex with valence ≥ 4 can
+      be <a href="#resolve">resolved</a>.</li>
+  <li><strong>Crossing</strong>: a way of splitting a vertex whose new edge would have direction 0.
+      It is realized as a parallelogram in the dual subdivision, not as an edge, so it cannot be
+      applied.</li>
+  <li><strong>Derived type</strong>: a type made from another (its parent) by contracting an edge or
+      resolving a vertex. Types form a <em>forest</em>, shown as a tree in the Types panel.</li>
+</ul>
+</section>
+
+<section class="doc" id="screen">
+<h2>3. The screen</h2>
+<p>On a wide screen there are three columns: the <strong>Types</strong> panel (left), the
+<strong>curve view</strong> with the dual subdivision below it (middle), and the <strong>Edit</strong>
+panel (right). A top bar runs across.</p>
+
+<h3 id="topbar">3.1 Top bar</h3>
+<table>
+  <tr><th>Button</th><th>What it does</th></tr>
+  <tr><td><span class="btn">New</span></td><td>Create a new root type: from a preset, by drawing a subdivision, or by pasting one as text (<a href="#new">§4</a>).</td></tr>
+  <tr><td><span class="btn">🎨 Display</span></td><td>Default colors, label visibility and background (<a href="#settings">§14</a>).</td></tr>
+  <tr><td><span class="btn">Multiplicity</span></td><td>Refined multiplicities of all types, and a search for balanced splits (<a href="#multiplicity">§11</a>).</td></tr>
+  <tr><td><span class="btn">Export…</span></td><td>Save the whole library, or a chosen part of it, as a JSON file (<a href="#export">§13.2</a>).</td></tr>
+  <tr><td><span class="btn">Import</span></td><td>Load a JSON file, adding its types to the library or replacing the library (<a href="#import">§13.3</a>).</td></tr>
+  <tr><td><span class="btn">☁ Drive…</span></td><td>Save the library to, and open it from, your Google Drive (<a href="#drive">§13.4</a>).</td></tr>
+  <tr><td><span class="btn">? Help</span></td><td>An overview of the top bar, with a link to this guide.</td></tr>
+  <tr><td><em>saved 10:41</em></td><td>When the library was last saved in this browser (<a href="#autosave">autosave</a>).</td></tr>
+  <tr><td><em>v46</em></td><td>The loaded version of the app. After an update, a hard refresh shows the new number (<a href="#faq">Troubleshooting</a>).</td></tr>
+</table>
+
+<h3 id="resize">3.2 Panels, phones and tablets</h3>
+<ul>
+  <li><strong>Resizing:</strong> on a wide screen, drag the thin bars between the columns to
+      widen or narrow the Types and Edit panels. Double-click (or double-tap) a bar to restore its
+      default width. With a bar focused, <kbd>←</kbd>/<kbd>→</kbd> resize it (with <kbd>Shift</kbd> in
+      bigger steps). Widths are remembered per browser.</li>
+  <li><strong>Narrow screens</strong> (phones, a portrait iPad, below about 900px): the columns stack
+      (Types, then the curve, then Edit), and the top-bar buttons move behind the
+      <span class="btn">☰</span> menu button.</li>
+  <li>Everything works with a mouse, a finger or an Apple Pencil (<a href="#input">§16</a>).</li>
+</ul>
+</section>
+
+<section class="doc" id="new">
+<h2>4. Creating types — <span class="btn">New</span></h2>
+<p>The <strong>New type</strong> dialog creates an independent root type in three ways:</p>
+<ul>
+  <li><strong>Presets:</strong> <span class="btn">Tropical line (unit triangle)</span>, a single
+      vertex with three ends; or <span class="btn">4-ended curve (unit square)</span>, two
+      vertices joined by one bounded edge.</li>
+  <li><span class="btn">Draw a subdivision…</span>: opens the visual editor (below). The curve is the
+      <em>dual</em> of the subdivision you draw.</li>
+  <li><strong>or paste as text</strong>: one cell per line, each a list of lattice points, e.g.
+      <code>[[0,0],[1,0],[0,1]]</code>. A JSON list of cells is also accepted. Press
+      <span class="btn">Create from text</span>. Parallelograms become crossings.</li>
+</ul>
+
+<h3 id="editor">4.1 Drawing a subdivision</h3>
+<ul>
+  <li>Click lattice points to trace a cell. Click the first point again, or press
+      <span class="btn">Finish cell</span>, to close it. Cells are shaded as you go.
+      Parallelograms are marked with × (in orange) and become crossings.</li>
+  <li><strong>x … to …, y … to …</strong> with <span class="btn">Resize grid</span> changes the lattice window.</li>
+  <li><span class="btn">Undo point</span> removes the last point of the current cell.
+      <span class="btn">Delete last cell</span> removes the last finished cell.
+      <span class="btn">Clear</span> starts over.</li>
+  <li>The status line counts cells, parallelograms and the points in the current cell.</li>
+  <li><span class="btn">Create curve</span> builds the type. <span class="btn">Show text</span> shows the
+      cells as text, with <span class="btn">Copy</span>, for reuse in the paste box.</li>
+</ul>
+</section>
+
+<section class="doc" id="types">
+<h2>5. The types panel</h2>
+<ul>
+  <li><strong>Selecting:</strong> click (tap) a type to show it in the curve view and the Edit panel.
+      The selected type is highlighted.</li>
+  <li><strong>Tree:</strong> derived types are indented under their parent, in derivation order.</li>
+  <li><strong>Each row</strong> shows the name, then the counts (ends, bounded edges, markings), and
+      for a derived type <em>follows</em> or <em>detached</em> (<a href="#propagation">§10</a>). If the type
+      has a <a href="#edit-type">description</a>, its first line appears in italics; hover over the row
+      to see all of it.</li>
+  <li><strong>Folding:</strong> <span class="btn">▾</span>/<span class="btn">▸</span> next to a type hides
+      or shows its derived types. A folded type shows a <span class="btn">+N</span> badge with the number
+      hidden. <span class="btn">Collapse all</span>/<span class="btn">Expand all</span> folds everything.
+      If the selected type is hidden inside a fold, the folded row gets a dashed border. Folds are
+      remembered per browser. Selecting a type (e.g. a newly made one) unfolds whatever hides it.</li>
+  <li><strong>needs attention</strong> badge: the type could not be rebuilt from its parent after an
+      edit (<a href="#propagation">§10</a>).</li>
+  <li><span class="btn">🗑</span> on each row opens the <a href="#delete">delete dialog</a> for that type,
+      without selecting it.</li>
+</ul>
+</section>
+
+<section class="doc" id="curve">
+<h2>6. The curve view</h2>
+<p>The selected type, drawn as a plane tropical curve. The header shows its name and the zoom,
+<span class="btn">🖌 Paint</span> and <span class="btn">Copy</span> controls. If the type needs attention,
+a warning line with <span class="btn">Try again</span> appears above the picture
+(<a href="#propagation">§10</a>).</p>
+
+<h3 id="drawing">6.1 How curves are drawn</h3>
+<ul>
+  <li><strong>Edges</strong> are drawn in their directions, bounded edges a little thicker than ends.
+      Ends are rays of a fixed length. Weights above 1 are in the label, e.g. <code>e1 (w4)</code>.</li>
+  <li><strong>Vertices are not drawn.</strong> <strong>Markings</strong> are drawn as dots exactly at
+      their points, larger at vertices where more edges meet (size grows with valence − 2).</li>
+  <li><strong>Lengths</strong> are chosen for readability: edges of comparable drawn length, and
+      anything not incident kept visibly apart. No vertex lands on an edge it does not belong to, and
+      unrelated parts do not touch.</li>
+  <li><strong>Derived types are drawn like their parent</strong>, as far as possible. A type that
+      differs from its parent by one marking looks the same except for that marking.</li>
+  <li><strong>Labels</strong> (edge, end and marking names) are placed so they never overlap each other
+      or any part of the curve. They can be turned off in <a href="#settings">Display settings</a>. Hidden
+      labels still appear on demand: hover over an edge or marking with a mouse, or tap it on a touch
+      screen (tap again, or tap empty space, to hide).</li>
+  <li><strong>Colors</strong>: each edge, end and marking can have its own color (<a href="#edit-lists">§8.4</a>,
+      <a href="#paint">Paint mode</a>); otherwise it uses the default color (<a href="#settings">§14</a>).</li>
+</ul>
+
+<h3 id="zoom">6.2 Zoom</h3>
+<ul>
+  <li><strong>Mouse wheel</strong> or <strong>trackpad pinch</strong> zooms about the pointer.
+      <strong>Two-finger pinch</strong> zooms on a touch screen.</li>
+  <li>Once zoomed in, <strong>drag</strong> to move around. A drag never counts as a click, so it never
+      picks or paints.</li>
+  <li>Header controls: the zoom level, <span class="btn">−</span>/<span class="btn">+</span> (on a
+      computer), and <span class="btn">Fit</span> to show the whole curve.</li>
+  <li>At full view, scrolling down with the wheel scrolls the page, not the picture.</li>
+  <li>The zoom is kept while you edit the same type, and resets when you select another.</li>
+  <li>The pictures in the Add marking, Contract edge and Resolve vertex dialogs zoom the same way.</li>
+</ul>
+
+<h3 id="paint">6.3 Paint mode — <span class="btn">🖌 Paint</span></h3>
+<ul>
+  <li>Opens a color dialog with a color picker, preset swatches and a hex field.</li>
+  <li><strong>Keep painting until I press Cancel</strong>: unticked, the next edge or marking you click
+      takes the color and painting stops. Ticked, every click paints until you press
+      <span class="btn">Cancel</span>.</li>
+  <li>While painting, a bar above the picture shows the color with <span class="btn">Change color</span>
+      and <span class="btn">Cancel</span>. <kbd>Escape</kbd> also stops painting. Markings are drawn
+      larger with a dashed ring, to be easy to hit. Hovering an item previews the color.</li>
+  <li>Each click is an ordinary color edit: saved, and passed on to derived types.</li>
+  <li>The last color and checkbox choice are remembered.</li>
+</ul>
+
+<h3 id="copy">6.4 Copying pictures</h3>
+<ul>
+  <li><span class="btn">Copy</span> on the curve copies it as a PNG with a <strong>transparent</strong>
+      background, always the whole figure, whatever the zoom, and without paint-mode decorations.</li>
+  <li><span class="btn">Copy</span> on the dual subdivision copies it as a PNG <strong>with</strong> its
+      background.</li>
+  <li>Where the browser cannot put images on the clipboard, the PNG is downloaded instead.</li>
+</ul>
+</section>
+
+<section class="doc" id="subdivision">
+<h2>7. Dual subdivision</h2>
+<ul>
+  <li>Below the curve, folded by default: click its heading to open it. Each vertex of the curve
+      is dual to a cell, each bounded edge to an interior edge of the subdivision.</li>
+  <li>The subdivision shown matches the lengths the curve is drawn with. Parallelogram cells
+      (crossings) are shaded orange.</li>
+  <li>If no subdivision can be built, a note explains why.</li>
+  <li><strong>subdivision text (debug)</strong>: the cells as text, with <span class="btn">Copy</span>.
+      Useful for the <a href="#new">paste box</a>.</li>
+</ul>
+</section>
+
+<section class="doc" id="edit">
+<h2>8. The edit panel</h2>
+<p>Everything about the selected type. It has five parts: <strong>Type</strong>, <strong>Refined
+multiplicity</strong>, <strong>Actions</strong>, <strong>Markings</strong> and <strong>Edges &amp;
+ends</strong>. Click a part's heading to fold or unfold it. Folds are remembered, and a folded part is
+not computed at all (a folded multiplicity costs nothing). <span class="btn">⚙ Layout</span> on the
+panel's title line sets their order and visibility (<a href="#layout">§8.5</a>).</p>
+
+<h3 id="edit-type">8.1 Type</h3>
+<ul>
+  <li><strong>Name</strong>: rename the type. The change applies when you leave the field.</li>
+  <li><strong>Description</strong>: free text about the type, empty by default. It is saved as you type,
+      shown (first line) in the Types panel, and stored in files. <span class="btn">Duplicate</span> copies it;
+      derived types start with an empty one.</li>
+  <li><strong>follow parent (propagate edits)</strong> (derived types only): whether edits to the parent
+      reach this type (<a href="#propagation">§10</a>).</li>
+  <li><span class="btn">Duplicate</span>: an independent copy of this type as a new root, named
+      "… copy", with no parent and no derived types.</li>
+  <li><span class="btn">Delete…</span>: the <a href="#delete">delete dialog</a>.</li>
+</ul>
+
+<h3 id="edit-mult">8.2 Refined multiplicity</h3>
+<p>The type's Göttsche–Schroeter refined multiplicity, a Laurent polynomial in <code>q</code>
+(<a href="#multiplicity">§11</a>). Below it are each vertex's factor and the value at <code>q = 1</code>. If
+the multiplicity is undefined (a vertex that is not trivalent, or a degenerate one), the reason is
+shown instead.</p>
+
+<h3 id="edit-actions">8.3 Actions</h3>
+<p>Buttons for the operations: <span class="btn">Edit end slope…</span> (<a href="#slope">§9.2</a>),
+<span class="btn">Add marking…</span> (<a href="#marking">§9.3</a>), <span class="btn">Contract edge…</span>
+(<a href="#contract">§9.4</a>), <span class="btn">Resolve vertex…</span> (<a href="#resolve">§9.5</a>) and
+<span class="btn">Evaluation matrix…</span> (<a href="#evaluation">§12</a>). A button is disabled, with
+the reason on hover, when the type does not allow it: slope editing needs two ends, contracting
+needs a bounded edge, and resolving needs a vertex of valence ≥ 4.</p>
+
+<h3 id="edit-lists">8.4 Markings, edges &amp; ends</h3>
+<ul>
+  <li>One row per marking, and one per bounded edge and end (tagged <em>edge</em> or <em>end</em>).</li>
+  <li><strong>Color control</strong>: the swatch opens the system color picker (on phones and tablets it
+      has its own palette). With a mouse or trackpad, <span class="btn">▾</span> next to it offers preset
+      colors. The text field takes a hex code (<code>#rrggbb</code>, <code>rrggbb</code>, <code>#rgb</code>).
+      When an item has its own color, <span class="btn">⟲</span> resets it to the default.</li>
+  <li><strong>Name field</strong>: rename the item. Names must be unique within the type.</li>
+  <li><span class="btn">✕</span> on a marking removes it.</li>
+  <li>Color and name changes are passed on to derived types (<a href="#propagation">§10</a>).</li>
+</ul>
+
+<h3 id="layout">8.5 Panel layout — <span class="btn">⚙ Layout</span></h3>
+<ul>
+  <li>Tick a part to show it, untick to hide it.</li>
+  <li>Drag parts by their <span class="btn">⠿</span> grip into the order you want (<a href="#reorder">§15</a>).</li>
+  <li><span class="btn">Reset to default</span> restores the original order with everything shown and unfolded.</li>
+  <li>The layout is saved in this browser only. It is not part of the library.</li>
+</ul>
+</section>
+
+<section class="doc" id="ops">
+<h2>9. Operations</h2>
+
+<h3 id="picking">9.1 Picking on the picture</h3>
+<p>The Add marking, Contract edge and Resolve vertex dialogs show the curve so you can pick
+<em>that</em> edge or vertex directly:</p>
+<ul>
+  <li><strong>Mouse:</strong> hovering highlights a target and names it below the picture. A click acts.</li>
+  <li><strong>Touch or Pencil:</strong> a tap selects (highlighted and named), and a second tap on the same
+      target, or the dialog's button, acts. Tapping empty space clears the selection.</li>
+  <li>Vertices, normally invisible, are shown as rings where they can be picked. Items that cannot be
+      picked are faded.</li>
+  <li>Where targets overlap (a very short edge next to longer ones), the one <strong>nearest</strong> the
+      pointer wins. A marking wins over the edge it sits on, and a vertex over the edges meeting there.</li>
+  <li><span class="btn">Choose from a list instead</span> switches to a plain list.
+      <span class="btn">Pick on the curve instead</span> switches back.</li>
+  <li>The picture zooms like the main one (<a href="#zoom">§6.2</a>).</li>
+  <li>In lists, a vertex is named by the edges, ends and markings that meet there, e.g. "where e1, e5,
+      l2 meet".</li>
+</ul>
+
+<h3 id="slope">9.2 Edit an end's slope</h3>
+<p>Changing one end alone would break balancing, so you choose the <strong>end to edit</strong>, its
+<strong>new x</strong> and <strong>new y</strong>, and a different <strong>dependent end</strong> that absorbs
+the change. The bounded edges are then solved again, and all other ends stay fixed.
+<span class="btn">Apply</span> changes this type, and the change is passed on to its derived types.</p>
+
+<h3 id="marking">9.3 Add a marking</h3>
+<ul>
+  <li>Pick a <strong>vertex</strong> (ringed) to put the marking there, or a point on an <strong>edge or
+      end</strong> to subdivide it and hang the marking on the new vertex.</li>
+  <li><strong>Name (optional)</strong>: leave empty for an automatic name.</li>
+  <li>The marking is added to this type itself, not to a new derived type. It is passed on to derived
+      types, and kept when they are rebuilt.</li>
+  <li>Remove a marking with <span class="btn">✕</span> in the Markings list.</li>
+</ul>
+
+<h3 id="contract">9.4 Contract an edge</h3>
+<p>Merges a bounded edge's two endpoints into one vertex, creating a <strong>derived type</strong> that
+follows this one (<a href="#propagation">§10</a>). Only bounded edges can be contracted; ends and markings
+are faded. Pick the edge, then (touch) tap it again or press <span class="btn">Contract</span>. The new type
+is selected.</p>
+
+<h3 id="resolve">9.5 Resolve a vertex</h3>
+<p>Splits a vertex of valence ≥ 4 in two, joined by a new bounded edge whose direction balancing
+forces. The result is a new derived type. Each resolution corresponds to an adjacent maximal cell of
+the moduli space.</p>
+<ul>
+  <li>Pick the vertex (ringed). If there is only one, it is chosen for you.</li>
+  <li><strong>Valence 4</strong>: the three ways to pair its four edges are shown as small pictures of the
+      curves they produce, with the new edge highlighted. Hovering one shows its pairing on the big picture.
+      Click the one you want. A pairing that would be a <strong>crossing</strong> is shown disabled.</li>
+  <li><strong>Valence 5 or more</strong> (the number of splits grows fast): tick the edges to gather on
+      one side, at least 2 and at most (valence − 2). Everything else goes to the other side. You can
+      also click the vertex's edges on the picture. A note shows the split and the forced new edge, and a
+      preview draws the resulting curve. <span class="btn">Resolve</span> applies it; it stays disabled
+      while the split is invalid or a crossing.</li>
+</ul>
+
+<h3 id="delete">9.6 Delete a type</h3>
+<ul>
+  <li>Open it from <span class="btn">🗑</span> on the type's row, or <span class="btn">Delete…</span> in
+      the Edit panel. It always asks for confirmation, since there is no undo.</li>
+  <li><strong>By default only this type is deleted.</strong> Its derived types move up to its parent,
+      keeping exactly the same derivation (the deleted type's steps are prepended to theirs). If it was a
+      root, they become independent roots.</li>
+  <li><strong>Also delete all N derived types</strong> (unticked by default): deletes the type together
+      with everything derived from it, all the way down. The text and button say how many will go.</li>
+  <li>If the type you are viewing survives, it stays selected.</li>
+</ul>
+</section>
+
+<section class="doc" id="propagation">
+<h2>10. Derived types &amp; propagation</h2>
+<ul>
+  <li>A derived type remembers <em>how</em> it was made from its parent (contract this edge, resolve that
+      vertex). When you edit the parent (slopes, markings, names, colors), each derived type that
+      <strong>follows</strong> its parent is rebuilt by replaying those steps, and the edit reaches it.
+      This continues down the tree.</li>
+  <li>Edits made directly to a derived type (a marking added to it, a color) are kept when it is rebuilt.</li>
+  <li><strong>follow parent</strong> (Edit panel → Type): untick it to <em>detach</em> a type, so its
+      parent's edits no longer reach it. The Types panel then shows <em>detached</em>.</li>
+  <li><strong>needs attention</strong>: if a step cannot be replayed on the edited parent (the edge
+      it contracted no longer exists, say), the type is left as it was and flagged. Open it and press
+      <span class="btn">Try again</span> to rebuild it from the parent as it is now. Loading a file also
+      retries flagged types once.</li>
+</ul>
+</section>
+
+<section class="doc" id="multiplicity">
+<h2>11. Multiplicities &amp; balanced splits — <span class="btn">Multiplicity</span></h2>
+<h3>The refined multiplicity</h3>
+<p>For a curve whose vertices are all trivalent (a vertex with one marking and valence 4 counts as a
+marked trivalent vertex), the Göttsche–Schroeter refined multiplicity is the product over vertices of
+<code>[μ(V)]<sub>q</sub><sup>−</sup></code> for unmarked vertices and <code>[μ(V)]<sub>q</sub><sup>+</sup></code>
+for marked ones. Here μ(V) is the lattice area of the vertex's dual triangle. A marking in the
+interior of an edge is not a vertex of the curve and contributes 1. At <code>q = 1</code> the value is the
+classical (Mikhalkin) multiplicity. Values are exact.</p>
+
+<h3>The Multiplicity dialog</h3>
+<ul>
+  <li>Lists every type in the Types panel's order and nesting, with its refined multiplicity, or
+      "undefined — reason".</li>
+  <li>Subtrees fold (<span class="btn">▾</span>/<span class="btn">▸</span>, <span class="btn">Collapse all</span>/<span class="btn">Expand all</span>).
+      Folds start as in the Types panel, but folding here does not change the panel. A folded row shows how
+      many types it hides and how many of those are ticked.</li>
+  <li><strong>Nothing is ticked when the dialog opens.</strong> Tick types, or click their names, then
+      use <span class="btn">Select all</span>/<span class="btn">Select none</span> as needed. Types
+      without a multiplicity cannot be ticked.</li>
+  <li><span class="btn">Check for a balanced split</span>: searches for a way to split the ticked types into
+      two groups whose multiplicities have equal sums, and shows the two groups and the common value. If
+      there is none, it says so and gives the total. At least two types are needed, and at most 26.</li>
+  <li><strong>Only the values at q = 1 have to balance</strong>: compares only the classical
+      multiplicities, not the whole polynomials. The choice is remembered.</li>
+  <li>Ticked types count in the search even while folded away.</li>
+</ul>
+</section>
+
+<section class="doc" id="evaluation">
+<h2>12. Evaluation matrix — <span class="btn">Evaluation matrix…</span></h2>
+<p>The matrix of a linear map from the type's cell of the moduli space to <code>R<sup>n</sup></code>,
+given by <code>n</code> evaluation functions, where <code>n</code> = number of bounded edges + 2.</p>
+<h3>Conventions</h3>
+<ul>
+  <li><strong>Coordinates of the cell</strong>: the position <code>(x0, y0)</code> of a chosen root vertex,
+      and the length of every bounded edge.</li>
+  <li>An edge of length ℓ and direction vector u (<strong>weight included</strong>) moves its head by
+      ℓ·u from its tail.</li>
+  <li><strong>x / y of a marking</strong>: that coordinate of the marking's position,
+      <code>x0</code> (or <code>y0</code>) plus the sum of ℓ·u along the path from the root.</li>
+  <li><strong>Cross ratio</strong> <code>cr(p1, p2, p3, p4)</code> of four markings or ends (markings count
+      as contracted ends), as in Tyomkin (arXiv:1509.07453): the signed length of the intersection of the
+      path from p1 to p3 with the path from p2 to p4. Each common edge contributes +ℓ where the two paths
+      cross it in the same direction, and −ℓ where they cross it in opposite directions. The four must be
+      different.</li>
+</ul>
+<h3>The dialog</h3>
+<ul>
+  <li><strong>Root vertex</strong>: markings first (alphabetically), then the other vertices, named by their
+      edges (alphabetically). The first marking is chosen by default.</li>
+  <li><strong>Evaluation functions</strong> (open by default): each row is <em>x of marking</em>, <em>y of
+      marking</em> or <em>cross ratio</em>, with its arguments. The list starts as x and y of every marking.
+      <span class="btn">+ Add function</span> adds a cross ratio (or an x, if there are fewer than four
+      legs). <span class="btn">✕</span> removes a row, and the <span class="btn">⠿</span> grip reorders
+      rows (<a href="#reorder">§15</a>). <span class="btn">Reset to x, y of every marking</span> restores the
+      start.</li>
+  <li><strong>Column order</strong> (folded by default): drag <code>x0</code>, <code>y0</code> and the edges
+      into the order the columns should have. <span class="btn">Default order</span> is x0, y0, then edges
+      by name. Reordering columns changes the determinant's sign by the permutation's sign.</li>
+  <li>A status line says <em>k of n functions</em> and what is missing. <span class="btn">Make the
+      matrix</span> works only with exactly n functions and valid cross ratios.</li>
+  <li><strong>Result</strong>: the matrix with row and column labels, and its exact determinant (or its rank,
+      if singular). Any change to the root, functions or columns clears it.</li>
+  <li><strong>As text</strong>: choose Python, Mathematica, Sage, MATLAB/Octave, LaTeX or tab-separated, then
+      <span class="btn">Copy text</span>. The format is remembered.</li>
+  <li><strong>As an image</strong>: <span class="btn">Copy image</span> puts a PNG (black on white, in brackets)
+      on the clipboard, for pasting into Notability or similar apps. <span class="btn">Download image</span>
+      saves it. <strong>Row and column labels</strong> adds the labels in grey.</li>
+  <li>Your choices for each type are kept while the page is open.</li>
+</ul>
+</section>
+
+<section class="doc" id="files">
+<h2>13. Saving, files &amp; Google Drive</h2>
+
+<h3 id="autosave">13.1 Autosave</h3>
+<p>Every change is saved in this browser at once (the top bar shows when). The library comes back when
+you reopen the page on the same device and browser. It is <em>not</em> shared between browsers or
+devices: use Export/Import or Google Drive for that. Clearing the browser's site data erases it, so
+export or save to Drive what matters. View preferences (panel widths, folds, display settings,
+Edit-panel layout) are also kept per browser, but are not part of the library.</p>
+
+<h3 id="export">13.2 Export — <span class="btn">Export…</span></h3>
+<ul>
+  <li>Lists every type in the Types panel's order. <strong>Nothing is ticked at first.</strong></li>
+  <li><strong>Select with N derived</strong> ticks a type and everything derived from it. When all of those are
+      ticked it reads <strong>Unselect with N derived</strong>. <span class="btn">Select all</span>/<span class="btn">Select none</span> too.</li>
+  <li>Subtrees fold, as in the Multiplicity dialog. Ticked types are exported even while folded.</li>
+  <li><span class="btn">Export</span> downloads a JSON file: <code>tropical-workspace.json</code> for everything,
+      the type's name for one type, <code>tropical-subset-N.json</code> otherwise.</li>
+  <li>A subset is exported consistently. A type whose parent is left out is re-attached to its nearest
+      included ancestor, carrying the steps in between, or becomes a root if there is none.</li>
+</ul>
+
+<h3 id="import">13.3 Import — <span class="btn">Import</span></h3>
+<ul>
+  <li>Choose a JSON file (from Export or Drive). On a phone or iPad, the file picker can also reach
+      Google Drive or iCloud through the Files app.</li>
+  <li>If the library is not empty, you choose: <span class="btn">Add to the library</span> or
+      <span class="btn">Replace the library</span> (which discards the current types).</li>
+  <li>Added types keep their derivations. If a name is already used, the imported one gets a number, e.g.
+      "root (2)".</li>
+  <li>A bad file is reported, and the library is left untouched.</li>
+</ul>
+
+<h3 id="drive">13.4 Google Drive — <span class="btn">☁ Drive…</span></h3>
+<ul>
+  <li><span class="btn">Sign in with Google</span> opens Google's sign-in window. The app asks only for
+      access to <strong>files it creates</strong>; it cannot see anything else in your Drive. The sign-in
+      lasts about an hour, or until the page is reloaded, and is never stored.</li>
+  <li><strong>Save the library</strong>: <span class="btn">Save as a new file</span> saves under the name you
+      type. This browser then remembers that file (<em>linked</em>), and
+      <span class="btn">Save to "name.json"</span> updates it from then on. <span class="btn">Unlink</span>
+      forgets the link.</li>
+  <li>If the Drive copy was changed after this browser last saved or opened it (from another device, say),
+      saving warns you: <span class="btn">Overwrite it</span>, <span class="btn">Save as a new file instead</span>
+      or <span class="btn">Cancel</span>.</li>
+  <li><strong>Open from Drive</strong>: lists the app's files, newest first, with <span class="btn">Open</span>
+      and <span class="btn">Refresh</span>. Opening goes through the same add-or-replace choice as Import.
+      Replacing links the library to that file.</li>
+  <li><span class="btn">Sign out</span> ends the session.</li>
+  <li>Messages you may see: <em>sign-in was cancelled</em>; <em>allow pop-ups for this site</em>; <em>your
+      Google session expired — press the button again</em>; or the linked file is no longer in Drive, in which
+      case you can save a new one.</li>
+</ul>
+</section>
+
+<section class="doc" id="settings">
+<h2>14. Display settings — <span class="btn">🎨 Display</span></h2>
+<ul>
+  <li><strong>Default edge / end / marking color</strong>: the color of everything without its own color.
+      <span class="btn">Use automatic (theme-based)</span> follows light/dark mode.</li>
+  <li><strong>Labels</strong>: show or hide <em>edge and end names</em> and <em>marking names</em>. Hidden
+      labels still appear on hover or tap (<a href="#drawing">§6.1</a>).</li>
+  <li><strong>Background</strong>: the color behind the curve. Pick one, use a swatch, or
+      <span class="btn">Use automatic (system light/dark)</span>. The page, borders and text adapt to it. Match
+      it to wherever you paste pictures.</li>
+  <li>Settings apply at once and are remembered per browser.</li>
+</ul>
+</section>
+
+<section class="doc" id="reorder">
+<h2>15. Reordering lists</h2>
+<p>Every list you can reorder (the Edit panel layout, and the evaluation functions and columns) works the
+same way:</p>
+<ul>
+  <li>Drag an item by its <span class="btn">⠿</span> grip. It follows the pointer and the others slide aside.
+      Drop it where you want it.</li>
+  <li>With a mouse you can also grab a row by its empty space. With a finger or Pencil, use the grip:
+      touching elsewhere scrolls as usual.</li>
+  <li>Hold the item near the top or bottom edge of the dialog or page to scroll it.</li>
+  <li><kbd>Escape</kbd> during a drag puts the item back.</li>
+  <li><strong>Keyboard:</strong> focus a grip (<kbd>Tab</kbd>), then <kbd>↑</kbd>/<kbd>↓</kbd> move its item.</li>
+</ul>
+</section>
+
+<section class="doc" id="input">
+<h2>16. Mouse, touch, Pencil &amp; keyboard</h2>
+<table>
+  <tr><th></th><th>Mouse / trackpad</th><th>Touch / Apple Pencil</th></tr>
+  <tr><td>Pick on a picture</td><td>hover to see, click to act</td><td>tap to select, tap again (or the button) to act</td></tr>
+  <tr><td>Hidden labels</td><td>hover</td><td>tap an edge or marking</td></tr>
+  <tr><td>Zoom</td><td>wheel, trackpad pinch, −/+</td><td>two-finger pinch</td></tr>
+  <tr><td>Move a zoomed picture</td><td>drag</td><td>drag</td></tr>
+  <tr><td>Reorder</td><td>drag the grip or a row's empty space</td><td>drag the grip</td></tr>
+  <tr><td>Preset colors</td><td><span class="btn">▾</span> next to a color</td><td>the system color picker's palette</td></tr>
+  <tr><td>Resize panels</td><td>drag the bars between columns</td><td>drag the bars (wide screens)</td></tr>
+</table>
+<p><strong>Keyboard:</strong> <kbd>Escape</kbd> closes menus and popovers, stops paint mode and cancels a drag.
+<kbd>↑</kbd>/<kbd>↓</kbd> on a focused grip reorder its item. <kbd>←</kbd>/<kbd>→</kbd> on a focused panel
+divider resize the panel.</p>
+</section>
+
+<section class="doc" id="help">
+<h2>17. Help in the app</h2>
+<ul>
+  <li><span class="btn">?</span> next to a panel's or dialog's title opens a short explanation of its purpose,
+      features and buttons, with a link to the matching part of this guide. Click (tap) it again, click
+      elsewhere or press <kbd>Escape</kbd> to close it.</li>
+  <li><span class="btn">? Help</span> in the top bar gives an overview of the top bar and a link to this guide.</li>
+  <li>Many buttons also explain themselves when you hover over them.</li>
+</ul>
+</section>
+
+<section class="doc" id="faq">
+<h2>18. Troubleshooting</h2>
+<ul>
+  <li><strong>The app did not update / a new feature is missing.</strong> Compare the version in the top bar
+      (e.g. <em>v46</em>) with the expected one, and do a hard refresh (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>;
+      on an iPad, close and reopen the tab).</li>
+  <li><strong>"needs attention" on a type.</strong> Its parent was edited in a way its derivation cannot
+      follow. Select it and press <span class="btn">Try again</span>, or delete and redo it (<a href="#propagation">§10</a>).</li>
+  <li><strong>A resolution is disabled ("crossing").</strong> That split's new edge would have direction 0. It
+      realizes as a parallelogram, not an edge, and cannot be applied.</li>
+  <li><strong>The refined multiplicity says "undefined".</strong> Some vertex is not trivalent (resolve it
+      first), or is degenerate. The reason names the vertex.</li>
+  <li><strong>Google sign-in does not open.</strong> Allow pop-ups for the site (on an iPad: Settings → Safari).
+      If it says the session expired, press the button again.</li>
+  <li><strong>My library is gone.</strong> The browser's site data was cleared, or you are in another browser,
+      device or private window. Import an exported file or open it from Drive.</li>
+  <li><strong>A copied picture looks wrong where I paste it.</strong> The curve copies with a transparent
+      background. Choose a matching background in <a href="#settings">Display settings</a> so colors read well.</li>
+</ul>
+<p class="small">The design record for developers is <code>docs/DESIGN.md</code> in the repository.</p>
+</section>
+
+</main>
+</div>
+</body>
+</html>

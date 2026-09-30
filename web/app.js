@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "46";
+const APP_VERSION = "47";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -393,6 +393,7 @@ function wireGlobalButtons() {
   wireSplitter("split-types", "types", +1);
   wireSplitter("split-controls", "controls", -1);
   wireZoom();
+  wirePanelHelp();
   bind("btn-new", "onclick", openNewDialog);
   bind("panel-layout", "onclick", openPanelLayoutDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
@@ -515,7 +516,7 @@ function downloadJSON(text, filename) {
 // and the file reads back as the same curves.
 function openExportDialog() {
   const nodes = api("list_nodes");
-  const body = dialogHead("Export",
+  const body = dialogHead("export", "Export",
     "Choose what to save. A type whose parent is left out is re-attached to " +
     "the nearest included one, carrying the steps in between, so it is still " +
     "the same derivation; with no included ancestor it becomes a root.");
@@ -633,7 +634,7 @@ function offerImport(text, title, onLoaded) {
   let count = null;
   try { count = JSON.parse(text).nodes.length; } catch (e) { /* load reports it */ }
   const many = n => `${n} type${n === 1 ? "" : "s"}`;
-  const body = dialogHead("Import " + title,
+  const body = dialogHead("import", "Import " + title,
     `${count === null ? "This file" : `This file holds ${many(count)}`}; your library
      has ${many(have)}. Add the file's types to the library, or replace the
      library with them?`);
@@ -816,7 +817,7 @@ function fmtWhen(iso) {
 }
 
 function openDriveDialog() {
-  const body = dialogHead("Google Drive",
+  const body = dialogHead("drive", "Google Drive",
     "Save the library to your Google Drive, or open one saved there. The app can " +
     "see only the files it saved itself, nothing else in your Drive.");
   const panel = document.createElement("div");
@@ -1007,6 +1008,7 @@ function openNewDialog() {
       closeModal(); refreshAll(); selectNode(summ.id); autosave();
     } catch (e) { errEl.textContent = e.message; }
   };
+  attachDialogHelp("new");
   openModal();
 }
 
@@ -1099,6 +1101,7 @@ function openSettingsDialog() {
     setNote();
     if (selectedId) renderSelected();
   };
+  attachDialogHelp("settings");
   openModal();
 }
 
@@ -1116,8 +1119,13 @@ function parseSubdivision(text) {
   return trimmed.split("\n").map(l => l.trim()).filter(Boolean).map(l => JSON.parse(l));
 }
 
-function openModal() { document.getElementById("modal").hidden = false; }
+function openModal() {
+  closeHelp();
+  document.getElementById("modal").hidden = false;
+  if (!document.querySelector("#modal-body .help-btn")) console.warn("dialog without a help button");
+}
 function closeModal() {
+  closeHelp();
   const m = document.getElementById("modal");
   m.hidden = true;
   const card = m.querySelector(".modal-card");
@@ -1186,6 +1194,7 @@ function openSubdivisionEditor() {
     if (navigator.clipboard) navigator.clipboard.writeText(ta.value);
   };
   renderEditor();
+  attachDialogHelp("editor");
   openModal();
 }
 
@@ -1696,7 +1705,7 @@ let painting = null;              // { color, sticky } while active
 function openPaintDialog() {
   const s0 = loadSettings();
   let color = isHex6(s0.paintColor) ? s0.paintColor : "#e53935";
-  const body = dialogHead("Paint edges and markings",
+  const body = dialogHead("paint", "Paint edges and markings",
     "Choose a color, then click edges, ends or markings on the curve to give " +
     "them that color.");
   const field = colorField(color, h => { color = h; }, { live: true });
@@ -2809,7 +2818,7 @@ function moveInArray(arr, from, to) {
 }
 
 function openPanelLayoutDialog() {
-  const body = dialogHead("Edit panel layout",
+  const body = dialogHead("layout", "Edit panel layout",
     "Tick the parts the edit panel shows, and drag them by ⠿ into the order you want. " +
     "This is saved in this browser.");
   const list = document.createElement("div");
@@ -2881,11 +2890,139 @@ function vertexLabel(c, vid) {
   return names.length ? names.join(", ") : vid;
 }
 
-function dialogHead(title, blurb) {
+// A dialog's title (with its help button) and blurb. `helpKey` names its
+// entry in HELP (help-tips.js).
+function dialogHead(helpKey, title, blurb) {
   const body = document.getElementById("modal-body");
   body.innerHTML = `<h2>${escapeHtml(title)}</h2>
     <p class="muted">${blurb}</p>`;
+  attachDialogHelp(helpKey);
   return body;
+}
+
+// ---------------------------------------------------------------------------
+// help tooltips
+//
+// Every panel and dialog has a "?" button beside its title. It opens a
+// popover explaining the purpose and every feature and button (the text is in
+// help-tips.js), with a link to the matching section of the full guide
+// (help.html). It is a click, not a hover, so it works on touch screens and
+// with the Pencil too; a click elsewhere, the ✕, Escape or the "?" again
+// closes it.
+// ---------------------------------------------------------------------------
+let openHelpPop = null;
+
+function helpEntry(key) {
+  return (typeof HELP !== "undefined" && HELP[key]) || null;
+}
+
+function helpButton(key) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "help-btn";
+  b.textContent = "?";
+  b.dataset.help = key;
+  const e = helpEntry(key);
+  b.title = "What is this?";
+  b.setAttribute("aria-label", "Help: " + (e ? e.title : key));
+  b.setAttribute("aria-expanded", "false");
+  b.addEventListener("click", ev => {
+    ev.preventDefault();            // inside a <summary>, do not fold it
+    ev.stopPropagation();           // nor select or toggle what the heading belongs to
+    toggleHelp(b, key);
+  });
+  return b;
+}
+
+// the first heading of the dialog gets the help button
+function attachDialogHelp(key) {
+  const h2 = document.querySelector("#modal-body h2");
+  if (!h2 || h2.querySelector(".help-btn")) return;
+  h2.classList.add("with-help");
+  h2.appendChild(helpButton(key));
+}
+
+function closeHelp() {
+  if (!openHelpPop) return;
+  openHelpPop.pop.remove();
+  openHelpPop.btn.setAttribute("aria-expanded", "false");
+  openHelpPop = null;
+}
+
+function toggleHelp(btn, key) {
+  const same = openHelpPop && openHelpPop.btn === btn;
+  closeHelp();
+  if (same) return;
+  const e = helpEntry(key) || { title: "Help", html: "<p>No help for this yet.</p>", anchor: "" };
+  const pop = document.createElement("div");
+  pop.className = "help-pop";
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", e.title);
+  pop.innerHTML = `<div class="help-pop-head"><strong>${escapeHtml(e.title)}</strong>
+      <button type="button" class="help-close" aria-label="Close help">✕</button></div>
+    <div class="help-pop-body">${e.html}</div>
+    <a class="help-more" href="help.html${e.anchor ? "#" + e.anchor : ""}" target="_blank" rel="noopener">Full guide →</a>`;
+  document.body.appendChild(pop);
+  pop.querySelector(".help-close").onclick = closeHelp;
+  pop.addEventListener("click", ev => { ev.helpClick = true; });
+  pop.addEventListener("pointerdown", ev => ev.stopPropagation());
+  openHelpPop = { pop, btn };
+  btn.setAttribute("aria-expanded", "true");
+  placeHelp();
+}
+
+// beside its button, inside the window: below if it fits, else above, else
+// as tall as the window allows (it scrolls)
+function placeHelp() {
+  if (!openHelpPop) return;
+  const { pop, btn } = openHelpPop;
+  const m = 8, vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(380, vw - 2 * m);
+  pop.style.width = w + "px";
+  pop.style.maxHeight = (vh - 2 * m) + "px";
+  const r = btn.getBoundingClientRect();
+  const visible = r.width > 0 && r.height > 0;
+  const h = pop.offsetHeight;
+  let left = visible ? r.left + r.width / 2 - w / 2 : (vw - w) / 2;
+  left = Math.max(m, Math.min(vw - w - m, left));
+  let top;
+  if (!visible) top = 56;
+  else if (r.bottom + 6 + h <= vh - m) top = r.bottom + 6;
+  else if (r.top - 6 - h >= m) top = r.top - 6 - h;
+  else top = Math.max(m, vh - m - h);
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+}
+
+document.addEventListener("click", ev => { if (!ev.helpClick) closeHelp(); });
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && openHelpPop) { ev.stopPropagation(); ev.preventDefault(); closeHelp(); }
+}, true);
+window.addEventListener("resize", () => placeHelp());
+// scrolling carries the popover along with its button, and closes it once
+// the button has left the screen (scrolling inside the popover does not count)
+document.addEventListener("scroll", ev => {
+  if (!openHelpPop || openHelpPop.pop.contains(ev.target)) return;
+  const r = openHelpPop.btn.getBoundingClientRect();
+  if (r.width && (r.bottom < 0 || r.top > window.innerHeight)) closeHelp();
+  else placeHelp();
+}, true);
+
+// the panels' help buttons, and the top bar's Help
+function wirePanelHelp() {
+  const add = (sel, key) => {
+    const h = document.querySelector(sel);
+    if (!h || h.querySelector(".help-btn")) return;
+    h.classList.add("with-help");
+    h.appendChild(helpButton(key));
+  };
+  add("#types .section-head h2", "types");
+  add("#views .view:first-child .view-head h2", "curve");
+  add("#sub-details summary h2", "subdivision");
+  add("#controls .section-head h2", "edit");
+  const top = document.getElementById("btn-help");
+  // not stopped: the ☰ menu should still close behind it on a phone
+  if (top) top.addEventListener("click", ev => { ev.helpClick = true; toggleHelp(top, "topbar"); });
 }
 function errBox() {
   const d = document.createElement("div");
@@ -2920,7 +3057,7 @@ function clearViews() {
 // of them), so "the same" here means equal on the nose, not numerically.
 function openMultiplicityDialog() {
   const rows = api("refined_multiplicities", null);
-  const body = dialogHead("Refined multiplicities",
+  const body = dialogHead("multiplicity", "Refined multiplicities",
     "Goettsche-Schroeter: the product of [&mu;(V)]<sub>q</sub><sup>&minus;</sup> " +
     "over the unmarked vertices and [&mu;(V)]<sub>q</sub><sup>+</sup> over the " +
     "marked ones, where &mu;(V) is the lattice area of the vertex's dual triangle. " +
@@ -3053,7 +3190,7 @@ function openEvalDialog() {
   const setup = api("evaluation_setup", nodeId);
   const card = document.querySelector("#modal .modal-card");
   if (card) card.classList.add("wide");
-  const body = dialogHead("Evaluation matrix",
+  const body = dialogHead("evaluation", "Evaluation matrix",
     `The matrix of ${setup.n} evaluation functions on this type's cell (the number
      of bounded edges plus 2). Its coordinates are the position (x0, y0) of the
      root vertex and the length of every bounded edge; an edge of length ℓ and
@@ -3427,7 +3564,7 @@ function openDeleteDialog(id = selectedId) {
          ${kids > 1 ? "independent roots" : "an independent root"}, since nothing
          would be left to derive ${kids > 1 ? "them" : "it"} from.`;
   }
-  const body = dialogHead("Delete this type", "");
+  const body = dialogHead("delete", "Delete this type", "");
   const blurb = body.querySelector("p");
 
   const go = document.createElement("button");
@@ -3482,7 +3619,7 @@ function openDeleteDialog(id = selectedId) {
 function openSlopeDialog() {
   const data = api("render", selectedId);
   const ends = data.curve.edges.filter(e => e.kind === "end");
-  const body = dialogHead("Edit an end's slope",
+  const body = dialogHead("slope", "Edit an end's slope",
     "Changing one end alone would break global balancing, so a second " +
     "<em>dependent</em> end absorbs the change; every bounded edge is then " +
     "re-derived. All other ends stay fixed.");
@@ -3533,7 +3670,7 @@ function openMarkingDialog() {
   const data = api("render", selectedId);
   const summ = api("list_nodes").find(n => n.id === selectedId) || {};
   const val = summ.valences || {};
-  const body = dialogHead("Add a marking",
+  const body = dialogHead("marking", "Add a marking",
     "A marking is a contracted end (direction 0). Attach it at an existing " +
     "vertex, or part-way along an edge or end, which subdivides the edge, " +
     "putting a new vertex between the two pieces and hanging the marking there.");
@@ -3601,7 +3738,7 @@ function openMarkingDialog() {
 function openContractDialog() {
   const data = api("render", selectedId);
   const bounded = data.curve.edges.filter(e => e.kind === "bounded");
-  const body = dialogHead("Contract an edge",
+  const body = dialogHead("contract", "Contract an edge",
     "Contracting merges the edge's two endpoints into a single vertex, " +
     "creating a derived type that follows this one. Only bounded edges " +
     "can be contracted.");
@@ -3650,7 +3787,7 @@ function openResolveDialog() {
   const data = api("render", selectedId);
   const valences = summ.valences || {};
   const big = Object.entries(valences).filter(([, k]) => k >= 4).map(([v]) => v);
-  const body = dialogHead("Resolve a vertex",
+  const body = dialogHead("resolve", "Resolve a vertex",
     "Resolving splits a vertex in two, joined by a new bounded edge whose " +
     "direction balancing forces. Each one is an adjacent maximal cell of the " +
     "tropical moduli space. A split whose forced edge comes out zero realizes " +
