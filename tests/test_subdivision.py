@@ -130,3 +130,26 @@ def test_random_curves_tile_newton_polygon():
                 assert isinstance(v.x, int) and isinstance(v.y, int)
         checked += 1
     assert checked >= 40  # plenty of non-degenerate curves were verified
+
+
+
+def test_cells_know_their_vertex_and_marked_ones_are_flagged():
+    from tropcurves.api import Session
+    s = Session()
+    t = s.add_preset("caterpillar_square")
+    curve = s.ws.nodes[t["id"]].curve
+    v = curve.vertices[0]
+    s.add_marking(t["id"], v)
+    r = s.render(t["id"])["subdivision"]
+    assert len(r["cell_vertices"]) == len(r["cells"]) == len(r["marked"])
+    assert sorted(r["cell_vertices"]) == sorted(curve.vertices)      # one cell per vertex, no crossing here
+    assert [cv for cv, m in zip(r["cell_vertices"], r["marked"]) if m] == [v]
+
+
+def test_a_crossing_cell_belongs_to_no_vertex():
+    c = _crossing_caterpillar()
+    sub = build_subdivision(c)
+    crossings = [cell for cell in sub.cells if cell.vertex is None]
+    assert crossings and all(cell.is_parallelogram() for cell in crossings)
+    owned = [cell.vertex for cell in sub.cells if cell.vertex is not None]
+    assert len(owned) == len(set(owned)) and set(owned) <= set(c.vertices)

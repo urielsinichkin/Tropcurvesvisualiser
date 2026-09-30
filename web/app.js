@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "47";
+const APP_VERSION = "48";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -2379,6 +2379,7 @@ function drawSubdivision(data) {
   if (!data.subdivision) {
     note.textContent = data.subdivision_error || "no subdivision";
     setSubDebug(null);
+    setSubLegend(null);
     return;
   }
   note.textContent = "";
@@ -2389,16 +2390,25 @@ function drawSubdivision(data) {
   if (data.newton) data.newton.forEach(v => pts.push(v));
   const T = fitTransform(pts);
   drawLattice(svg, T); // behind the cells
-  cells.forEach(cell => {
-    const isPar = cell.length === 4 && sameSum(cell);
+  // a cell is dual to a vertex of the curve, or (vertex null) to a crossing;
+  // cells of marked vertices get their own color
+  const owners = data.subdivision.cell_vertices;
+  const marked = data.subdivision.marked || [];
+  const kinds = new Set();
+  cells.forEach((cell, i) => {
+    const crossing = owners ? owners[i] === null : (cell.length === 4 && sameSum(cell));
+    const kind = marked[i] ? "marked" : crossing ? "crossing" : "vertex";
+    kinds.add(kind);
     const d = cell.map(v => T(v));
     const poly = svgEl("polygon", {
       points: d.map(p => p.join(",")).join(" "),
-      fill: isPar ? "color-mix(in srgb, var(--warn) 28%, transparent)" : "color-mix(in srgb, var(--accent) 16%, transparent)",
+      fill: SUB_FILL[kind],
       stroke: "var(--ink)", "stroke-width": 1.5, "stroke-linejoin": "round",
+      "data-kind": kind,
     });
     svg.appendChild(poly);
   });
+  setSubLegend(kinds);
   // lattice points
   const seen = new Set();
   cells.forEach(cell => cell.forEach(v => {
@@ -2407,6 +2417,33 @@ function drawSubdivision(data) {
     const p = T(v);
     svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: 3, fill: "var(--ink)" }));
   }));
+}
+
+const SUB_FILL = {
+  vertex: "color-mix(in srgb, var(--accent) 16%, transparent)",
+  marked: "color-mix(in srgb, #8e5bd8 34%, transparent)",
+  crossing: "color-mix(in srgb, var(--warn) 28%, transparent)",
+};
+
+// what the colors mean, for the kinds of cell present
+function setSubLegend(kinds) {
+  let box = document.getElementById("sub-legend");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "sub-legend"; box.className = "sub-legend";
+    document.getElementById("sub-svg").after(box);
+  }
+  box.innerHTML = "";
+  if (!kinds || !(kinds.has("marked") || kinds.has("crossing"))) { box.hidden = true; return; }
+  box.hidden = false;
+  [["vertex", "vertex"], ["marked", "marked vertex"], ["crossing", "crossing"]].forEach(([k, label]) => {
+    if (!kinds.has(k)) return;
+    const item = document.createElement("span");
+    const sw = document.createElement("span");
+    sw.className = "sub-swatch"; sw.style.background = SUB_FILL[k];
+    item.append(sw, document.createTextNode(label));
+    box.appendChild(item);
+  });
 }
 
 function sameSum(cell) {

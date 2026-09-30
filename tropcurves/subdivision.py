@@ -72,6 +72,8 @@ class SubdivisionCell:
     """One 2-cell of the dual subdivision (a convex lattice polygon, CCW)."""
 
     vertices: List[Vec2]
+    vertex: Optional[str] = None
+    """The curve vertex this cell is dual to; None for a crossing's parallelogram."""
 
     @property
     def num_sides(self) -> int:
@@ -256,7 +258,9 @@ def _build_once(curve: Curve, pos: Dict[str, Point]) -> Subdivision:
         all_segs.append(_Seg(a=corners[i], b=corners[(i + 1) % 4], w=0, u=Vec2(0, 0)))
 
     real_vertex_pts = {pos[v] for v in curve.vertices} | set(crossings)
-    return _arrangement_to_subdivision(all_segs, real_vertex_pts, extra_nodes=crossings)
+    vertex_at = {pos[v]: v for v in curve.vertices}
+    return _arrangement_to_subdivision(all_segs, real_vertex_pts, extra_nodes=crossings,
+                                       vertex_at=vertex_at)
 
 
 def _assert_distinct(crossings: List[FPoint], vertex_pts: List[FPoint]) -> None:
@@ -298,7 +302,7 @@ def _ray_box_exit(a: FPoint, u: Vec2, xmin, xmax, ymin, ymax) -> FPoint:
 # DCEL from segments
 # ---------------------------------------------------------------------------
 def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
-                                extra_nodes=()) -> Subdivision:
+                                extra_nodes=(), vertex_at=None) -> Subdivision:
     # 1. node set: all segment endpoints plus crossing points (which are interior
     # to the segments they lie on and must become split vertices).
     nodes: Dict[FPoint, int] = {}
@@ -448,7 +452,7 @@ def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
         if len(pts) < 3:
             continue
         hull = convex_hull(pts)
-        cells.append(SubdivisionCell(vertices=hull))
+        cells.append(SubdivisionCell(vertices=hull, vertex=(vertex_at or {}).get(p)))
         for v in hull:
             all_pts.add((v.x, v.y))
 

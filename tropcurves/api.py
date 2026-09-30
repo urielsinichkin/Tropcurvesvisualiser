@@ -423,8 +423,13 @@ class Session:
         try:
             # the displayed lengths first, so the parallelograms are the drawn crossings
             sub = build_subdivision(c, lengths=lengths)
+            marked = {m.tail for m in c.markings}
             out["subdivision"] = {
                 "cells": [[v.to_list() for v in cell.vertices] for cell in sub.cells],
+                # per cell: the vertex it is dual to (None for a crossing),
+                # and whether that vertex carries a marking
+                "cell_vertices": [cell.vertex for cell in sub.cells],
+                "marked": [cell.vertex in marked for cell in sub.cells],
             }
             out["subdivision_error"] = None
         except SubdivisionError as exc:
