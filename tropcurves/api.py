@@ -22,7 +22,7 @@ from .operations import resolutions, resolution_for_subset, apply_resolution
 from .subdivision_import import import_subdivision
 from .refined import (
     refined_multiplicity, vertex_multiplicities, balanced_split, balanced_split_numbers,
-    MultiplicityError, MAX_SPLIT_ITEMS,
+    maximal_balanced_subsets, MultiplicityError, MAX_SPLIT_ITEMS, MAX_MAXIMAL_ITEMS,
 )
 from .workspace import Workspace
 from . import schema, builders, evaluation
@@ -403,6 +403,49 @@ class Session:
             out["complement"] = [n for n in node_ids if n not in set(picked)]
             out["value"] = text(half) if half is not None else "0"
         return out
+
+    def maximal_balanced_subsets(self, node_ids: List[str], at_q_1: bool = False,
+                                 limit: int = 200) -> Dict[str, Any]:
+        """The maximal sub-collections of these types that split in balanced
+        halves (see ``refined.maximal_balanced_subsets``), largest first, each
+        with one such split and the common total -- for when the whole set does
+        not balance. ``at_q_1`` compares the values at q = 1 only. At most
+        ``limit`` are listed (``count`` says how many there are).
+        """
+        values, undefined = [], []
+        for nid in node_ids:
+            info = self.refined_multiplicity(nid)
+            if not info["defined"]:
+                undefined.append({"id": nid, "name": info["name"], "reason": info["reason"]})
+            else:
+                values.append(refined_multiplicity(self.ws.nodes[nid].curve))
+        if undefined:
+            return {"ok": False, "undefined": undefined}
+        if len(node_ids) > MAX_MAXIMAL_ITEMS:
+            return {"ok": False, "reason": f"pick at most {MAX_MAXIMAL_ITEMS} types for this search"}
+        if at_q_1:
+            values = [v.at_q(Fraction(1)) for v in values]
+        text = (lambda v: str(v)) if at_q_1 else (lambda v: v.text())
+        try:
+            found = maximal_balanced_subsets(values)
+        except ValueError as exc:
+            return {"ok": False, "reason": str(exc)}
+        results = []
+        for members, plus in found[:limit]:
+            idx = [i for i in range(len(node_ids)) if members >> i & 1]
+            a = [i for i in idx if plus >> i & 1]
+            b = [i for i in idx if not plus >> i & 1]
+            half = values[a[0]]
+            for i in a[1:]:
+                half = half + values[i]
+            results.append({
+                "members": [node_ids[i] for i in idx],
+                "subset": [node_ids[i] for i in a],
+                "complement": [node_ids[i] for i in b],
+                "value": text(half),
+            })
+        return {"ok": True, "at_q_1": at_q_1, "count": len(found),
+                "truncated": len(found) > limit, "results": results}
 
     # --- render data ----------------------------------------------------
     def render(self, node_id: str) -> Dict[str, Any]:

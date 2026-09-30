@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "48";
+const APP_VERSION = "49";
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -3187,6 +3187,14 @@ function openMultiplicityDialog() {
         The total${atOne} is <span class="mult">${escapeHtml(out.total)}</span>, and no
         way of splitting these ${picked.length} types gives two halves with the
         same total.</p>`;
+      // then: which parts of the ticked set do balance, as large as possible?
+      const more = document.createElement("button");
+      more.className = "small"; more.id = "find-maximal";
+      more.textContent = "Find the maximal balanced sub-collections";
+      more.title = "Every largest part of the ticked types that splits into two halves of equal total";
+      more.style.marginTop = "8px";
+      more.onclick = () => findMaximal(picked, q1.checked, nameOf);
+      result.appendChild(more);
       return;
     }
     result.innerHTML = `<p style="margin:0 0 4px">Balanced${atOne}, each half totalling
@@ -3194,6 +3202,57 @@ function openMultiplicityDialog() {
       <p class="muted" style="margin:0">{${out.subset.map(nameOf).map(escapeHtml).join(", ")}}
       &nbsp;|&nbsp; {${out.complement.map(nameOf).map(escapeHtml).join(", ")}}</p>`;
   };
+  // The maximal sub-collections of `picked` that balance: none of them is
+  // part of a larger balanced one. Listed largest first, each with one
+  // balanced split; "Tick only these" makes it the selection.
+  const findMaximal = (picked, atQ1, nameOf) => {
+    const box = document.createElement("div");
+    box.className = "maximal-results";
+    const old = result.querySelector(".maximal-results");
+    if (old) old.remove();
+    const btn = result.querySelector("#find-maximal");
+    if (btn) btn.disabled = true;
+    box.innerHTML = `<p class="muted" style="margin:8px 0 0">Searching${picked.length > 16 ? " (this can take a few seconds)" : ""}…</p>`;
+    result.appendChild(box);
+    // let the message show before the search holds the page
+    setTimeout(() => {
+      let out;
+      try { out = api("maximal_balanced_subsets", picked, atQ1); }
+      catch (e) { box.innerHTML = ""; showModalError(e.message); if (btn) btn.disabled = false; return; }
+      if (btn) btn.disabled = false;
+      if (!out.ok) {
+        box.innerHTML = `<p class="muted" style="margin:8px 0 0">${escapeHtml(out.reason ||
+          ("some of these have no multiplicity: " + out.undefined.map(u => u.name).join(", ")))}</p>`;
+        return;
+      }
+      const atOne = out.at_q_1 ? " at q = 1" : "";
+      if (!out.count) {
+        box.innerHTML = `<p class="muted" style="margin:8px 0 0">No two or more of these types balance${atOne}.</p>`;
+        return;
+      }
+      box.innerHTML = `<p style="margin:10px 0 4px"><strong>${out.count}</strong> maximal balanced
+        sub-collection${out.count > 1 ? "s" : ""}${atOne}, largest first${out.truncated ? ` (showing the first ${out.results.length})` : ""}:</p>`;
+      const list = document.createElement("ol");
+      list.className = "maximal-list";
+      out.results.forEach(r => {
+        const li = document.createElement("li");
+        const names = ids => ids.map(nameOf).map(escapeHtml).join(", ");
+        li.innerHTML = `<div>${r.members.length} types, each half totalling
+            <span class="mult">${escapeHtml(r.value)}</span></div>
+          <div class="muted">{${names(r.subset)}} &nbsp;|&nbsp; {${names(r.complement)}}</div>`;
+        const tick = document.createElement("button");
+        tick.className = "small"; tick.textContent = "Tick only these";
+        tick.onclick = () => {
+          boxes.forEach(b => { b.checked = r.members.includes(b.value); });
+          refold();
+        };
+        li.appendChild(tick);
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+    }, 30);
+  };
+
   body.appendChild(q1Label);
   body.appendChild(row([go, all, none]));
   body.appendChild(result);

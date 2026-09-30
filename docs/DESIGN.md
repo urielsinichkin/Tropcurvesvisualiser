@@ -273,6 +273,18 @@ restricts the check to the values at q = 1, the Mikhalkin multiplicities
 same search over plain numbers, so a set can balance there without its refined
 multiplicities balancing.
 
+When the ticked set does not balance, the dialog can list its **maximal
+balanced sub-collections** (`maximal_balanced_subsets`,
+`Session.maximal_balanced_subsets`): the subsets that split into halves of
+equal total (some choice of signs sums to zero) and lie in no larger such
+subset, largest first, each with one split. Values are encoded exactly as
+integers (common denominator; coefficients as digits of a balanced base too
+large for any signed sum to carry), each half's 3^(n/2) signed sums are
+tabled, and for each sum only the half-supports maximal among those with that
+sum are kept -- a maximal balanced set's part in each half must be one --
+before pairing opposite sums and keeping the inclusion-maximal unions. Up to
+22 types; at most 200 listed.
+
 The Multiplicity dialog lists the types in the types menu's order (each root
 followed by its derived types, depth first; `typeTreeOrder`, also used by the
 Export dialog) and nested the same way. Subtrees fold, starting as they are
