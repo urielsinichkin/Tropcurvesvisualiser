@@ -203,6 +203,9 @@ panel (right). A top bar runs across.</p>
       widen or narrow the Types and Edit panels. Double-click (or double-tap) a bar to restore its
       default width. With a bar focused, <kbd>←</kbd>/<kbd>→</kbd> resize it (with <kbd>Shift</kbd> in
       bigger steps). Widths are remembered per browser.</li>
+  <li><strong>Side by side</strong> (wider than about 900px, e.g. a computer or a landscape iPad): each
+      column scrolls on its own, and the page itself does not, so the curve stays in view while you scroll the
+      Types or Edit panel.</li>
   <li><strong>Narrow screens</strong> (phones, a portrait iPad, below about 900px): the columns stack
       (Types, then the curve, then Edit), and the top-bar buttons move behind the
       <span class="btn">☰</span> menu button.</li>
@@ -258,6 +261,11 @@ panel (right). A top bar runs across.</p>
       edit (<a href="#propagation">§10</a>).</li>
   <li><span class="btn">🗑</span> on each row opens the <a href="#delete">delete dialog</a> for that type,
       without selecting it.</li>
+  <li><strong>Reordering:</strong> drag a type by its <span class="btn">⠿</span> grip to move it among its
+      <em>siblings</em>: the other roots, or the other types derived from the same parent. Its derived types
+      move with it. A type never changes parent this way, since that would change its derivation, so only
+      types with siblings have a grip. The order is saved with the library, and the Multiplicity and Export
+      dialogs follow it (<a href="#reorder">§15</a>).</li>
 </ul>
 </section>
 
@@ -633,13 +641,13 @@ Edit-panel layout) are also kept per browser, but are not part of the library.</
 
 <section class="doc" id="reorder">
 <h2>15. Reordering lists</h2>
-<p>Every list you can reorder (the Edit panel layout, and the evaluation functions and columns) works the
-same way:</p>
+<p>Every list you can reorder (the types in the Types panel, the Edit panel layout, and the evaluation
+functions and columns) works the same way:</p>
 <ul>
   <li>Drag an item by its <span class="btn">⠿</span> grip. It follows the pointer and the others slide aside.
       Drop it where you want it.</li>
-  <li>With a mouse you can also grab a row by its empty space. With a finger or Pencil, use the grip:
-      touching elsewhere scrolls as usual.</li>
+  <li>With a mouse you can also grab a row by its empty space (not in the Types panel, where a click selects
+      the type). With a finger or Pencil, use the grip: touching elsewhere scrolls as usual.</li>
   <li>Hold the item near the top or bottom edge of the dialog or page to scroll it.</li>
   <li><kbd>Escape</kbd> during a drag puts the item back.</li>
   <li><strong>Keyboard:</strong> focus a grip (<kbd>Tab</kbd>), then <kbd>↑</kbd>/<kbd>↓</kbd> move its item.</li>

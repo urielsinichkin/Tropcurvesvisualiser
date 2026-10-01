@@ -366,6 +366,34 @@ class Workspace:
     def rename_node(self, node_id: str, name: str) -> None:
         self._get(node_id).name = name
 
+    def move_type(self, node_id: str, to_index: int) -> None:
+        """Move a type to position ``to_index`` among its siblings -- the other
+        types derived from the same parent, or the other roots. Its derived
+        types come along; nothing changes parent, so no derivation changes.
+
+        Children are ordered by their parent's ``children`` list; roots by the
+        order of ``nodes``, which is rebuilt root by root (each followed by its
+        subtree) so that a saved file keeps the order.
+        """
+        node = self._get(node_id)
+        parent = self.nodes.get(node.parent_id) if node.parent_id else None
+        if parent is not None:
+            sib = [c for c in parent.children if c != node_id]
+            to_index = max(0, min(len(sib), to_index))
+            sib.insert(to_index, node_id)
+            parent.children = sib
+            return
+        roots = [n.id for n in self.nodes.values() if not n.parent_id or n.parent_id not in self.nodes]
+        roots.remove(node_id)
+        to_index = max(0, min(len(roots), to_index))
+        roots.insert(to_index, node_id)
+        order: List[str] = []
+        for r in roots:
+            order.append(r)
+            order.extend(self.descendants(r))
+        order += [nid for nid in self.nodes if nid not in set(order)]
+        self.nodes = {nid: self.nodes[nid] for nid in order}
+
     def set_description(self, node_id: str, text: str) -> None:
         self._get(node_id).description = text or ""
 

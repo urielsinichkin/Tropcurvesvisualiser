@@ -11,9 +11,9 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "50";
+const APP_VERSION = "51";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "38";
+const STYLES_VERSION = "40";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -423,8 +423,19 @@ function wireSplitter(id, which, sign) {
   });
 }
 
+// the columns fill the window under the top bar, whose height can change
+function trackTopbarHeight() {
+  const tb = document.getElementById("topbar");
+  if (!tb) return;
+  const set = () => document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight + "px");
+  set();
+  if (window.ResizeObserver) new ResizeObserver(set).observe(tb);
+  else window.addEventListener("resize", set);
+}
+
 function wireGlobalButtons() {
   wireMenu();
+  trackTopbarHeight();
   wireSplitter("split-types", "types", +1);
   wireSplitter("split-controls", "controls", -1);
   wireZoom();
@@ -1484,12 +1495,30 @@ function renderTypeList() {
     return false;
   };
 
+  // A nested list: each type's derived types sit in their own sub-list under
+  // it, and every sub-list (and the roots) reorders by dragging a grip -- a
+  // type moves among its siblings, carrying its derived types; it never
+  // changes parent, which would change its derivation.
   const ul = document.getElementById("type-list");
   ul.innerHTML = "";
-  const walk = (n, depth) => {
+  // each list keeps the ids it shows; the roots' list outlives redraws and is
+  // made sortable once, so its handler reads the ids of the moment
+  const sortableGroup = (list, ids) => {
+    list._typeIds = ids;
+    if (ids.length < 2) return;
+    makeSortable(list, (from, to) => {
+      try { api("move_type", list._typeIds[from], to); } catch (e) { alert(e.message); }
+      renderTypeList();
+      autosave();
+    }, { gripOnly: true });
+  };
+  const walk = (n, depth, into, siblings) => {
     const kids = (n.children || []).filter(cid => byId[cid]);
     const folded = kids.length > 0 && collapsed.has(n.id);
-    const li = document.createElement("li");
+    const node = document.createElement("li");
+    node.className = "type-node sort-item";
+    node.dataset.id = n.id;
+    const li = document.createElement("div");
     li.className = "type-item" + (n.id === selectedId ? " selected" : "")
       + (folded && hidesSelection(n) ? " holds-selection" : "");
     li.onclick = () => selectNode(n.id);
@@ -1498,7 +1527,7 @@ function renderTypeList() {
     // a description shows as one line under the counts; all of it on hover
     const desc = (n.description || "").trim();
     if (desc) li.title = desc;
-    li.innerHTML = `<span class="tree-indent" style="width:${depth * 14}px"></span>
+    li.innerHTML = `<span class="tree-indent" style="width:${depth * 12}px"></span>
       <span class="twisty-slot"></span>
       <span style="flex:1;min-width:0">
         <span class="tname">${escapeHtml(n.name)}</span> ${warn} ${hidden}<br/>
@@ -1527,10 +1556,28 @@ function renderTypeList() {
     del.setAttribute("aria-label", `Delete ${n.name}`);
     del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
     li.appendChild(del);
-    ul.appendChild(li);
-    if (!folded) kids.forEach(cid => walk(byId[cid], depth + 1));
+    // the grip, for a type that has siblings to move among
+    if (siblings > 1) {
+      const grip = sortGrip(n.name);
+      grip.addEventListener("click", ev => ev.stopPropagation());   // not a selection
+      li.prepend(grip);
+    } else {
+      const slot = document.createElement("span");
+      slot.className = "grip-slot";
+      li.prepend(slot);
+    }
+    node.appendChild(li);
+    into.appendChild(node);
+    if (!folded && kids.length) {
+      const sub = document.createElement("ul");
+      sub.className = "type-children";
+      node.appendChild(sub);
+      kids.forEach(cid => walk(byId[cid], depth + 1, sub, kids.length));
+      sortableGroup(sub, kids);
+    }
   };
-  roots.forEach(r => walk(r, 0));
+  roots.forEach(r => walk(r, 0, ul, roots.length));
+  sortableGroup(ul, roots.map(r => r.id));
 
   // fold / unfold everything at once
   const parents = nodes.filter(n => (n.children || []).some(c => byId[c])).map(n => n.id);
@@ -2756,8 +2803,11 @@ function sortGrip(label) {
 // `list`'s children with class sort-item are the items. `onMove(from, to)`
 // moves item `from` to position `to` in the caller's data and redraws; the
 // list element itself must stay the same across redraws.
-function makeSortable(list, onMove) {
+function makeSortable(list, onMove, opts = {}) {
   if (list._sortable) return;
+  // gripOnly: rows do something else when clicked (the types list selects),
+  // so only the grip starts a drag, even with a mouse
+  const gripOnly = !!opts.gripOnly;
   list._sortable = true;
   const items = () => [...list.children].filter(el => el.classList.contains("sort-item"));
   const interactive = el => el.closest("input, select, textarea, button:not(.sort-grip), label, a, .eval-bad");
@@ -2845,7 +2895,7 @@ function makeSortable(list, onMove) {
     const item = ev.target.closest(".sort-item");
     if (!item || item.parentElement !== list) return;
     const grip = ev.target.closest(".sort-grip");
-    if (!grip && (ev.pointerType !== "mouse" || interactive(ev.target))) return;
+    if (!grip && (gripOnly || ev.pointerType !== "mouse" || interactive(ev.target))) return;
     ev.preventDefault();
     const r = item.getBoundingClientRect();
     drag = { item, id: ev.pointerId, from: items().indexOf(item), y: ev.clientY,

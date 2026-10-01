@@ -221,6 +221,11 @@ class Session:
         self.ws.rename_node(node_id, name)
         return self.node_summary(node_id)
 
+    def move_type(self, node_id: str, to_index: int) -> Dict[str, Any]:
+        """Move a type among its siblings (see ``Workspace.move_type``)."""
+        self.ws.move_type(node_id, int(to_index))
+        return self.node_summary(node_id)
+
     def set_description(self, node_id: str, text: str) -> Dict[str, Any]:
         """Set a type's description (free text; empty clears it)."""
         self.ws.set_description(node_id, text)
