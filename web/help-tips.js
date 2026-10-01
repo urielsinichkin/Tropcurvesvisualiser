@@ -29,6 +29,7 @@ const HELP = {
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
+        <li><b>⠿</b> — drag to reorder a type among its siblings (its derived types come along; it never changes parent). Saved with the library.</li>
       </ul>`,
   },
   curve: {

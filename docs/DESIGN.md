@@ -350,6 +350,20 @@ cancelled touch puts the item back. The grip is a focusable button, and the
 arrow keys move its item. The caller only supplies `onMove(from, to)`, which
 moves the item in its data and redraws; the list element stays the same.
 
+The types list is the third user of the component: nested lists, one per
+group of siblings (the roots; each type's children), each sortable with
+`gripOnly` (a click on a row selects it). A type moves only among its
+siblings, with its subtree, through `Workspace.move_type`: children are
+ordered by the parent's `children` list, roots by the order of `nodes`
+(rebuilt root by root), so the order is saved in the file.
+
+### Columns that scroll by themselves
+
+In the side-by-side layout (above 900px) `#app` fills the window under the top
+bar (`--topbar-h`, kept current by a ResizeObserver) and the Types, curve and
+Edit columns each scroll on their own; the page does not scroll. The stacked
+layout scrolls as one page, as before.
+
 ### 3.4 Help and documentation
 
 `web/help.html` is the user guide: every feature, by panel and dialog, with a

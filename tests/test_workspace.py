@@ -417,3 +417,34 @@ def test_a_marking_whose_vertex_is_gone_is_not_forced_back():
     ws.add_marking_on_edge(root.id, "a")
     assert "star" in {m.name for m in child.curve.markings}
     child.curve.validate()
+
+
+
+def test_move_type_among_siblings_keeps_derivations_and_saves():
+    from tropcurves.api import Session
+    s = Session()
+    a = s.add_preset("caterpillar_square")["id"]
+    b = s.add_preset("line")["id"]
+    c = s.add_preset("line")["id"]
+    edge = next(e["id"] for e in s.render(a)["curve"]["edges"] if e["kind"] == "bounded")
+    k1 = s.contract(a, edge)["id"]
+    k2 = s.duplicate(a)["id"]                          # another root
+    roots = lambda: [n["id"] for n in s.list_nodes() if not n["parent_id"]]
+    assert roots() == [a, b, c, k2]
+    s.move_type(k2, 0)
+    assert roots() == [k2, a, b, c]
+    s.move_type(a, 3)                                  # to the end; its child comes along
+    assert roots() == [k2, b, c, a]
+    assert s.node_summary(k1)["parent_id"] == a
+    # children reorder within their parent
+    v = next(v for v, k in s.node_summary(k1)["valences"].items() if k >= 4)
+    r = s.list_resolutions(k1, v)
+    g1 = s.resolve(k1, v, r[0]["index"])["id"]
+    g2 = s.resolve(k1, v, r[-1]["index"])["id"]
+    assert s.node_summary(k1)["children"] == [g1, g2]
+    s.move_type(g2, 0)
+    assert s.node_summary(k1)["children"] == [g2, g1]
+    # the order survives saving and loading
+    t = Session(); t.load(s.save())
+    assert [n["id"] for n in t.list_nodes() if not n["parent_id"]] == [k2, b, c, a]
+    assert t.node_summary(k1)["children"] == [g2, g1]
