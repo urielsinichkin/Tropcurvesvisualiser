@@ -10,8 +10,10 @@ served by GitHub Pages at https://urielsinichkin.github.io/Tropcurvesvisualiser/
 
 - Tests: `python3 -m pytest -q`. A new module in `tropcurves/` must also be
   listed in `PKG_FILES` in `web/app.js` (a test checks this).
-- Bump `APP_VERSION` in `web/app.js` on every change to the web app, and the
-  `styles.css?v=` number in `web/index.html` whenever `styles.css` changes.
+- Bump `APP_VERSION` in `web/app.js` on every change to the web app, and
+  whenever `styles.css` changes bump both the `styles.css?v=` number in
+  `web/index.html` and `STYLES_VERSION` in `web/app.js` (a test checks they
+  match; app.js uses it to repair stale cached copies of index.html).
 - Reuse the shared UI pieces rather than building new ones:
   - **reordering any list: drag and drop with `makeSortable` / `sortGrip` /
     `moveInArray`** -- never up/down arrow buttons;
