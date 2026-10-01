@@ -48,3 +48,14 @@ def test_every_dialog_and_panel_has_help():
     assert not unused, f"help written for nothing: {sorted(unused)}"
     # no dialog built without a key
     assert "dialogHead(title" not in app.replace("function dialogHead(helpKey, title", "")
+
+
+
+def test_styles_version_matches_index():
+    """app.js re-links the stylesheet when a cached index.html names an old
+    one, so its STYLES_VERSION must be the version index.html links."""
+    app = (ROOT / "web" / "app.js").read_text()
+    index = (ROOT / "web" / "index.html").read_text()
+    js = re.search(r'const STYLES_VERSION = "(\d+)"', app).group(1)
+    html = re.search(r'styles\.css\?v=(\d+)', index).group(1)
+    assert js == html, f"STYLES_VERSION {js} in app.js but styles.css?v={html} in index.html"

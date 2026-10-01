@@ -11,7 +11,42 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "49";
+const APP_VERSION = "50";
+// Must match the styles.css?v= in index.html (a test checks).
+const STYLES_VERSION = "38";
+
+// index.html can be a stale cached copy -- phones restore old tabs from cache
+// -- naming an old styles.css?v= and predating newer scripts and buttons.
+// app.js itself is always fresh (index.html loads it with a time token), so it
+// brings the rest up to date: the current stylesheet, the help text, and the
+// top bar's Help button.
+function ensureFreshPage() {
+  const link = [...document.querySelectorAll('link[rel="stylesheet"]')]
+    .find(l => /(^|\/)styles\.css/.test(l.getAttribute("href") || ""));
+  const v = link && ((link.getAttribute("href").match(/[?&]v=(\d+)/) || [])[1]);
+  if (v !== STYLES_VERSION) {
+    const fresh = document.createElement("link");
+    fresh.rel = "stylesheet";
+    fresh.href = "styles.css?v=" + STYLES_VERSION;
+    document.head.appendChild(fresh);
+  }
+  if (typeof HELP === "undefined" && !document.querySelector('script[src^="help-tips.js"]')) {
+    const sc = document.createElement("script");
+    sc.src = "help-tips.js?t=" + Math.floor(Date.now() / 60000);
+    document.head.appendChild(sc);
+  }
+  if (!document.getElementById("btn-help")) {
+    const drive = document.getElementById("btn-drive") || document.getElementById("btn-load");
+    if (drive) {
+      const b = document.createElement("button");
+      b.id = "btn-help";
+      b.title = "What the buttons do, and the full guide";
+      b.textContent = "? Help";
+      drive.after(b);
+    }
+  }
+}
+ensureFreshPage();
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -2993,6 +3028,12 @@ function toggleHelp(btn, key) {
   const e = helpEntry(key) || { title: "Help", html: "<p>No help for this yet.</p>", anchor: "" };
   const pop = document.createElement("div");
   pop.className = "help-pop";
+  // what it needs to be seen at all, inline (the stylesheet adds the rest)
+  Object.assign(pop.style, {
+    position: "fixed", zIndex: "1000", overflow: "auto", boxSizing: "border-box",
+    background: "var(--panel, #fff)", color: "var(--ink, #1c1c1e)",
+    border: "1px solid var(--line, #ddd)", borderRadius: "12px", padding: "10px 14px 12px",
+  });
   pop.setAttribute("role", "dialog");
   pop.setAttribute("aria-label", e.title);
   pop.innerHTML = `<div class="help-pop-head"><strong>${escapeHtml(e.title)}</strong>

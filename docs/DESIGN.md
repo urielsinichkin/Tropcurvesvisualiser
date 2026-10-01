@@ -324,6 +324,17 @@ Mathematica, Sage, MATLAB, LaTeX, plain) or as a PNG image with optional
 row/column labels, copied to the clipboard for pasting into e.g. Notability
 or downloaded. The choices for a type are kept for the session.
 
+### Stale cached pages
+
+Phones restore old tabs from cache, so `index.html` can be an old copy naming
+an old `styles.css?v=` and lacking newer scripts and buttons, while `app.js`
+(loaded with a time token) is current. `app.js` repairs the page at load
+(`ensureFreshPage`): it links the stylesheet version it expects
+(`STYLES_VERSION`, kept equal to index.html's by a test) when the page names
+another, loads `help-tips.js` if missing, and adds the top bar's Help button.
+The help popover also carries the layout it needs inline, so it shows even
+under an old stylesheet.
+
 ### 3.3 Reordering lists
 
 Every list the user puts in order uses one component, `makeSortable` (with
