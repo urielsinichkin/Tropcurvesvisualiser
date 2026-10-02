@@ -115,6 +115,7 @@ th { background: var(--bg); font-weight: 600; }
         <li><a href="#export">Export</a></li>
         <li><a href="#import">Import</a></li>
         <li><a href="#drive">Google Drive</a></li>
+        <li><a href="#github">GitHub</a></li>
       </ol></li>
     <li><a href="#settings">Display settings</a></li>
     <li><a href="#reorder">Reordering lists</a></li>
@@ -192,6 +193,7 @@ panel (right). A top bar runs across.</p>
   <tr><td><span class="btn">Export…</span></td><td>Save the whole library, or a chosen part of it, as a JSON file (<a href="#export">§13.2</a>).</td></tr>
   <tr><td><span class="btn">Import</span></td><td>Load a JSON file, adding its types to the library or replacing the library (<a href="#import">§13.3</a>).</td></tr>
   <tr><td><span class="btn">☁ Drive…</span></td><td>Save the library to, and open it from, your Google Drive (<a href="#drive">§13.4</a>).</td></tr>
+  <tr><td><span class="btn">⑂ GitHub…</span></td><td>Open a file from a GitHub repository and commit the library back to it, with branches, history and pull requests (<a href="#github">§13.5</a>).</td></tr>
   <tr><td><span class="btn">? Help</span></td><td>An overview of the top bar, with a link to this guide.</td></tr>
   <tr><td><em>saved 10:41</em></td><td>When the library was last saved in this browser (<a href="#autosave">autosave</a>).</td></tr>
   <tr><td><em>v46</em></td><td>The loaded version of the app. After an update, a hard refresh shows the new number (<a href="#faq">Troubleshooting</a>).</td></tr>
@@ -625,6 +627,57 @@ Edit-panel layout) are also kept per browser, but are not part of the library.</
 </ul>
 </section>
 
+<section class="doc" id="github-section">
+<h3 id="github">13.5 GitHub — <span class="btn">⑂ GitHub…</span></h3>
+<p>Keep the library in a GitHub repository and work on it there: open a file, commit changes back,
+use branches, look at the file's history and open pull requests.</p>
+<h4>Access: a token</h4>
+<p>Public repositories open without anything. To commit (or to read a private repository) the app needs a
+<strong>fine-grained personal access token</strong>; the site has no server, so GitHub's usual "sign in" cannot
+be used. To make one:</p>
+<ol>
+  <li>On GitHub: <em>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new
+      token</em> (the dialog has a direct link).</li>
+  <li><strong>Repository access:</strong> <em>Only select repositories</em> → your repository.</li>
+  <li><strong>Permissions → Repository:</strong> <em>Contents: Read and write</em>; for pull requests also
+      <em>Pull requests: Read and write</em>. Choose an expiry date.</li>
+  <li>Copy the token, paste it in the dialog and press <span class="btn">Save token</span>. The app checks it and shows
+      the account. It is kept in this browser and sent only to GitHub; <span class="btn">Forget token</span> removes it.</li>
+</ol>
+<h4>Opening</h4>
+<ul>
+  <li><strong>Repository</strong>: <code>owner/repo</code>, or paste a GitHub link (to the repository, a branch or the
+      file itself), then <span class="btn">Load</span>.</li>
+  <li><strong>Branch</strong>: the default branch is chosen first; the list shows the branch's <code>.json</code> files,
+      each with <span class="btn">Open</span>.</li>
+  <li>Opening goes through the same add-or-replace choice as <a href="#import">Import</a>. <strong>Replacing</strong> links
+      the library to the file (shown under <em>Linked file</em>, with the commit it was read at); adding does not.</li>
+  <li><span class="btn">Commit as a new file</span> adds the library to the chosen branch under a new name, and links it.</li>
+</ul>
+<h4>Committing</h4>
+<ul>
+  <li>Write a <strong>commit message</strong> and choose <strong>Commit to <em>branch</em></strong> (the branch it was opened
+      from, the default) or <strong>Commit to a new branch</strong> (named for you; change it if you like). A new branch
+      starts at the commit the file was read at. Press <span class="btn">Commit</span>.</li>
+  <li><strong>Conflict check</strong>: if the file changed on that branch after you opened it, nothing is overwritten.
+      You choose <span class="btn">Commit to the new branch instead</span>, <span class="btn">Overwrite on <em>branch</em></span>
+      (replaces the newer version) or <span class="btn">Cancel</span>.</li>
+  <li><strong>Pull request</strong>: when the linked branch is not the default branch (e.g. after committing to a new
+      branch), give a title (and a description) and press <span class="btn">Open pull request</span>; a link to it
+      appears.</li>
+</ul>
+<h4>History</h4>
+<ul>
+  <li><span class="btn">Show history</span> lists the file's commits on the branch: message, short id, author, date.</li>
+  <li><span class="btn">Open this version</span> loads an older version. Committing from it goes through the conflict check
+      (the file has changed since), so you can put it on a new branch.</li>
+  <li><span class="btn">Unlink</span> forgets the linked file.</li>
+</ul>
+<p>Messages you may see: the token was rejected (expired or mistyped — forget it and paste a new one); the token is not
+allowed to do this (check its repository and permissions); not found (check the repository, branch and path; a private
+repository needs a token); the rate limit is used up (without a token GitHub allows few requests per hour).</p>
+</section>
+
 <section class="doc" id="settings">
 <h2>14. Display settings — <span class="btn">🎨 Display</span></h2>
 <ul>
@@ -697,6 +750,9 @@ divider resize the panel.</p>
       realizes as a parallelogram, not an edge, and cannot be applied.</li>
   <li><strong>The refined multiplicity says "undefined".</strong> Some vertex is not trivalent (resolve it
       first), or is degenerate. The reason names the vertex.</li>
+  <li><strong>GitHub says the token is rejected or not allowed.</strong> Make a new fine-grained token for that repository
+      with <em>Contents: Read and write</em> (and <em>Pull requests</em> for pull requests), and paste it after
+      <span class="btn">Forget token</span> (<a href="#github">§13.5</a>).</li>
   <li><strong>Google sign-in does not open.</strong> Allow pop-ups for the site (on an iPad: Settings → Safari).
       If it says the session expired, press the button again.</li>
   <li><strong>My library is gone.</strong> The browser's site data was cleared, or you are in another browser,

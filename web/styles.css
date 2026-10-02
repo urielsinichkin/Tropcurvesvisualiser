@@ -255,7 +255,7 @@ label { font-size: 13px; display: grid; gap: 3px; }
   align-items: baseline; gap: 10px; padding: 3px 0; font-size: 13px;
 }
 label.check { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; margin: 2px 0; }
-select, input[type=text], input[type=number] {
+select, input[type=text], input[type=number], input[type=password] {
   font: inherit; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line);
   background: var(--bg); color: var(--ink);
 }
@@ -421,3 +421,13 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
   }
   #types, #views, #controls { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 }
+
+/* GitHub dialog */
+.gh-link { display: inline-block; margin: 0 0 8px; color: var(--accent); font-weight: 600; text-decoration: none; }
+.gh-target { display: grid; gap: 4px; margin: 6px 0; }
+.gh-target input[type=text] { margin-left: 26px; max-width: 320px; }
+.gh-history { display: grid; gap: 8px; margin: 6px 0; }
+.gh-commit { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.gh-commit > span { min-width: 0; overflow-wrap: anywhere; }
+.gh-files { max-height: 240px; overflow: auto; }

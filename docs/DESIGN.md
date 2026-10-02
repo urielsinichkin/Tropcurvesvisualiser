@@ -464,6 +464,20 @@ derivation as an ordered list of such steps, normally one.
   Opening lists the app's files and goes through the same Add / Replace
   choice as Import; replacing links the library to that file. A 401 (expired
   session) asks the user to press again, which signs back in from the click.
+- **GitHub** (menu: GitHub...): open a workspace file from a repository and commit
+  the library back, through the REST API (`api.github.com`, CORS-enabled; its
+  Contents endpoint makes real commits, so no git client is needed). GitHub's
+  OAuth and device flows need a server-side exchange, so the user pastes a
+  fine-grained personal access token (Contents read/write; Pull requests for
+  PRs), kept in localStorage until "Forget" and sent only to GitHub; without
+  one, public repositories open read-only. The *link* records owner, repo,
+  branch, path, the file's blob sha and the commit it was read at (files are
+  read at the branch head's commit). Committing to the same branch passes the
+  blob sha, so GitHub answers 409 if the file changed there meanwhile -- the
+  conflict check offers a new branch, overwrite (re-reading the current sha)
+  or cancel. A new branch is created at the linked commit, so a pull request
+  from it (into the default branch) shows only this change. History lists the
+  file's commits and opens any older version (linked at that commit).
 - A versioned JSON schema is the single source of truth for save/load.
 
 ## 6. Architecture
