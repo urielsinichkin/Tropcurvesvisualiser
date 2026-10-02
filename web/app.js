@@ -11,9 +11,9 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "51";
+const APP_VERSION = "52";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "40";
+const STYLES_VERSION = "42";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -35,8 +35,18 @@ function ensureFreshPage() {
     sc.src = "help-tips.js?t=" + Math.floor(Date.now() / 60000);
     document.head.appendChild(sc);
   }
-  if (!document.getElementById("btn-help")) {
+  if (!document.getElementById("btn-github")) {
     const drive = document.getElementById("btn-drive") || document.getElementById("btn-load");
+    if (drive) {
+      const b = document.createElement("button");
+      b.id = "btn-github";
+      b.title = "Open a file from a GitHub repository, and commit the library back to it";
+      b.textContent = "⑂ GitHub…";
+      drive.after(b);
+    }
+  }
+  if (!document.getElementById("btn-help")) {
+    const drive = document.getElementById("btn-github") || document.getElementById("btn-drive") || document.getElementById("btn-load");
     if (drive) {
       const b = document.createElement("button");
       b.id = "btn-help";
@@ -450,6 +460,7 @@ function wireGlobalButtons() {
   bind("btn-save", "onclick", openExportDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("btn-drive", "onclick", openDriveDialog);
+  bind("btn-github", "onclick", openGitHubDialog);
   bind("file-input", "onchange", importJSON);
   bind("modal-cancel", "onclick", closeModal);
   // the curve copies transparent (drop it on any background); the subdivision
@@ -1014,6 +1025,419 @@ function openDriveDialog() {
 
   say("Loading Google sign-in…");
   loadGis().then(() => { say(""); draw(); }, e => say(e.message, true));
+}
+
+// ---------------------------------------------------------------------------
+// GitHub
+//
+// Open a workspace file from a GitHub repository and commit the library back
+// to it. The site has no server, so GitHub's sign-in flows (which need a
+// server-side secret) are out; instead the user pastes a fine-grained
+// personal access token, kept in this browser until "Forget" and sent only to
+// api.github.com. Without a token, public repositories open read-only.
+//
+// Everything goes through the REST API, whose Contents endpoint makes real
+// commits. The library remembers the file it was opened from (the *link*):
+// repository, branch, path, the file's blob sha and the commit it was read
+// at. Committing to the same branch passes that blob sha, so GitHub refuses
+// (409) if the file changed there meanwhile -- the conflict check; a new
+// branch starts at the commit the file was read at, so a pull request from it
+// shows only this change.
+// ---------------------------------------------------------------------------
+const GH_TOKEN_KEY = "tropcurves.github.token.v1";
+const GH_KEY = "tropcurves.github.v1";            // link and last choices, per browser
+const GH_API = "https://api.github.com";
+const GH_TOKEN_URL = "https://github.com/settings/personal-access-tokens/new";
+
+function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ""; } catch (e) { return ""; } }
+function setGhToken(t) {
+  try { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); }
+  catch (e) { /* ignore */ }
+}
+function loadGh() { try { return JSON.parse(localStorage.getItem(GH_KEY) || "{}"); } catch (e) { return {}; } }
+function saveGh(state) { try { localStorage.setItem(GH_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
+
+// "owner/repo", or a github.com link to a repository, branch or file
+function parseGhRepo(input) {
+  let s = (input || "").trim().replace(/\.git$/, "").replace(/\/+$/, "");
+  const m = s.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/]+)\/([^/]+)(?:\/(?:blob|tree)\/([^/]+)(?:\/(.+))?)?$/);
+  if (m) return { owner: m[1], repo: m[2], branch: m[3] || null, path: m[4] ? decodeURIComponent(m[4]) : null };
+  const p = s.match(/^([\w.-]+)\/([\w.-]+)$/);
+  return p ? { owner: p[1], repo: p[2], branch: null, path: null } : null;
+}
+const ghPath = p => p.split("/").map(encodeURIComponent).join("/");
+function utf8ToB64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64ToUtf8(b64) {
+  const bin = atob((b64 || "").replace(/\s/g, ""));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function ghFetch(path, opts = {}) {
+  const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) };
+  const t = ghToken();
+  if (t) headers.Authorization = "Bearer " + t;
+  if (opts.body && typeof opts.body !== "string") { headers["Content-Type"] = "application/json"; opts = { ...opts, body: JSON.stringify(opts.body) }; }
+  let r;
+  try { r = await fetch(GH_API + path, { ...opts, headers }); }
+  catch (e) { throw new Error("could not reach GitHub (are you offline?)"); }
+  if (r.ok) return r.status === 204 ? null : r.json();
+  let msg = r.statusText;
+  try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) { /* keep */ }
+  let text;
+  if (r.status === 401) text = "GitHub rejected the token (expired or mistyped?) — forget it and paste a new one";
+  else if (r.status === 403 && r.headers.get("x-ratelimit-remaining") === "0") {
+    const reset = +r.headers.get("x-ratelimit-reset") * 1000;
+    text = "GitHub's rate limit is used up" + (reset ? ` until ${new Date(reset).toLocaleTimeString()}` : "") +
+      (t ? "" : "; with a token the limit is much higher");
+  } else if (r.status === 403) text = "the token is not allowed to do this here: " + msg +
+    " (it needs this repository, with Contents: Read and write" + (path.endsWith("/pulls") ? " and Pull requests: Read and write" : "") + ")";
+  else if (r.status === 404) text = "not found on GitHub — check the repository, branch and path" + (t ? "" : " (a private repository needs a token)");
+  else text = "GitHub: " + msg;
+  const err = new Error(text);
+  err.status = r.status;
+  throw err;
+}
+
+const ghRepoInfo = (o, r) => ghFetch(`/repos/${o}/${r}`);
+const ghUser = () => ghFetch("/user");
+async function ghBranches(o, r) { return (await ghFetch(`/repos/${o}/${r}/branches?per_page=100`)).map(b => b.name); }
+async function ghHead(o, r, branch) { return (await ghFetch(`/repos/${o}/${r}/git/ref/heads/${ghPath(branch)}`)).object.sha; }
+async function ghJsonFiles(o, r, ref) {
+  const t = await ghFetch(`/repos/${o}/${r}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+  return t.tree.filter(x => x.type === "blob" && /\.json$/i.test(x.path)).map(x => x.path);
+}
+// the file's text and blob sha at a ref (a branch or a commit)
+async function ghGetFile(o, r, path, ref) {
+  const f = await ghFetch(`/repos/${o}/${r}/contents/${ghPath(path)}?ref=${encodeURIComponent(ref)}`);
+  if (Array.isArray(f) || f.type !== "file") throw new Error(`“${path}” is not a file`);
+  let b64 = f.content;
+  if (!b64 && f.size > 0) b64 = (await ghFetch(`/repos/${o}/${r}/git/blobs/${f.sha}`)).content;   // over 1 MB
+  return { text: b64ToUtf8(b64), sha: f.sha, name: f.name, path: f.path };
+}
+const ghPutFile = (o, r, path, body) =>
+  ghFetch(`/repos/${o}/${r}/contents/${ghPath(path)}`, { method: "PUT", body });
+const ghCreateBranch = (o, r, name, sha) =>
+  ghFetch(`/repos/${o}/${r}/git/refs`, { method: "POST", body: { ref: "refs/heads/" + name, sha } });
+const ghCommits = (o, r, path, branch) =>
+  ghFetch(`/repos/${o}/${r}/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(branch)}&per_page=30`);
+const ghCreatePR = (o, r, body) => ghFetch(`/repos/${o}/${r}/pulls`, { method: "POST", body });
+
+const shortSha = s => (s || "").slice(0, 7);
+const ghLinkText = l => `${l.owner}/${l.repo} · ${l.branch} · ${l.path}`;
+function ghBranchName() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `tropical-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function openGitHubDialog() {
+  const body = dialogHead("github", "GitHub",
+    "Open a workspace file from a GitHub repository, and commit the library back to it.");
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+  const panel = document.createElement("div");
+  panel.className = "gh-panel";
+  const status = document.createElement("div");
+  status.className = "status";
+  body.append(panel, status, errBox());
+  openModal();
+
+  const st = loadGh();
+  let user = null;                  // the token's account, once checked
+  let repoInfo = null;              // the repository being browsed: { owner, repo, default_branch, push }
+  let branches = [], files = null, history = null;
+  let pending = null;               // a conflict waiting for a decision
+  let prOffer = null;               // { head, base } after committing to a new branch
+  let lastPR = null;                // the pull request just opened
+
+  const say = (text, warn) => { status.textContent = text || ""; status.className = "status" + (warn ? " warn" : ""); };
+  const button = (text, cls, onclick) => {
+    const b = document.createElement("button");
+    b.type = "button"; if (cls) b.className = cls;
+    b.textContent = text; b.onclick = onclick;
+    return b;
+  };
+  const section = title => {
+    const h = document.createElement("h3");
+    h.className = "eval-head"; h.textContent = title;
+    panel.appendChild(h);
+  };
+  const para = (text, cls = "muted") => {
+    const p = document.createElement("p");
+    p.className = cls; p.style.margin = "0 0 6px";
+    p.textContent = text;
+    return p;
+  };
+  const act = async (work, busy) => {
+    say(busy || "Working…");
+    try { await work(); }
+    catch (e) { say(e.message, true); }
+    draw();
+  };
+  const link = () => loadGh().link || null;
+  const setLink = l => { const s = loadGh(); s.link = l; saveGh(s); };
+  const remember = (k, v) => { const s = loadGh(); s[k] = v; saveGh(s); };
+
+  // -- operations --------------------------------------------------------
+  const loadRepo = async input => {
+    const p = parseGhRepo(input);
+    if (!p) throw new Error("write the repository as owner/repo, or paste its GitHub link");
+    const info = await ghRepoInfo(p.owner, p.repo);
+    repoInfo = { owner: p.owner, repo: p.repo, default_branch: info.default_branch,
+                 push: !!(info.permissions && info.permissions.push) };
+    branches = await ghBranches(p.owner, p.repo);
+    const branch = p.branch && branches.includes(p.branch) ? p.branch
+      : (st.branch && st.repo === `${p.owner}/${p.repo}` && branches.includes(st.branch) ? st.branch : info.default_branch);
+    remember("repo", `${p.owner}/${p.repo}`); remember("branch", branch);
+    if (p.path) remember("path", p.path);
+    files = await ghJsonFiles(p.owner, p.repo, branch);
+    say("");
+  };
+  const switchBranch = async branch => {
+    remember("branch", branch);
+    files = await ghJsonFiles(repoInfo.owner, repoInfo.repo, branch);
+    say("");
+  };
+  // read at the branch's head commit, so a new branch can start from it
+  const openFile = async (path, version) => {
+    const { owner, repo } = repoInfo;
+    const branch = loadGh().branch || repoInfo.default_branch;
+    const commit = version ? version.sha : await ghHead(owner, repo, branch);
+    const f = await ghGetFile(owner, repo, path, commit);
+    remember("path", f.path);
+    say("");
+    offerImport(f.text, f.name, append => {
+      // replacing the library links it to the file; adding to it does not
+      if (append) return;
+      setLink({ owner, repo, branch, path: f.path, sha: f.sha, commit,
+                defaultBranch: repoInfo.default_branch, at: new Date().toISOString(),
+                version: version ? { sha: version.sha, date: version.date } : null });
+      pending = null; prOffer = null; history = null;
+    });
+  };
+  const commit = async (target, message, newBranch, force) => {
+    const l = link();
+    const { owner, repo } = l;
+    let branch = l.branch, sha = l.sha;
+    if (target === "new") {
+      branch = (newBranch || "").trim();
+      if (!branch) throw new Error("name the new branch");
+      try { await ghCreateBranch(owner, repo, branch, l.commit); }
+      catch (e) { if (e.status === 422) throw new Error(`a branch “${branch}” already exists — choose another name`); throw e; }
+    } else if (force) {
+      try { sha = (await ghGetFile(owner, repo, l.path, branch)).sha; }
+      catch (e) { if (e.status === 404) sha = undefined; else throw e; }
+    }
+    let out;
+    try {
+      out = await ghPutFile(owner, repo, l.path, {
+        message: message || `Update ${l.path} from Tropical Curves`,
+        content: utf8ToB64(api("save")), branch, ...(sha ? { sha } : {}) });
+    } catch (e) {
+      if ((e.status === 409 || e.status === 422) && target !== "new") {
+        pending = { message };
+        say(""); return;
+      }
+      throw e;
+    }
+    setLink({ ...l, branch, sha: out.content.sha, commit: out.commit.sha, at: new Date().toISOString(), version: null });
+    pending = null; history = null;
+    prOffer = target === "new" ? { head: branch, base: l.branch } : null;
+    say(`Committed ${shortSha(out.commit.sha)} to ${branch}.`);
+  };
+  const saveNewFile = async (path, message) => {
+    if (!repoInfo) throw new Error("load a repository first");
+    path = (path || "").trim().replace(/^\/+/, "");
+    if (!path) throw new Error("name the file, e.g. tropical-library.json");
+    if (!/\.json$/i.test(path)) path += ".json";
+    const { owner, repo } = repoInfo;
+    const branch = loadGh().branch || repoInfo.default_branch;
+    let out;
+    try {
+      out = await ghPutFile(owner, repo, path, {
+        message: message || `Add ${path} from Tropical Curves`, content: utf8ToB64(api("save")), branch });
+    } catch (e) {
+      if (e.status === 422) throw new Error(`“${path}” already exists on ${branch} — open it to commit to it, or choose another name`);
+      throw e;
+    }
+    setLink({ owner, repo, branch, path: out.content.path, sha: out.content.sha, commit: out.commit.sha,
+              defaultBranch: repoInfo.default_branch, at: new Date().toISOString(), version: null });
+    files = null; history = null; prOffer = null;
+    say(`Committed ${shortSha(out.commit.sha)}: added ${out.content.path} to ${branch}.`);
+  };
+  const openPR = async (head, base, title, text) => {
+    const l = link();
+    const pr = await ghCreatePR(l.owner, l.repo, { head, base, title: title || `Update ${l.path}`, body: text || "" });
+    prOffer = null;
+    say("");
+    lastPR = pr;
+  };
+
+  // -- drawing -------------------------------------------------------------
+  const draw = () => {
+    panel.innerHTML = "";
+    const token = ghToken();
+
+    // token
+    section("Access");
+    if (token) {
+      const who = document.createElement("div");
+      who.className = "drive-who";
+      who.textContent = user ? `Token for ${user.login}${user.name ? " (" + user.name + ")" : ""}` : "A token is saved in this browser.";
+      who.appendChild(button("Forget token", "small", () => { setGhToken(""); user = null; say("Token forgotten."); draw(); }));
+      panel.appendChild(who);
+    } else {
+      panel.appendChild(para("No token: public repositories open read-only. To commit, paste a fine-grained " +
+        "personal access token for the repository, with Contents: Read and write (and Pull requests: Read and " +
+        "write for pull requests). It is kept in this browser and sent only to GitHub."));
+      const a = document.createElement("a");
+      a.href = GH_TOKEN_URL; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "Create a token on GitHub →";
+      a.className = "gh-link";
+      const inp = document.createElement("input");
+      inp.type = "password"; inp.id = "gh-token"; inp.placeholder = "github_pat_…"; inp.autocomplete = "off";
+      panel.append(a, labeled("Token", inp), row([button("Save token", "primary", () => act(async () => {
+        const t = inp.value.trim();
+        if (!t) throw new Error("paste the token first");
+        setGhToken(t);
+        try { user = await ghUser(); }
+        catch (e) { setGhToken(""); throw e; }
+        say(`Token saved for ${user.login}.`);
+      }, "Checking the token…"))]));
+    }
+
+    // the linked file
+    const l = link();
+    if (l) {
+      section("Linked file");
+      panel.appendChild(para(ghLinkText(l) + (l.version
+        ? ` — an older version (commit ${shortSha(l.version.sha)}, ${fmtWhen(l.version.date)})`
+        : ` — at commit ${shortSha(l.commit)}`), ""));
+      if (pending) {
+        const p = para(`“${l.path}” changed on ${l.branch} after it was opened here (someone else's commit, or ` +
+          "another device). Committing now would replace that change.", "drive-warn");
+        const nb = document.createElement("input");
+        nb.type = "text"; nb.value = ghBranchName();
+        panel.append(p, labeled("New branch", nb), row([
+          button("Commit to the new branch instead", "primary", () => act(() => commit("new", pending.message, nb.value), "Committing…")),
+          button("Overwrite on " + l.branch, "danger", () => act(() => commit("same", pending.message, null, true), "Committing…")),
+          button("Cancel", "", () => { pending = null; say(""); draw(); }),
+        ]));
+      } else if (token) {
+        const msg = document.createElement("input");
+        msg.type = "text"; msg.id = "gh-message"; msg.value = `Update ${l.path} from Tropical Curves`;
+        const radios = document.createElement("div");
+        radios.className = "gh-target";
+        const mk = (val, label, checked) => {
+          const lab = document.createElement("label"); lab.className = "check";
+          const r = document.createElement("input"); r.type = "radio"; r.name = "gh-target"; r.value = val; r.checked = checked;
+          lab.append(r, document.createTextNode(label));
+          return lab;
+        };
+        const nb = document.createElement("input");
+        nb.type = "text"; nb.id = "gh-new-branch"; nb.value = ghBranchName();
+        radios.append(mk("same", `Commit to ${l.branch}`, true), mk("new", "Commit to a new branch:", false), nb);
+        nb.addEventListener("focus", () => { radios.querySelector('input[value="new"]').checked = true; });
+        panel.append(labeled("Commit message", msg), radios, row([button("Commit", "primary", () => {
+          const target = radios.querySelector("input[name=gh-target]:checked").value;
+          act(() => commit(target, msg.value.trim(), nb.value), "Committing…");
+        })]));
+      } else {
+        panel.appendChild(para("Save a token above to commit."));
+      }
+
+      // pull request: after a new-branch commit, or whenever on another branch than the default
+      const base = prOffer ? prOffer.base : l.defaultBranch;
+      if (token && !pending && l.branch !== base) {
+        const title = document.createElement("input");
+        title.type = "text"; title.id = "gh-pr-title"; title.value = `Update ${l.path}`;
+        const text = document.createElement("textarea");
+        text.rows = 2; text.className = "type-desc"; text.placeholder = "Description (optional)";
+        panel.append(para(`Open a pull request from ${l.branch} into ${base}:`, ""), labeled("Title", title), text,
+          row([button("Open pull request", "", () => act(() => openPR(l.branch, base, title.value.trim(), text.value), "Opening…"))]));
+      }
+      if (lastPR) {
+        const a = document.createElement("a");
+        a.href = lastPR.html_url; a.target = "_blank"; a.rel = "noopener"; a.className = "gh-link";
+        a.textContent = `Pull request #${lastPR.number} opened →`;
+        panel.appendChild(a);
+      }
+
+      // history
+      if (history === null) {
+        panel.appendChild(row([button("Show history", "small", () => act(async () => {
+          history = await ghCommits(l.owner, l.repo, l.path, l.branch); say("");
+        }, "Loading history…")), button("Unlink", "small", () => { setLink(null); history = null; prOffer = null; pending = null; say(""); draw(); })]));
+      } else {
+        const list = document.createElement("div");
+        list.className = "gh-history";
+        if (!history.length) list.appendChild(para("No commits found for this file."));
+        history.forEach(c => {
+          const r = document.createElement("div");
+          r.className = "gh-commit";
+          const what = document.createElement("span");
+          what.innerHTML = `<b>${escapeHtml(c.commit.message.split("\n")[0])}</b><br>
+            <span class="muted">${escapeHtml(shortSha(c.sha))} · ${escapeHtml(c.commit.author ? c.commit.author.name : "")} ·
+            ${escapeHtml(fmtWhen(c.commit.author ? c.commit.author.date : ""))}</span>`;
+          r.append(what, button("Open this version", "small", () => act(async () => {
+            if (!repoInfo || repoInfo.owner !== l.owner || repoInfo.repo !== l.repo) await loadRepo(`${l.owner}/${l.repo}`);
+            remember("branch", l.branch);
+            await openFile(l.path, { sha: c.sha, date: c.commit.author ? c.commit.author.date : "" });
+          }, "Opening…")));
+          list.appendChild(r);
+        });
+        panel.appendChild(list);
+      }
+    }
+
+    // open / browse
+    section("Open from a repository");
+    const repoIn = document.createElement("input");
+    repoIn.type = "text"; repoIn.id = "gh-repo"; repoIn.placeholder = "owner/repo, or a GitHub link";
+    repoIn.value = repoInfo ? `${repoInfo.owner}/${repoInfo.repo}` : (st.repo || "");
+    panel.append(labeled("Repository", repoIn), row([button("Load", repoInfo ? "small" : "primary",
+      () => act(() => loadRepo(repoIn.value), "Loading the repository…"))]));
+    if (repoInfo) {
+      const cur = loadGh().branch || repoInfo.default_branch;
+      const sel = document.createElement("select");
+      sel.id = "gh-branch";
+      branches.forEach(b => sel.appendChild(new Option(b + (b === repoInfo.default_branch ? " (default)" : ""), b)));
+      sel.value = cur;
+      sel.onchange = () => act(() => switchBranch(sel.value), "Loading…");
+      panel.appendChild(labeled("Branch", sel));
+      if (files && files.length) {
+        const list = document.createElement("div");
+        list.className = "drive-files gh-files";
+        files.forEach(path => {
+          const r = document.createElement("div");
+          r.className = "drive-file";
+          const name = document.createElement("span"); name.className = "tname"; name.textContent = path;
+          const gap = document.createElement("span");
+          r.append(name, gap, button("Open", "small", () => act(() => openFile(path), "Opening…")));
+          list.appendChild(r);
+        });
+        panel.appendChild(list);
+      } else if (files) {
+        panel.appendChild(para(`No .json files on ${cur}.`));
+      }
+      if (token) {
+        const path = document.createElement("input");
+        path.type = "text"; path.id = "gh-new-path"; path.value = "tropical-library.json";
+        panel.append(labeled(`Or commit the library as a new file on ${cur}`, path),
+          row([button("Commit as a new file", "", () => act(() => saveNewFile(path.value), "Committing…"))]));
+      }
+    }
+  };
+
+  draw();
+  if (ghToken()) act(async () => { user = await ghUser(); say(""); }, "Checking the token…");
+  if (st.repo) act(() => loadRepo(st.repo), "Loading the repository…");
 }
 
 function openNewDialog() {

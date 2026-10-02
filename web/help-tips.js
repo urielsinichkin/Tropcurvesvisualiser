@@ -14,6 +14,7 @@ const HELP = {
         <li><b>Export…</b> — save the library, or a chosen part, as a JSON file.</li>
         <li><b>Import</b> — load a JSON file: add to the library or replace it.</li>
         <li><b>☁ Drive…</b> — save to / open from your Google Drive.</li>
+        <li><b>⑂ GitHub…</b> — open a file from a GitHub repository and commit the library back (branches, history, pull requests).</li>
         <li><b>? Help</b> — this overview.</li>
         <li><i>saved …</i> — when the library was last saved in this browser (it saves itself); <i>v…</i> — the app version.</li>
       </ul>
@@ -134,6 +135,18 @@ const HELP = {
         <li><b>Open from Drive</b> — the app's files, newest first: <b>Open</b> (then add to or replace the library), <b>Refresh</b>.</li>
       </ul>
       <p>If sign-in does not open, allow pop-ups for this site.</p>`,
+  },
+  github: {
+    title: "GitHub",
+    anchor: "github",
+    html: `<p>Work on a workspace file in a GitHub repository: open it, then commit the library back to it.</p>
+      <ul>
+        <li><b>Access</b> — without a token, public repositories open read-only. To commit, paste a fine-grained personal access token for the repository (Contents: Read and write; Pull requests: Read and write for pull requests); <b>Save token</b> keeps it in this browser, <b>Forget token</b> removes it.</li>
+        <li><b>Open from a repository</b> — <i>owner/repo</i> or a GitHub link, <b>Load</b>, pick the <b>Branch</b>, then <b>Open</b> a .json file (add to or replace the library). Replacing links the library to that file. <b>Commit as a new file</b> adds the library as a new file.</li>
+        <li><b>Commit</b> — a message, then to the same branch (default) or <b>a new branch</b>. If the file changed on GitHub since you opened it, you choose: commit to a new branch, <b>Overwrite</b>, or <b>Cancel</b>.</li>
+        <li><b>Open pull request</b> — from the linked branch into the default branch (offered after committing to a new branch).</li>
+        <li><b>Show history</b> — the file's commits; <b>Open this version</b> loads an older one. <b>Unlink</b> forgets the link.</li>
+      </ul>`,
   },
   paint: {
     title: "Paint",
