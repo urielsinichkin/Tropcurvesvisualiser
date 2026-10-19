@@ -738,6 +738,12 @@ divider resize the panel.</p>
 <section class="doc" id="faq">
 <h2>18. Troubleshooting</h2>
 <ul>
+  <li><strong>"Something went wrong" appears at the bottom of the screen.</strong> Part of the view could not be
+      drawn. Your library is saved; reload the page. If it keeps happening, note the message (and, if you can,
+      export the library) and report it.</li>
+  <li><strong>A deleted type is still in the list.</strong> Reload the page: libraries are checked and repaired when
+      they load (a type listed under the wrong parent, or not listed at all, is put back in place), after which
+      deletion works. If the delete itself fails, the dialog stays open and says so.</li>
   <li><strong>A button or the help popovers do not respond, or look unstyled.</strong> The browser
       showed an old cached copy of the page. Reload it; the app also repairs such a page by itself when it
       starts.</li>

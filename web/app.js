@@ -11,9 +11,9 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "52";
+const APP_VERSION = "53";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "42";
+const STYLES_VERSION = "43";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -131,6 +131,31 @@ function api(method, ...args) {
   if (res && res.__error) throw new Error(res.__error);
   return res;
 }
+
+// A notice for errors that would otherwise go unseen (the console is not
+// something users look at): what failed, and that the library is safe.
+function reportError(err) {
+  const msg = (err && (err.message || err.reason || err)) + "";
+  console.error(err);
+  let box = document.getElementById("error-toast");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "error-toast"; box.className = "error-toast"; box.setAttribute("role", "alert");
+    document.body.appendChild(box);
+  }
+  box.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = "Something went wrong: " + msg.slice(0, 300) +
+    ". Your library is saved; reload the page if the view looks wrong.";
+  const x = document.createElement("button");
+  x.type = "button"; x.textContent = "✕"; x.setAttribute("aria-label", "Dismiss");
+  x.onclick = () => box.remove();
+  box.append(text, x);
+}
+window.addEventListener("error", ev => {
+  if (ev.error || ev.message) reportError(ev.error || ev.message);
+});
+window.addEventListener("unhandledrejection", ev => reportError(ev.reason || "an operation failed"));
 
 function autosave() {
   try { localStorage.setItem(STORAGE_KEY, api("save")); markSaved(); }
@@ -4208,16 +4233,28 @@ function openDeleteDialog(id = selectedId) {
     try {
       removed = api("delete", id, !!(all && all.checked)).removed;
     } catch (e) { showModalError(e.message); return; }
-    closeModal();
+    // check it really went, before saying so
     const remaining = api("list_nodes");
+    const still = remaining.filter(n => removed.includes(n.id));
+    if (still.length) {
+      showModalError("Could not delete " + still.map(n => n.name).join(", ") + ". Please report this.");
+      return;
+    }
+    closeModal();
+    autosave();
     let next = null;
     if (selectedId && !removed.includes(selectedId)) next = selectedId;
     else if (summ.parent_id && remaining.some(n => n.id === summ.parent_id)) next = summ.parent_id;
     else if (remaining.length) next = remaining[0].id;
-    refreshAll();
-    if (next) selectNode(next);
-    else { selectedId = null; renderTypeList(); clearViews(); }
-    autosave();
+    // the list must not stay stale even if drawing the next type fails
+    try {
+      if (next) selectNode(next);
+      else { selectedId = null; renderTypeList(); clearViews(); }
+    } catch (e) {
+      reportError(e);
+      selectedId = next;
+      try { renderTypeList(); } catch (e2) { reportError(e2); }
+    }
   };
   const box = document.createElement("div");
   box.className = "reslist"; box.style.marginTop = "10px";

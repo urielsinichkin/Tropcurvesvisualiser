@@ -430,6 +430,20 @@ derivation as an ordered list of such steps, normally one.
   that currently resolves to all-or-nothing (the single flag), so **selective
   propagation** can be enabled later without reworking the model.
 
+
+### Tree consistency
+
+`parent_id` is the record of the derivation forest; each `children` list only
+orders it. `Workspace.normalize()` makes the two agree -- children lists hold
+exactly the types naming that parent (existing order kept, duplicates and
+strays dropped, missing ones appended); a type whose parent is missing, or on
+a cycle of parents, becomes a root. It runs on every load, merge and delete.
+Without it, a file whose lists disagreed showed a types list (built from
+`children`) different from the core's tree, so a deleted type could seem to
+stay. The delete dialog also checks the type is gone before closing, and
+redraws inside a guard; errors anywhere in the page that would otherwise only
+reach the console are shown as a dismissible notice (`reportError`).
+
 ## 5. Workspace and persistence
 
 - A **workspace** holds many types, the derivation forest, and presentation.

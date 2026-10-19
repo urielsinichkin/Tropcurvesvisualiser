@@ -431,3 +431,14 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
   padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
 .gh-commit > span { min-width: 0; overflow-wrap: anywhere; }
 .gh-files { max-height: 240px; overflow: auto; }
+
+/* errors that would otherwise go unseen */
+.error-toast {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2000;
+  max-width: min(560px, calc(100vw - 24px)); box-sizing: border-box;
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--danger);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 25%, transparent); font-size: 13px;
+}
+.error-toast span { flex: 1; overflow-wrap: anywhere; }
+.error-toast button { border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 0 4px; }
