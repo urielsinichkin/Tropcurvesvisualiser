@@ -170,6 +170,7 @@ def workspace_from_dict(d: Dict[str, Any]):
         if m:
             max_num = max(max_num, int(m.group(1)))
     ws._counter = itertools.count(max_num + 1)
+    ws.normalize()             # files from older versions may disagree with themselves
     return ws
 
 

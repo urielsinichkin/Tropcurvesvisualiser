@@ -448,3 +448,65 @@ def test_move_type_among_siblings_keeps_derivations_and_saves():
     t = Session(); t.load(s.save())
     assert [n["id"] for n in t.list_nodes() if not n["parent_id"]] == [k2, b, c, a]
     assert t.node_summary(k1)["children"] == [g2, g1]
+
+
+def _tree_file():
+    """A small saved workspace: A -> B -> {C, D}, and a second root E."""
+    from tropcurves.api import Session
+    s = Session()
+    a = s.add_preset("caterpillar_square")["id"]
+    e = next(x["id"] for x in s.render(a)["curve"]["edges"] if x["kind"] == "bounded")
+    b = s.contract(a, e)["id"]
+    v = next(v for v, d in s.node_summary(b)["valences"].items() if d >= 4)
+    r = s.list_resolutions(b, v)
+    c = s.resolve(b, v, r[0]["index"])["id"]
+    d = s.resolve(b, v, r[-1]["index"])["id"]
+    e2 = s.add_preset("line")["id"]
+    import json
+    return json.loads(s.save()), dict(A=a, B=b, C=c, D=d, E=e2)
+
+
+def _load(data):
+    import json
+    from tropcurves.api import Session
+    s = Session(); s.load(json.dumps(data))
+    return s
+
+
+def _consistent(s):
+    nodes = {n["id"]: n for n in s.list_nodes()}
+    for n in nodes.values():
+        assert n["children"] == [c for c in n["children"] if nodes[c]["parent_id"] == n["id"]]
+        assert sorted(n["children"]) == sorted(c for c in nodes if nodes[c]["parent_id"] == n["id"])
+    return nodes
+
+
+def test_inconsistent_files_load_as_a_consistent_tree_and_delete():
+    import copy
+    data, ids = _tree_file()
+    byid = lambda d, i: next(n for n in d["nodes"] if n["id"] == i)
+    cases = {}
+    w = copy.deepcopy(data); byid(w, ids["E"])["children"].append(ids["C"]); cases["listed under wrong parent"] = w
+    w = copy.deepcopy(data); byid(w, ids["B"])["children"].append(ids["C"]); cases["duplicated child"] = w
+    w = copy.deepcopy(data); byid(w, ids["B"])["children"].remove(ids["D"]); cases["missing from parent's list"] = w
+    w = copy.deepcopy(data); byid(w, ids["D"])["parent_id"] = "T999"; cases["dangling parent"] = w
+    w = copy.deepcopy(data); byid(w, ids["A"])["parent_id"] = ids["C"]; cases["cycle of parents"] = w
+    for label, w in cases.items():
+        s = _load(w)
+        nodes = _consistent(s)
+        assert set(nodes) == set(ids.values()), label
+        for key in ("C", "D", "B"):
+            t = _load(w)
+            t.delete(ids[key])
+            left = _consistent(t)
+            assert ids[key] not in left, (label, key)
+            u = _load(__import__("json").loads(t.save()))
+            assert ids[key] not in {n["id"] for n in u.list_nodes()}, (label, key)
+        t = _load(w); t.delete(ids["B"], True); _consistent(t)
+
+
+def test_normalize_keeps_a_consistent_tree_unchanged():
+    data, ids = _tree_file()
+    s = _load(data)
+    assert s.ws.normalize() == []
+    assert s.node_summary(ids["B"])["children"] == [ids["C"], ids["D"]]

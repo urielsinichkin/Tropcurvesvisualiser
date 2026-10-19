@@ -154,7 +154,63 @@ class Workspace:
             used_names.add(n.name)
             self.nodes[n.id] = n
             added.append(n.id)
+        self.normalize()
         return added
+
+    def normalize(self) -> List[str]:
+        """Make the tree consistent: every ``children`` list is exactly the
+        types whose ``parent_id`` names that type, in the list's existing order
+        with any missing ones appended; a type whose parent does not exist, or
+        that sits on a cycle of parents, becomes a root. ``parent_id`` is the
+        record; ``children`` only orders it. Returns a note per repair.
+
+        Files written by older versions, or edited by hand, can disagree; the
+        types list (built from ``children``) and everything else (built from
+        ``nodes``) would then see different trees.
+        """
+        fixed: List[str] = []
+        for n in self.nodes.values():
+            if n.parent_id and (n.parent_id not in self.nodes or n.parent_id == n.id):
+                fixed.append(f"{n.name}: parent {n.parent_id!r} is missing; now a root")
+                n.parent_id = None
+                n.operations = []
+                n.status = STATUS_OK
+        kids: Dict[str, List[str]] = {nid: [] for nid in self.nodes}
+        for n in self.nodes.values():
+            if n.parent_id:
+                kids[n.parent_id].append(n.id)
+        for n in self.nodes.values():
+            want = kids[n.id]
+            new = [c for i, c in enumerate(n.children) if c in want and c not in n.children[:i]]
+            new += [c for c in want if c not in new]
+            if new != n.children:
+                fixed.append(f"{n.name}: derived types list repaired")
+                n.children = new
+        # parents forming a cycle: nothing reaches them from a root
+        reached = set()
+        stack = [n.id for n in self.nodes.values() if not n.parent_id]
+        while stack:
+            nid = stack.pop()
+            if nid in reached:
+                continue
+            reached.add(nid)
+            stack.extend(self.nodes[nid].children)
+        for n in self.nodes.values():
+            if n.id not in reached:
+                fixed.append(f"{n.name}: on a cycle of parents; now a root")
+                parent = self.nodes.get(n.parent_id)
+                if parent is not None and n.id in parent.children:
+                    parent.children.remove(n.id)
+                n.parent_id = None
+                n.operations = []
+                n.status = STATUS_OK
+                stack = [n.id]
+                while stack:
+                    nid = stack.pop()
+                    if nid not in reached:
+                        reached.add(nid)
+                        stack.extend(self.nodes[nid].children)
+        return fixed
 
     @staticmethod
     def _numbered_name(base: str, used: set) -> str:
@@ -204,6 +260,7 @@ class Workspace:
                 parent.children = [c for c in parent.children if c != node_id]
             for nid in removed:
                 self.nodes.pop(nid, None)
+            self.normalize()
             return removed
         for cid in node.children:
             child = self.nodes.get(cid)
@@ -225,6 +282,7 @@ class Workspace:
             at = parent.children.index(node_id)
             parent.children[at:at + 1] = node.children
         self.nodes.pop(node_id, None)
+        self.normalize()
         return [node_id]
 
     def _fresh_node_name(self, base: str) -> str:
