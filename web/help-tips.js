@@ -53,6 +53,7 @@ const HELP = {
       <ul>
         <li>Folded by default — click the heading to open it.</li>
         <li>Cell colors: green — a vertex; <b>violet — a marked vertex</b>; orange — a crossing (a parallelogram). A legend names those present.</li>
+        <li>Each edge has the color of the curve edge it is dual to (perpendicular to it).</li>
         <li><b>Copy</b> — the picture as a PNG including its background.</li>
         <li><b>subdivision text (debug)</b> — the cells as text, with <b>Copy</b>, reusable in <i>New → paste as text</i>.</li>
       </ul>`,

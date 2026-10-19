@@ -153,3 +153,57 @@ def test_a_crossing_cell_belongs_to_no_vertex():
     assert crossings and all(cell.is_parallelogram() for cell in crossings)
     owned = [cell.vertex for cell in sub.cells if cell.vertex is not None]
     assert len(owned) == len(set(owned)) and set(owned) <= set(c.vertices)
+
+
+def _sides(cell):
+    vs = cell.vertices
+    return {tuple(sorted([(vs[i].x, vs[i].y), (vs[i - 1].x, vs[i - 1].y)])) for i in range(len(vs))}
+
+
+def _check_dual_edges(c, sub):
+    """Every side of every cell names one curve edge, perpendicular to it with
+    length its weight; each crossing's sides come from the two crossing edges."""
+    from tropcurves.geometry import primitive
+    named = {tuple(sorted([(e.a.x, e.a.y), (e.b.x, e.b.y)])): e.edge for e in sub.edges}
+    sides = set().union(*(_sides(cell) for cell in sub.cells))
+    assert set(named) == sides
+    edges = c.edges
+    for (a, b), eid in named.items():
+        e = edges[eid]
+        u, w = primitive(e.vec)
+        d = Vec2(b[0] - a[0], b[1] - a[1])
+        assert d.x * u.x + d.y * u.y == 0          # perpendicular
+        assert primitive(d)[1] == w                # as long as the weight
+    for cell in sub.cells:
+        if cell.vertex is None:
+            assert len({named[s] for s in _sides(cell)}) == 2
+        else:
+            incident = {e.id for e in c.incident(cell.vertex) if not e.outgoing(cell.vertex).is_zero()}
+            assert {named[s] for s in _sides(cell)} == incident
+
+
+def test_each_side_knows_its_dual_curve_edge():
+    c = _crossing_caterpillar()
+    _check_dual_edges(c, build_subdivision(c))
+    rng = random.Random(777)
+    checked = 0
+    for _ in range(80):
+        c = _random_valid_curve(rng)
+        try:
+            sub = build_subdivision(c)
+        except SubdivisionError:
+            continue
+        _check_dual_edges(c, sub)
+        checked += 1
+    assert checked >= 20
+
+
+def test_render_gives_the_dual_edge_of_each_side():
+    from tropcurves.api import Session
+    s = Session()
+    t = s.add_preset("caterpillar_square")
+    r = s.render(t["id"])
+    ids = {e["id"] for e in r["curve"]["edges"]}
+    sub = r["subdivision"]
+    assert sub["edges"] and all(e["edge"] in ids for e in sub["edges"])
+    assert {e["edge"] for e in sub["edges"]} == ids    # every edge has a dual side

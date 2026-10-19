@@ -19,6 +19,9 @@ Construction (the classical moment/gradient duality):
 * The dual cell at each real curve vertex (tree vertex or crossing) is the
   convex hull of ``phi`` over the faces around it: triangles at trivalent
   vertices, parallelograms at crossings, larger mixed cells otherwise.
+* Each piece of a curve edge is dual to the segment joining ``phi`` of the
+  faces on its two sides; :attr:`Subdivision.edges` records which curve edge
+  every side of every cell comes from (so the picture can share its colors).
 
 Cells tile the Newton polygon (up to translation). Multiplicities are out of
 scope. See ``docs/DESIGN.md`` section 2.4.
@@ -87,9 +90,19 @@ class SubdivisionCell:
 
 
 @dataclass
+class SubdivisionEdge:
+    """A side of the subdivision and the curve edge it is dual to."""
+
+    a: Vec2
+    b: Vec2
+    edge: str
+
+
+@dataclass
 class Subdivision:
     cells: List[SubdivisionCell] = field(default_factory=list)
     lattice_points: List[Vec2] = field(default_factory=list)
+    edges: List[SubdivisionEdge] = field(default_factory=list)
 
     @property
     def num_cells(self) -> int:
@@ -112,6 +125,7 @@ class _Seg:
     b: FPoint
     w: int          # weight; 0 for the bounding box
     u: Vec2         # primitive direction a -> b (meaningless when w == 0)
+    edge: Optional[str] = None   # the curve edge it is part of; None for the box
 
 
 def _curve_segments_and_rays(curve: Curve, pos: Dict[str, Point]):
@@ -121,10 +135,10 @@ def _curve_segments_and_rays(curve: Curve, pos: Dict[str, Point]):
         a = pos[e.tail]
         b = pos[e.head]  # type: ignore[index]
         u, w = primitive(e.outgoing(e.tail))
-        segs.append(_Seg(a=a, b=b, w=w, u=u))
+        segs.append(_Seg(a=a, b=b, w=w, u=u, edge=e.id))
     for e in curve.ends:
         u, w = primitive(e.vec)
-        rays.append((pos[e.tail], u, w))
+        rays.append((pos[e.tail], u, w, e.id))
     return segs, rays
 
 
@@ -135,7 +149,7 @@ def _seg_ray_and_ray_ray_crossings(segs, rays) -> List[FPoint]:
         # param of b from a in units of u
         tmax = _param_along(s.a, s.b, s.u)
         objs.append((s.a, s.u, tmax))
-    for (a, u, _w) in rays:
+    for (a, u, _w, _e) in rays:
         objs.append((a, u, None))
 
     pts: List[FPoint] = []
@@ -250,9 +264,9 @@ def _build_once(curve: Curve, pos: Dict[str, Point]) -> Subdivision:
 
     all_segs: List[_Seg] = list(segs)
     # rays -> segments clipped to the box
-    for (a, u, w) in rays:
+    for (a, u, w, eid) in rays:
         exit_pt = _ray_box_exit(a, u, xmin, xmax, ymin, ymax)
-        all_segs.append(_Seg(a=a, b=exit_pt, w=w, u=u))
+        all_segs.append(_Seg(a=a, b=exit_pt, w=w, u=u, edge=eid))
     # box edges (weight 0)
     for i in range(4):
         all_segs.append(_Seg(a=corners[i], b=corners[(i + 1) % 4], w=0, u=Vec2(0, 0)))
@@ -324,6 +338,7 @@ def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
     # 2. split each segment at any node lying in its interior
     # darts: dict origin -> list of (target, w, u_dir)
     darts: List[Tuple[int, int, int, Vec2]] = []  # (origin, target, w, u)
+    dart_edge: List[Optional[str]] = []           # the curve edge of each dart
     for s in segs:
         pts_on = [p for p in nodes if _on_segment_interior(p, s.a, s.b)]
         ab = _sub(s.b, s.a)
@@ -336,6 +351,7 @@ def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
             u = s.u if s.w else Vec2(0, 0)
             darts.append((ia, ib, s.w, u))
             darts.append((ib, ia, s.w, Vec2(-u.x, -u.y)))
+            dart_edge += [s.edge, s.edge]
 
     # 3. rotation system: outgoing darts per node, sorted CCW by angle
     out: Dict[int, List[int]] = {i: [] for i in range(len(nodes))}
@@ -432,6 +448,7 @@ def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
 
     # 6. cells at real curve vertices
     cells: List[SubdivisionCell] = []
+    sides: Dict[Tuple[Tuple[int, int], Tuple[int, int]], str] = {}
     all_pts: set[Tuple[int, int]] = set()
     for i, p in enumerate(node_pts):
         if p not in real_vertex_pts:
@@ -455,8 +472,18 @@ def _arrangement_to_subdivision(segs: List[_Seg], real_vertex_pts,
         cells.append(SubdivisionCell(vertices=hull, vertex=(vertex_at or {}).get(p)))
         for v in hull:
             all_pts.add((v.x, v.y))
+        # each curve edge leaving this vertex is dual to a side of the cell
+        for di in out[i]:
+            if darts[di][2] == 0:
+                continue
+            f1, f2 = face_of[di], face_of[twin(di)]
+            if f1 in phi and f2 in phi:
+                a, b = sorted([(phi[f1].x, phi[f1].y), (phi[f2].x, phi[f2].y)])
+                sides[(a, b)] = dart_edge[di]  # type: ignore[assignment]
 
-    sub = Subdivision(cells=cells, lattice_points=[Vec2(x, y) for x, y in sorted(all_pts)])
+    sub = Subdivision(cells=cells, lattice_points=[Vec2(x, y) for x, y in sorted(all_pts)],
+                      edges=[SubdivisionEdge(Vec2(*a), Vec2(*b), e)
+                             for (a, b), e in sorted(sides.items())])
     _normalize_translation(sub)
     return sub
 
@@ -488,4 +515,6 @@ def _normalize_translation(sub: Subdivision) -> None:
         return
     for c in sub.cells:
         c.vertices = [v + shift for v in c.vertices]
+    for e in sub.edges:
+        e.a, e.b = e.a + shift, e.b + shift
     sub.lattice_points = [p + shift for p in sub.lattice_points]
