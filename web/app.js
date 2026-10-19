@@ -11,7 +11,7 @@ const PKG_FILES = [
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "53";
+const APP_VERSION = "54";
 // Must match the styles.css?v= in index.html (a test checks).
 const STYLES_VERSION = "43";
 
@@ -2940,6 +2940,19 @@ function drawSubdivision(data) {
     svg.appendChild(poly);
   });
   setSubLegend(kinds);
+  // each side in the color of the curve edge it is dual to, over the cells'
+  // own outline (which shows only where a side has no edge, e.g. older data)
+  const colorOf = {};
+  data.curve.edges.forEach(e => { colorOf[e.id] = renderColor(e.color); });
+  (data.subdivision.edges || []).forEach(s => {
+    if (!(s.edge in colorOf)) return;
+    const a = T(s.a), b = T(s.b);
+    svg.appendChild(svgEl("line", {
+      x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+      stroke: colorOf[s.edge], "stroke-width": 2, "stroke-linecap": "round",
+      "data-edge": s.edge,
+    }));
+  });
   // lattice points
   const seen = new Set();
   cells.forEach(cell => cell.forEach(v => {

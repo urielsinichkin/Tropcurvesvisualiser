@@ -94,6 +94,14 @@ colors cells by that: ordinary vertex, marked vertex (violet), crossing
 (orange) -- a 4-valent vertex's parallelogram is a vertex, not a crossing --
 with a legend when marked or crossing cells are present.
 
+Each side records the curve edge it is dual to (`Subdivision.edges`): the
+arrangement's darts carry their edge id, and a dart at a real vertex is dual
+to the segment between `phi` of the faces on its two sides. The render data
+passes these on (`edges`: `{a, b, edge}`), and the view draws every side in
+its edge's color -- the same `renderColor` the curve uses, so painting an edge
+recolors its dual sides too. Pieces of one edge split by crossings are dual to
+parallel translates, all in that color.
+
 ### 2.5 Layout (readability is a first-class goal)
 
 Slopes are fixed, so only **lengths** and a root position are free. The layout

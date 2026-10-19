@@ -478,6 +478,9 @@ class Session:
                 # and whether that vertex carries a marking
                 "cell_vertices": [cell.vertex for cell in sub.cells],
                 "marked": [cell.vertex in marked for cell in sub.cells],
+                # every side of every cell, with the curve edge it is dual to
+                "edges": [{"a": e.a.to_list(), "b": e.b.to_list(), "edge": e.edge}
+                          for e in sub.edges],
             }
             out["subdivision_error"] = None
         except SubdivisionError as exc:
