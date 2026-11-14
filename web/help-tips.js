@@ -270,7 +270,7 @@ const HELP = {
         <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
         <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>
-        <li>The fold at the bottom lists every type: multiplicity and cone, or why it only appears on walls.</li>
+        <li>The fold at the bottom lists every type: multiplicity and cone, or why it is not full-dimensional (e.g. the points fix a length of M<sub>0,5</sub> on it).</li>
       </ul>`,
   },
   moduliChart: {
@@ -281,6 +281,7 @@ const HELP = {
         <li><b>Drag</b> to move the point (mouse, touch or Pencil).</li>
         <li>Shaded: where each type has a curve (darker where several do). Lines: <b>walls</b>, where an edge shrinks to 0 — hover for which.</li>
         <li><b>⇄</b> — turn the page: the other cone at that ray.</li>
+        <li><b>Orange</b> — where a type that is not full-dimensional has curves through the points (hover for why). Snap onto it to see one of its curves (not counted).</li>
         <li><b>Snap to walls</b> — land exactly on a wall or ray near the pointer.</li>
         <li><b>− / +</b> — larger or smaller lengths. <b>Copy</b> / <b>SVG</b> — export the picture.</li>
       </ul>`,

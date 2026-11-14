@@ -56,6 +56,8 @@ const MM = {
   selected: null,       // type id of the big figure
   frame: null,          // a frozen transform while a point is dragged
   onWall: null,         // { name, edge } when snapped onto a wall
+  onImage: null,        // { name } when snapped onto the image of a type
+  images: [],           // images of the types that are not full-dimensional
   path: { from: null, to: null, cycle: null, t: 0, playing: false, log: [] },
 };
 
@@ -346,10 +348,15 @@ function mmRenderSetup() {
   else if (MM.check && !MM.check.ok) { st.classList.add("warn"); st.textContent = MM.check.message; }
   else if (MM.check) {
     st.textContent = `dim ${MM.check.dim} = 2·${cfg.evaluated.length} + 2 ✓`;
-    if (!MM.m) {
+    const full = (MM.check.types || []).filter(t => t.full);
+    if (!full.length) {
       st.classList.add("warn");
-      st.textContent += " — but with these choices no type here is full-dimensional (its map is not " +
-        "invertible, or it lands on a ray of M₀,₅), so there is nothing to show. Try other legs or markings.";
+      const why = (MM.check.types || []).filter(t => t.why).slice(0, 3)
+        .map(t => `${t.name}: ${t.why.reason}`);
+      st.textContent += " — but with these choices no type here is full-dimensional, so over a general point " +
+        "there is no curve. " + why.join(". ") + "." +
+        (MM.m ? " Where such a type does have curves is drawn in orange in the chart; snap onto it." :
+                " Try other legs or markings.");
     }
   }
   body.appendChild(st);
@@ -394,7 +401,7 @@ function mmRenderSetup() {
     MM.check.types.forEach(t => {
       const li = document.createElement("li");
       li.innerHTML = `${escapeHtml(t.name)} <span class="muted">— ${t.full ? "mult " + t.multiplicity + ", cone " + mmConeName(t.cone)
-        : (t.cone.length < 2 ? "maps to " + (t.cone.length ? "a ray" : "the apex") : "dimension " + t.cell_dim + (t.multiplicity === 0 ? ", not finite onto its image" : "") ) + " (only on walls)"}</span>`;
+        : "not full-dimensional: " + escapeHtml(t.why ? t.why.reason : "")}</span>`;
       ul.appendChild(li);
     });
     d.appendChild(ul);
@@ -542,12 +549,15 @@ function mmRecomputeAll() {
   mmDrawAll();
   mmPathUpdate();
 }
-function mmRegions() {
+function mmRegions(withImages = true) {
   const cones = cycleCones(MM.cycle).map(k => k.split("|").map(rayOf));
   MM.regions = {};
   api("moduli_regions", MM.config, cones, String(MM.R)).forEach(c => {
     MM.regions[coneKey(c.cone[0], c.cone[1])] = c.regions;
   });
+  // the images of the types that are not full-dimensional: slower, so not
+  // redone on every frame of a drag of the points (they follow on release)
+  if (withImages) MM.images = api("moduli_images", MM.config, String(MM.R));
 }
 function mmOverview(force) {
   const s = mmSize(MM.m) || MM.R / 2;
@@ -557,7 +567,7 @@ function mmOverview(force) {
 }
 
 // Coalesce work into one per frame: a drag fires far more often than that.
-const mmPending = { regions: false, overview: false, pre: false };
+const mmPending = { regions: false, overview: false, pre: false, quick: false };
 let mmRaf = 0;
 function mmSchedule(what) {
   Object.assign(mmPending, what);
@@ -565,9 +575,9 @@ function mmSchedule(what) {
   mmRaf = requestAnimationFrame(() => {
     mmRaf = 0;
     const p = { ...mmPending };
-    mmPending.regions = mmPending.overview = mmPending.pre = false;
+    mmPending.regions = mmPending.overview = mmPending.pre = mmPending.quick = false;
     mmGuard(() => {
-      if (p.regions) mmRegions();
+      if (p.regions) mmRegions(!p.quick);
       if (p.overview || p.regions) mmOverview(p.regions);
       if (p.pre || p.regions) mmPreimage();
       mmDrawAll();
@@ -624,11 +634,13 @@ function mmPointAt(v, cycle) {
   return { splits, lengths, cone: coneKey(rayOf(cycle[i]), rayOf(cycle[j])), a, b, i };
 }
 
-let mmChartHits = { walls: [], rays: [] };
+let mmChartHits = { walls: [], rays: [], images: [] };
 
 function mmDrawChart() {
   const svg = clearSvg("mm-chart");
-  mmChartHits = { walls: [], rays: [] };
+  mmChartHits = { walls: [], rays: [], images: [] };
+  const legendEl = document.getElementById("mm-chart-legend");
+  if (legendEl) legendEl.hidden = true;
   if (!MM.m || !MM.cycle) return;
   const C = [CH.cx, CH.cy];
   const P = [0, 1, 2, 3, 4].map(i => chScreen([chU(i)[0] * MM.R, chU(i)[1] * MM.R]));
@@ -659,6 +671,7 @@ function mmDrawChart() {
     svg.appendChild(line);
     mmChartHits.walls.push({ a, b, cone: key, type: reg.type, edge: w.edge, name: reg.name, edgeName: w.edge_name });
   })));
+  mmDrawImages(svg, toScreen);
   // rays, with their names, and the page-turners on the current cone's rays
   const cur = MM.lastCone ? MM.lastCone.split("|") : [];
   MM.cycle.forEach((r, i) => {
@@ -704,10 +717,58 @@ function mmDrawChart() {
   svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: 7, fill: "var(--accent)", stroke: "var(--panel)", "stroke-width": 2 }));
   const where = document.getElementById("mm-where");
   const sp = MM.m.splits;
-  where.textContent = MM.onWall ? `on the wall where ${MM.onWall.edge} of ${MM.onWall.name} shrinks to 0`
+  where.textContent = MM.onImage ? `on the image of ${MM.onImage.name} (orange)`
+    : MM.onWall ? `on the wall where ${MM.onWall.edge} of ${MM.onWall.name} shrinks to 0`
     : sp.length === 2 ? `cone ${mmConeName(sp)}: ${sp.map((s, i) => mmRayName(s) + " = " + mmShort(MM.m.lengths[i])).join(", ")}`
     : sp.length === 1 ? `on the ray ${mmRayName(sp[0])} = ${mmShort(MM.m.lengths[0])}` : "at the apex";
+  where.title = where.textContent;
   document.getElementById("mm-chart-note").textContent = `(a + b ≤ ${mmShort(String(MM.R))})`;
+}
+
+// The images of types that are not full-dimensional, in orange: segments
+// (or points, regions) where they have curves over the points, though not
+// finitely many. Snapping lands on them exactly.
+function mmDrawImages(svg, toScreen) {
+  const shown = [];
+  (MM.images || []).forEach(im => {
+    let pts = null;
+    if (im.cone.length === 2) {
+      const key = coneKey(im.cone[0], im.cone[1]);
+      if (!cycleCones(MM.cycle).includes(key)) return;
+      // the image's coordinates follow the cone's sorted rays, as toScreen does
+      pts = im.points.map(q => toScreen(key, q));
+    } else if (im.cone.length === 1) {
+      const idx = MM.cycle.indexOf(rk(im.cone[0]));
+      if (idx < 0) return;
+      const u = chU(idx);
+      pts = im.points.map(q => chScreen([u[0] * q[0], u[1] * q[0]]));
+    } else pts = [[CH.cx, CH.cy]];
+    const tip = `${im.name}: ${im.reason}`;
+    let el;
+    if (im.kind === "region") {
+      el = svgEl("polygon", { points: pts.map(q => q.join(",")).join(" "), fill: "var(--warn)", "fill-opacity": 0.22,
+        stroke: "var(--warn)", "stroke-width": 2 });
+    } else if (im.kind === "segment") {
+      el = svgEl("line", { x1: pts[0][0], y1: pts[0][1], x2: pts[1][0], y2: pts[1][1], stroke: "var(--warn)",
+        "stroke-width": 5, "stroke-linecap": "round", "stroke-opacity": 0.9 });
+    } else {
+      el = svgEl("circle", { cx: pts[0][0], cy: pts[0][1], r: 6, fill: "var(--warn)" });
+    }
+    const t = svgEl("title", {}); t.textContent = tip;
+    el.appendChild(t);
+    svg.appendChild(el);
+    if (im.kind !== "region") {
+      mmChartHits.images.push({ a: pts[0], b: pts[pts.length - 1], type: im.type, name: im.name, kind: im.kind });
+    }
+    shown.push(im);
+  });
+  const legend = document.getElementById("mm-chart-legend");
+  if (legend && shown.length) {
+    legend.hidden = false;
+    legend.innerHTML = `<span><span class="sub-swatch" style="background:var(--warn)"></span>
+      where ${shown.length === 1 ? escapeHtml(shown[0].name) + ", a type" : shown.length + " types"} that ${shown.length === 1 ? "is" : "are"}
+      not full-dimensional ${shown.length === 1 ? "has" : "have"} curves over the points — reached only by snapping onto it</span>`;
+  }
 }
 
 // The other cone at a ray of the current cone: the chart becomes the 5-cycle
@@ -769,6 +830,13 @@ function mmWireChart() {
           mmSchedule({ pre: true, overview: true });
           return;
         }
+      } else if (hit && hit.kind === "image") {
+        MM.m = api("moduli_on_image", MM.config, hit.image.type, String(MM.R), hit.frac.toFixed(6));
+        MM.onWall = null;
+        MM.onImage = { name: hit.image.name };
+        if (MM.m.splits.length === 2) MM.lastCone = coneKey(MM.m.splits[0], MM.m.splits[1]);
+        mmSchedule({ pre: true, overview: true });
+        return;
       } else if (hit && hit.kind === "ray") {
         q = hit.q;
       }
@@ -776,6 +844,7 @@ function mmWireChart() {
     const p = mmPointAt(chPlane(q), MM.cycle);
     MM.m = { splits: p.splits, lengths: p.lengths };
     MM.onWall = null;
+    MM.onImage = null;
     if (p.splits.length === 2) MM.lastCone = p.cone;
     mmSchedule({ pre: true, overview: true });
   };
@@ -809,6 +878,16 @@ function mmNearest(q) {
   mmChartHits.rays.forEach(r => {
     const n = near(r.a, r.b);
     if (n.d < 9 && (!best || n.d < best.d - 2)) best = { kind: "ray", ray: r, q: n.p, d: n.d };
+  });
+  // the images of types that are not full-dimensional win: there is nothing
+  // to see near them, only exactly on them
+  mmChartHits.images.forEach(im => {
+    const n = near(im.a, im.b);
+    if (n.d < 14 && (!best || best.kind !== "image" || n.d < best.d)) {
+      const L = Math.hypot(im.b[0] - im.a[0], im.b[1] - im.a[1]);
+      best = { kind: "image", image: im, q: n.p, d: n.d,
+               frac: L ? Math.hypot(n.p[0] - im.a[0], n.p[1] - im.a[1]) / L : 0 };
+    }
   });
   return best;
 }
@@ -874,6 +953,30 @@ function mmDrawOverview() {
     lbl.setAttribute("pointer-events", "none");
     svg.appendChild(lbl);
   });
+  // where the images of types that are not full-dimensional meet a + b = s
+  const s0 = mmSize(MM.m) || MM.R / 2;
+  (MM.images || []).forEach(im => {
+    let at = null;
+    if (im.cone.length === 2) {
+      const sum = q => q[0] + q[1];
+      const P = im.points[0], Q = im.points[im.points.length - 1];
+      const d = sum(Q) - sum(P);
+      const u = Math.abs(d) < 1e-12 ? (Math.abs(sum(P) - s0) < MM.R / 400 ? 0 : -1) : (s0 - sum(P)) / d;
+      if (u < -1e-9 || u > 1 + 1e-9) return;
+      const pa = P[0] + u * (Q[0] - P[0]), pb = P[1] + u * (Q[1] - P[1]);
+      const A = ovPos(im.cone[0]), B = ovPos(im.cone[1]), t = pb / (pa + pb);
+      at = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+    } else if (im.cone.length === 1) {
+      const lo = im.points[0][0], hi = im.points[im.points.length - 1][0];
+      if (s0 < Math.min(lo, hi) - 1e-9 || s0 > Math.max(lo, hi) + 1e-9) return;
+      at = ovPos(im.cone[0]);
+    }
+    if (!at) return;
+    const dot = svgEl("circle", { cx: at[0], cy: at[1], r: 6, fill: "none", stroke: "var(--warn)", "stroke-width": 3, "pointer-events": "none" });
+    const tt = svgEl("title", {}); tt.textContent = `${im.name}: ${im.reason}`;
+    dot.appendChild(tt);
+    svg.appendChild(dot);
+  });
   // the point
   const sp = MM.m.splits;
   let q = null;
@@ -905,6 +1008,7 @@ function mmJumpToCone(cone, a, b, ev) {
   const t = Math.max(0.02, Math.min(0.98, ((q.x - a[0]) * dx + (q.y - a[1]) * dy) / (dx * dx + dy * dy)));
   const s = mmSize(MM.m) || MM.R / 2;
   MM.onWall = null;
+  MM.onImage = null;
   MM.m = { splits: cone, lengths: [mmDec(s * (1 - t), MM.R / 2000), mmDec(s * t, MM.R / 2000)] };
   MM.lastCone = coneKey(cone[0], cone[1]);
   if (!cycleCones(MM.cycle).includes(MM.lastCone)) {
@@ -924,6 +1028,7 @@ function mmSizeInput(ev) {
     m = { splits: [rayOf(r1), rayOf(r2)], lengths: [mmDec(s / 2, MM.R / 2000), mmDec(s / 2, MM.R / 2000)] };
   }
   MM.onWall = null;
+  MM.onImage = null;
   MM.m = m;
   mmSchedule({ pre: true, overview: true });
 }
@@ -953,14 +1058,15 @@ function mmWireFigure() {
     const step = Math.pow(10, Math.floor(Math.log10((VBW - 2 * PAD) / p.s / 400)));
     MM.config.points[drag.name] = [mmDec(Math.round(x / step) * step, step), mmDec(Math.round(y / step) * step, step)];
     MM.onWall = null;       // the walls move with the points
-    mmSchedule({ regions: true });
+    MM.onImage = null;
+    mmSchedule({ regions: true, quick: true });
   });
   const end = () => {
     if (!drag) return;
     drag = null;
     MM.frame = null;
     mmRenderSetup();
-    mmSchedule({});
+    mmSchedule({ regions: true });
   };
   svg.addEventListener("pointerup", end);
   svg.addEventListener("pointercancel", end);
@@ -982,7 +1088,7 @@ function mmDrawFigure() {
       T = fitTransform(all);
     }
     svg = drawCurve({ curve: pic }, { svgId: "mm-figure", transform: T }).svg;
-    name.textContent = sel.name + (sel.multiplicity ? ` · mult ${sel.multiplicity}` : " · on a wall");
+    name.textContent = sel.name + " · " + mmMultText(sel);
     note.textContent = "Drag a ringed point to move it.";
     note.classList.remove("warn");
   } else {
@@ -1012,6 +1118,13 @@ function mmDrawFigure() {
   });
 }
 
+// how a curve over the point counts
+function mmMultText(p) {
+  if (p.multiplicity) return "mult " + p.multiplicity;
+  if (p.fibre) return `one of a ${p.fibre}-dimensional family (not counted)`;
+  return "on a wall";
+}
+
 let mmGalleryTimer = null;
 function mmDrawGallery(now) {
   clearTimeout(mmGalleryTimer);
@@ -1023,7 +1136,7 @@ function mmDrawGallery(now) {
     if (!pre) { count.textContent = ""; return; }
     const n = pre.preimages.length;
     count.textContent = `weighted count ${pre.count} · ${n} curve${n === 1 ? "" : "s"}` +
-      (pre.on_wall ? " · on a wall" : "");
+      (pre.on_wall ? " · on a wall" : "") + (MM.onImage ? " · on an orange image" : "");
     const notes = pre.notes.map(x => `${x.name}: ${x.note}`);
     if (MM.onWall && !pre.preimages.some(p => !p.full)) {
       notes.unshift(`On a wall: here ${MM.onWall.edge} of ${MM.onWall.name} has length 0. The curve of lower ` +
@@ -1040,7 +1153,7 @@ function mmDrawGallery(now) {
       svg.id = id; svg.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);
       card.appendChild(svg);
       const cap = document.createElement("span");
-      cap.innerHTML = `${escapeHtml(p.name)} <span class="muted">${p.multiplicity ? "mult " + p.multiplicity : "on a wall"}</span>`;
+      cap.innerHTML = `${escapeHtml(p.name)} <span class="muted">${mmMultText(p)}</span>`;
       card.appendChild(cap);
       card.onclick = () => { MM.selected = p.type; mmDrawFigure(); mmDrawGallery(true); mmAutosave(); };
       box.appendChild(card);
@@ -1173,6 +1286,7 @@ function mmPathSeek(t) {
   const v = [MM.path.from[0] + (MM.path.to[0] - MM.path.from[0]) * t, MM.path.from[1] + (MM.path.to[1] - MM.path.from[1]) * t];
   const p = mmPointAt(v, MM.cycle);
   MM.onWall = null;
+  MM.onImage = null;
   MM.m = { splits: p.splits, lengths: p.lengths };
   if (p.splits.length === 2) MM.lastCone = p.cone;
   mmSchedule({ pre: true, overview: true });

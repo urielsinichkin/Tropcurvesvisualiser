@@ -799,7 +799,16 @@ directly, and remembers its own session.</p>
       <span class="btn">New starting point</span> picks points and a point of M<sub>0,5</sub> that have a curve
       over them.</li>
   <li><strong>… full-dimensional types, … others</strong> — every type of the group: its multiplicity and cone,
-      or, for the others, why it only shows up on walls (a lower dimension, a ray, the apex).</li>
+      or, for the others, <em>why</em> it is not full-dimensional, in words:
+    <ul>
+      <li>its cell has a lower dimension (it only appears on walls);</li>
+      <li>the points are tied on it (e.g. <code>y(x1) − y(x3) = 0</code>), so points in general position have
+          no curve of it;</li>
+      <li>its five legs span a tree with one inner edge (it maps to a ray) or none (the apex);</li>
+      <li>the points fix a length of M<sub>0,5</sub> on it, e.g. <code>{x1,x2} = y(x1) − y(x3)</code>: its
+          curves through the points form a family whose image is a line, not an open set.</li>
+    </ul>
+    When no type is full-dimensional the status line gives these reasons.</li>
 </ul>
 <p>All types of the group are candidates. A type with a contracted edge cannot be in a library, so cones
 needing one (two evaluated-free markings bunched alone) may have no curves at all.</p>
@@ -819,6 +828,12 @@ the length along a ray grows outwards (up to the size in the title, <em>a + b �
       dimension on the wall can be seen; near a ray, onto the ray.</li>
   <li><span class="btn">−</span> / <span class="btn">+</span> — show larger or smaller lengths. The regions are
       recomputed for the new size.</li>
+  <li><strong>Orange</strong> — where a type that is <em>not</em> full-dimensional (but not of lower dimension)
+      has curves through the points: a segment, a point or a region, exactly (hover for the reason). Over a point
+      there it has a whole family of curves; one of them is shown, marked <em>one of a d-dimensional family
+      (not counted)</em>. Such a set has no area, so the point lands on it only by <strong>snapping</strong>.
+      In the overview, an orange ring marks where it meets the size a + b. While a point of the plane is being
+      dragged the orange marks wait until it is let go.</li>
 </ul>
 
 <h3 id="moduli-overview">18.3 The overview</h3>

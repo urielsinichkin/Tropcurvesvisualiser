@@ -251,3 +251,94 @@ def test_points_of_m05_are_parsed_strictly():
     with pytest.raises(ValueError):
         moduli.parse_point({"splits": [[0, 1], [1, 2]], "lengths": ["1", "1"]})
     assert len(moduli.CONES) == 15 and len(moduli.RAYS) == 10
+
+
+# A type whose cell is 12-dimensional, as is the target, but on which the
+# points fix the length of {x1,x2}: c0 is pinned by x1 and x2, the height of
+# c2 by x3, and e1, e2 both drop by one per unit length between them.
+WALLED = {
+    "vertices": ["c0", "c1", "c2", "c3", "c4", "c5", "c0_1", "c0_2", "c2_1", "c5_1", "c5_2"],
+    "bounded": [
+        {"id": "e0", "tail": "c0", "head": "c1", "vec": [0, -1], "name": "e1"},
+        {"id": "e3", "tail": "c1", "head": "c2", "vec": [1, -1], "name": "e2"},
+        {"id": "e5", "tail": "c2", "head": "c3", "vec": [2, -1], "name": "e3"},
+        {"id": "e8", "tail": "c3", "head": "c4", "vec": [2, 0], "name": "e4"},
+        {"id": "e9", "tail": "c4", "head": "c5", "vec": [1, -1], "name": "e5"},
+        {"id": "b1", "tail": "c0", "head": "c0_1", "vec": [-1, 0], "name": "e6"},
+        {"id": "b2", "tail": "c0", "head": "c0_2", "vec": [1, 1], "name": "e7"},
+        {"id": "b3", "tail": "c2", "head": "c2_1", "vec": [-1, 0], "name": "e8"},
+        {"id": "b4", "tail": "c5", "head": "c5_1", "vec": [0, -1], "name": "e9"},
+        {"id": "b5", "tail": "c5", "head": "c5_2", "vec": [1, 0], "name": "e10"},
+    ],
+    "ends": [
+        {"id": "l1", "tail": "c0_2", "vec": [1, 1], "name": "l1"},
+        {"id": "l2", "tail": "c0_1", "vec": [-1, 0], "name": "l2"},
+        {"id": "l3", "tail": "c1", "vec": [-1, 0], "name": "l3"},
+        {"id": "l4", "tail": "c2_1", "vec": [-1, 0], "name": "l4"},
+        {"id": "l5", "tail": "c3", "vec": [0, -1], "name": "l5"},
+        {"id": "l6", "tail": "c4", "vec": [1, 1], "name": "l6"},
+        {"id": "l7", "tail": "c5_1", "vec": [0, -1], "name": "l7"},
+        {"id": "l8", "tail": "c5_2", "vec": [1, 0], "name": "l8"},
+    ],
+    "markings": [{"id": f"m{i}", "tail": v, "name": f"x{i}"}
+                 for i, v in enumerate(["c0_1", "c0_2", "c2_1", "c5_1", "c5_2"], 1)],
+}
+
+
+def _walled():
+    s = Session()
+    s.add_curve(WALLED, name="walled")
+    marks = ["x1", "x2", "x3", "x4", "x5"]
+    return s, {"group": s.moduli_groups()[0]["key"], "evaluated": marks, "legs": marks}
+
+
+def test_why_a_type_is_not_full_dimensional():
+    s, cfg = _walled()
+    t = s.moduli_check(cfg)["types"][0]
+    assert t["cell_dim"] == 12 and not t["full"] and t["multiplicity"] == 0
+    assert t["why"]["kind"] == "fixed"
+    assert t["why"]["relation"] == "{x1,x2} = y(x1) − y(x3)"
+    # other reasons, in words
+    s2 = _library(LINE, ["x1", "x2"])
+    cfg2 = {"group": s2.moduli_groups()[0]["key"], "evaluated": ["x1"], "legs": ["a", "b", "d", "x1", "x2"]}
+    assert all(t["why"] is None for t in s2.moduli_check(cfg2)["types"])
+    contracted = s2.contract(s2.moduli_check(cfg2)["types"][0]["id"], "e1")
+    why = next(t["why"] for t in s2.moduli_check(cfg2)["types"] if t["id"] == contracted["id"])
+    assert why["kind"] == "lower"
+
+
+def test_the_image_of_a_type_whose_lengths_the_points_fix():
+    s, cfg = _walled()
+    ini = s.moduli_initial(cfg)                       # no full type: starts on the image
+    assert ini["m"] and ini["points"]
+    cfg = dict(cfg, points=ini["points"])
+    imgs = s.moduli_images(cfg, 40)
+    assert len(imgs) == 1 and imgs[0]["kind"] == "segment"
+    (a1, b1), (a2, b2) = [[Fraction(x) for x in q] for q in imgs[0]["exact"]]
+    y = {m: Fraction(v[1]) for m, v in cfg["points"].items()}
+    assert a1 == a2 == y["x1"] - y["x3"]              # the {x1,x2} length, fixed
+    assert b1 != b2
+    # a point on it has a whole family of curves over it: one is shown
+    for frac in (Fraction(1, 10), Fraction(1, 2), Fraction(9, 10)):
+        m = s.moduli_on_image(cfg, imgs[0]["type"], 40, str(frac))
+        pre = s.moduli_preimage(cfg, m)
+        assert [p["fibre"] for p in pre["preimages"]] == [1]
+        p = pre["preimages"][0]
+        assert all(Fraction(l["value"]) > 0 for l in p["lengths"])
+        at = {mk["name"]: mk["at"] for mk in p["picture"]["markings"]}
+        for name, (x, yy) in cfg["points"].items():
+            assert at[name] == pytest.approx([float(Fraction(x)), float(Fraction(yy))])
+        assert pre["count"] == 0                      # not counted: not a finite fibre
+    # beyond the segment's ends, and off its line, there is nothing
+    off = moduli.point_json(((0, 1), (3, 4)), [a1 + Fraction(1, 7), (b1 + b2) / 2])
+    assert s.moduli_preimage(cfg, off)["preimages"] == []
+    past = moduli.point_json(((0, 1), (3, 4)), [a1, max(b1, b2) + 1])
+    assert s.moduli_preimage(cfg, past)["preimages"] == []
+
+
+def test_full_dimensional_types_have_no_image_entry(weighted):
+    s, cfg = weighted
+    rng = random.Random(9)
+    cfg = dict(cfg, points=_random_points(rng, cfg["evaluated"]))
+    ids = {t["id"] for t in s.moduli_check(cfg)["types"] if t["full"]}
+    assert not ids & {i["type"] for i in s.moduli_images(cfg, 30)}
