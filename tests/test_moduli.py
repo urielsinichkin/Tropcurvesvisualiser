@@ -409,3 +409,76 @@ def test_a_new_slope_moves_the_type_to_another_group_and_can_free_it():
     t = out["types"][0]
     # c0 is no longer pinned at the height of x1, so nothing fixes {x1,x2}
     assert out["ok"] and t["full"] and t["multiplicity"] > 0 and t["why"] is None
+
+
+_BIG = {}
+
+
+def _one_type(s, with_walls=False):
+    """A library holding one full-dimensional type of the weighted degree
+    (whose region at its starting point has walls, if asked)."""
+    if "lib" not in _BIG:
+        _BIG["lib"] = _library(WEIGHTED, ["x1", "x2", "x3"])
+    big = _BIG["lib"]
+    cfg = {"group": big.moduli_groups()[0]["key"], "evaluated": ["x1", "x2"], "legs": ["a", "b", "c", "d", "x3"]}
+    for t in big.moduli_check(cfg)["types"]:
+        if not t["full"]:
+            continue
+        s.load(big.export_subset([t["id"]]))
+        nid = next(iter(s.ws.nodes))
+        one = dict(cfg, types=[nid])
+        if not with_walls:
+            return nid, one
+        ini = s.moduli_initial(one)
+        regs = s.moduli_regions(dict(one, points=ini["points"]), [ini["m"]["splits"]], 200)[0]["regions"]
+        if regs and regs[0]["walls"]:
+            return nid, one
+    raise AssertionError("no type with walls")
+
+
+def test_crossing_a_wall_adds_the_types_on_the_other_side():
+    s = Session()
+    nid, cfg = _one_type(s, with_walls=True)
+    ini = s.moduli_initial(cfg)
+    cfg = dict(cfg, points=ini["points"])
+    cone = tuple(tuple(x) for x in ini["m"]["splits"])
+    reg = s.moduli_regions(cfg, [list(map(list, cone))], 200)[0]["regions"][0]
+    wall = reg["walls"][0]
+    # from inside the region straight across that wall
+    inside = [sum(q[i] for q in reg["polygon"]) / len(reg["polygon"]) for i in range(2)]
+    mid = [(wall["from"][i] + wall["to"][i]) / 2 for i in range(2)]
+    out = [mid[i] + (mid[i] - inside[i]) * 0.05 for i in range(2)]
+    q = lambda v: moduli.point_json(cone, [Fraction(x).limit_denominator(10 ** 6) for x in v])
+    m0, m1 = q(inside), q(out)
+    assert [p["type"] for p in s.moduli_preimage(cfg, m0)["preimages"]] == [nid]
+    assert s.moduli_preimage(cfg, m1)["preimages"] == []          # only the one type so far
+    res = s.moduli_cross(cfg, nid, cfg["points"], m0, m1)
+    assert res["edge"] == wall["edge_name"]
+    assert len(s.ws.nodes) == 1 + len(res["added"]) and len(res["types"]) >= 2
+    # the type on the wall has a vertex of valence 4, the others are full and new
+    keys = {moduli.type_key(s.ws.nodes[i].curve) for i in res["types"]}
+    assert moduli.type_key(s.ws.nodes[nid].curve) not in keys and len(keys) == len(res["types"])
+    wall_type = s.ws.nodes[res["wall"]].curve
+    assert max(wall_type.valence(v) for v in wall_type.vertices) == 4
+    # with them, the other side has curves again, with the same weighted count
+    cfg2 = dict(cfg, types=[nid] + res["types"])
+    assert s.moduli_preimage(cfg2, m1)["count"] == s.moduli_preimage(cfg2, m0)["count"]
+    assert s.moduli_preimage(cfg2, m1)["count"] > 0
+    # crossing again reuses them
+    again = s.moduli_cross(cfg, nid, cfg["points"], m0, m1)
+    assert again["added"] == [] and sorted(again["types"]) == sorted(res["types"])
+    # staying inside crosses nothing
+    assert s.moduli_cross(cfg, nid, cfg["points"], m0, q([inside[0] * 1.01, inside[1]]))["edge"] is None
+
+
+def test_points_through_a_type_over_a_given_point():
+    s = Session()
+    nid, cfg = _one_type(s)
+    ini = s.moduli_initial(cfg)
+    pts = s.moduli_points_through(cfg, nid, ini["m"])["points"]
+    assert pts and set(pts) == {"x1", "x2"}
+    pre = s.moduli_preimage(dict(cfg, points=pts), ini["m"])
+    assert [p["type"] for p in pre["preimages"]] == [nid]
+    # over a point of another cone the type has no curve
+    other = next(c for c in moduli.CONES if c != tuple(tuple(x) for x in ini["m"]["splits"]))
+    assert s.moduli_points_through(cfg, nid, moduli.point_json(other, [1, 1]))["points"] is None

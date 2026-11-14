@@ -435,6 +435,29 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   changes, so the type moves to another group; `mmLibraryChanged(typeId)`
   follows it there, keeping legs, evaluated markings and points (an undo
   finds a group where the chosen names exist).
+- *The opened type and wall crossing*: the page's candidate set is
+  `config.types` = the opened type (`base`, the one drawn and edited) plus
+  the types added at walls (`extra`); `_moduli_setup` keeps only those, so the
+  rest of the library is ignored. After each preimage the page compares with
+  the last one: a full-dimensional type that was over the last (points, m) and
+  is not now left through a wall. `moduli.crossing_edge` finds which edge
+  reached length 0 first on the straight way between the two configurations,
+  in the type's cone coordinates continued across a ray (the other coordinate
+  becomes minus the length along the new ray), so ray crossings count too;
+  `neighbours` contracts that edge and applies every non-crossing resolution
+  of the vertex it leaves, except the one giving the type back. The results
+  (the wall type and the ones beyond) become new roots, or existing types when
+  `type_key` (each bounded edge's leg split by name with its direction, plus
+  the ends) matches. Jumps (resets, overview clicks, new starting points) are
+  not moves and add nothing. An edit of the opened type deletes its `extra`
+  (undo restores them). On narrow screens the setup is redrawn only after a
+  drag (and after the click a short touch drag still fires): it sits above
+  the chart, and growing under a finger moved the chart. The ⇄ buttons turn
+  the page on a tap only; a touch that moves from one drags the point (a
+  finger near ⇄ is snapped onto it by the browser).
+- *Reset points after an edit*: `points_through` solves ft(z) = m with the
+  root pinned at the origin, takes an interior point of {l_e > 0} and returns
+  ev(z); when the type has no curve over m, a fresh starting point is taken.
 - *Choosing on a picture*: the setup draws a type of the group (the one shown
   large if it is there) with `drawCurve`, ends and markings pickable
   (`routePicks` events), in two modes -- legs of M_0,5 or evaluated markings;

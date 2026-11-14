@@ -480,8 +480,9 @@ class Session:
 
     def _moduli_setup(self, config: Dict[str, Any]) -> "moduli.Setup":
         key = config.get("group")
+        only = set(config.get("types") or [])      # the page's own set, when it has one
         types = [(nid, n.name, n.curve) for nid, n in self.ws.nodes.items()
-                 if moduli.signature(n.curve) == key]
+                 if moduli.signature(n.curve) == key and (not only or nid in only)]
         if not types:
             raise ValueError("no types in that group")
         return moduli.Setup(types, config.get("evaluated") or [], config.get("legs") or [],
@@ -547,6 +548,55 @@ class Session:
         cone, ls = moduli.on_image(st, type_id, Fraction(str(radius)),
                                    Fraction(str(frac)).limit_denominator(10 ** 6))
         return moduli.point_json(cone, ls)
+
+    def moduli_cross(self, config: Dict[str, Any], type_id: str, points_before: Dict[str, Any],
+                     m_before: Dict[str, Any], m_after: Dict[str, Any]) -> Dict[str, Any]:
+        """A curve of ``type_id`` was over (points_before, m_before) and is not
+        over (config's points, m_after): if it left through a wall, add the
+        types on the wall and on its other side to the library (new roots,
+        built by contracting the shrinking edge and resolving the vertex it
+        leaves; a type already in the library is reused). Returns their ids."""
+        st = self._moduli_setup(config)
+        t = next((x for x in st.maps if x.id == type_id), None)
+        if t is None:
+            return {"edge": None, "types": []}
+        before = self._moduli_setup(dict(config, points=points_before))
+        eid = moduli.crossing_edge(t, before.p, moduli.parse_point(m_before), st.p,
+                                   moduli.parse_point(m_after))
+        if eid is None:
+            return {"edge": None, "types": []}
+        node = self.ws.nodes[type_id]
+        ename = node.curve.edges[eid].name
+        wall, others = moduli.neighbours(node.curve, eid)
+        known = {moduli.type_key(n.curve): nid for nid, n in self.ws.nodes.items()}
+        ids, added = [], []
+        for c, name in [(wall, f"{node.name} / {ename}")] + [
+                (c, f"{node.name} ⇄ {ename}" + (f" ({i + 1})" if len(others) > 1 else ""))
+                for i, c in enumerate(others)]:
+            key = moduli.type_key(c)
+            if key in known:
+                ids.append(known[key])
+                continue
+            new = self.ws.add_root(c, name=name)
+            known[key] = new.id
+            ids.append(new.id)
+            added.append(new.id)
+        return {"edge": ename, "types": ids, "added": added, "wall": ids[0]}
+
+    def moduli_points_through(self, config: Dict[str, Any], type_id: str,
+                              m: Dict[str, Any]) -> Dict[str, Any]:
+        """Points with a curve of the type through them over the point m of
+        M_0,5 (None when the type has no curve over m at all)."""
+        cfg = dict(config, points={k: [0, 0] for k in config.get("evaluated") or []})
+        st = self._moduli_setup(cfg)
+        t = next((x for x in st.maps if x.id == type_id), None)
+        if t is None:
+            return {"points": None}
+        cone, ls = moduli.parse_point(m)
+        p = moduli.points_through(t, cone, ls)
+        if p is None:
+            return {"points": None}
+        return {"points": {mk: [str(p[2 * i]), str(p[2 * i + 1])] for i, mk in enumerate(st.evaluated)}}
 
     def moduli_overview(self, config: Dict[str, Any], size: Any) -> List[Dict[str, Any]]:
         return moduli.overview(self._moduli_setup(config), Fraction(str(size)))
