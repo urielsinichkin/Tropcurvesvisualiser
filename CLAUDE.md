@@ -5,14 +5,17 @@ Python core in `tropcurves/` (exact arithmetic, no SageMath), run in the
 browser by Pyodide; the UI is `web/` (plain HTML/CSS/JS, no build step),
 served by GitHub Pages at https://urielsinichkin.github.io/Tropcurvesvisualiser/web/.
 `docs/DESIGN.md` is the design record -- keep it current with each change.
+A second page, `moduli/` (the moduli map explorer), loads `web/app.js` in
+library mode (`window.TROP_LIBRARY_MODE`) for Python, drawing, export and help,
+and links `web/styles.css` at the same `?v=` (a test checks).
 
 ## Conventions
 
 - Tests: `python3 -m pytest -q`. A new module in `tropcurves/` must also be
   listed in `PKG_FILES` in `web/app.js` (a test checks this).
 - Bump `APP_VERSION` in `web/app.js` on every change to the web app, and
-  whenever `styles.css` changes bump both the `styles.css?v=` number in
-  `web/index.html` and `STYLES_VERSION` in `web/app.js` (a test checks they
+  whenever `styles.css` changes bump the `styles.css?v=` number in
+  `web/index.html` and `moduli/index.html` and `STYLES_VERSION` in `web/app.js` (a test checks they
   match; app.js uses it to repair stale cached copies of index.html).
 - Reuse the shared UI pieces rather than building new ones:
   - **reordering any list: drag and drop with `makeSortable` / `sortGrip` /

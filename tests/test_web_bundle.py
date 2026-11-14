@@ -34,15 +34,17 @@ def test_every_help_entry_points_at_a_guide_section():
 
 
 def test_every_dialog_and_panel_has_help():
-    """Dialogs go through dialogHead(helpKey, ...) or attachDialogHelp(key);
-    each key must exist in help-tips.js."""
-    app = (ROOT / "web" / "app.js").read_text()
+    """Dialogs go through dialogHead(helpKey, ...) or attachDialogHelp(key),
+    panels through add/panelHelp (the moduli page); each key must exist in
+    help-tips.js."""
+    app = (ROOT / "web" / "app.js").read_text() + (ROOT / "moduli" / "moduli.js").read_text()
     tips = (ROOT / "web" / "help-tips.js").read_text()
     keys = set(re.findall(r"^  (\w+): \{", tips, re.M))
     used = set(re.findall(r'dialogHead\("(\w+)"', app))
     used |= set(re.findall(r'attachDialogHelp\("(\w+)"\)', app))
     used |= set(re.findall(r'add\("[^"]+", "(\w+)"\)', app))
     used |= set(re.findall(r'toggleHelp\(top, "(\w+)"\)', app))
+    used |= set(re.findall(r'panelHelp\("[^"]+", "(\w+)"\)', app))
     assert used <= keys, f"help keys used but not written: {sorted(used - keys)}"
     unused = keys - used
     assert not unused, f"help written for nothing: {sorted(unused)}"
@@ -59,3 +61,11 @@ def test_styles_version_matches_index():
     js = re.search(r'const STYLES_VERSION = "(\d+)"', app).group(1)
     html = re.search(r'styles\.css\?v=(\d+)', index).group(1)
     assert js == html, f"STYLES_VERSION {js} in app.js but styles.css?v={html} in index.html"
+
+
+def test_moduli_page_shares_the_stylesheet_version():
+    """The moduli page links the main app's stylesheet, at the same version."""
+    index = (ROOT / "web" / "index.html").read_text()
+    moduli = (ROOT / "moduli" / "index.html").read_text()
+    v = re.search(r'styles\.css\?v=(\d+)', index).group(1)
+    assert f"../web/styles.css?v={v}" in moduli
