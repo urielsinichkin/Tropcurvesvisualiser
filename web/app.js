@@ -14,7 +14,7 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "58";
+const APP_VERSION = "59";
 // Must match the styles.css?v= in index.html (a test checks).
 const STYLES_VERSION = "50";
 
@@ -116,6 +116,8 @@ async function boot() {
   refreshAll();
   const all = api("list_nodes");
   if (all.length) selectNode(all[0].id);
+  takeFromModuli();
+  window.addEventListener("storage", ev => { if (ev.key === FROM_MODULI_KEY && ev.newValue) takeFromModuli(); });
 }
 
 // Python and the tropcurves package, with a session to call (both pages).
@@ -178,6 +180,18 @@ window.addEventListener("unhandledrejection", ev => reportError(ev.reason || "an
 // The moduli map page, in a new tab: on the whole library (which it reads
 // from the autosave), or on just these types (handed over in their own key).
 const MODULI_HANDOFF_KEY = "tropcurves.moduli.handoff.v1";
+// ... and back: the moduli page leaves a library here (types changed there);
+// the main app offers to add it, at once if open, else when it next starts
+const FROM_MODULI_KEY = "tropcurves.fromModuli.v1";
+function takeFromModuli() {
+  let raw = null;
+  try { raw = localStorage.getItem(FROM_MODULI_KEY); } catch (e) { return; }
+  if (!raw) return;
+  try { localStorage.removeItem(FROM_MODULI_KEY); } catch (e) { /* ignore */ }
+  let text = null;
+  try { text = JSON.parse(raw).library; } catch (e) { return; }
+  if (text) offerImport(text, "from the moduli map");
+}
 function openModuli(ids) {
   autosave();
   if (!ids) { window.open("../moduli/?from=app", "_blank"); return; }

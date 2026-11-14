@@ -260,6 +260,41 @@ def add_marking_on_edge(curve: Curve, edge_id: str, *, marking_id: Optional[str]
                              split_edge=edge_id, moved_flag_vertex=moved)  # type: ignore[arg-type]
 
 
+def smooth_vertex(curve: Curve, vertex: str) -> Optional[Tuple[str, str]]:
+    """Undo a subdivision: a vertex with exactly two edges and no marking is a
+    point inside one edge, so merge the two. Mutates ``curve``.
+
+    Returns ``(kept, removed)`` edge ids, or None when ``vertex`` is not such a
+    point. An end keeps its id (the end stays the same end); of two bounded
+    edges the first keeps its id and the merged edge runs between the far
+    endpoints in the same direction.
+    """
+    inc = curve.incident(vertex)
+    if len(inc) != 2 or any(e.kind is EdgeKind.MARKING for e in inc):
+        return None
+    a, b = inc
+    if a.kind is EdgeKind.END and b.kind is EdgeKind.END:
+        return None                      # the whole curve: nothing to merge into
+    if a.kind is EdgeKind.END:
+        a, b = b, a                      # a is bounded
+    u = a.other(vertex)
+    if a.outgoing(vertex) != -b.outgoing(vertex):
+        return None                      # not straight through: a real corner
+    if b.kind is EdgeKind.END:
+        b.tail = u
+        del curve.edges[a.id]
+        kept, gone = b.id, a.id
+    else:
+        w = b.other(vertex)
+        d = a.outgoing(u)                # u -> vertex, the same as vertex -> w
+        a.tail, a.head, a.vec = u, w, d
+        del curve.edges[b.id]
+        kept, gone = a.id, b.id
+    curve.vertices.remove(vertex)
+    curve._vset.discard(vertex)
+    return kept, gone
+
+
 def _fresh_marking_id(curve: Curve, reserved: Iterable[str] = ()) -> str:
     taken = set(curve.edges) | set(reserved)
     for i in itertools.count(1):

@@ -789,6 +789,13 @@ directly, and remembers its own session.</p>
           exactly five. Chosen ends are drawn thick in the accent color, chosen markings ringed in it.</li>
       <li><span class="btn">Evaluated markings</span>: click markings to fix them at points of the plane
           (the <em>k</em> evaluated markings), shown in orange squares.</li>
+      <li><span class="btn">Move markings</span>: <em>changes the type</em>. Click a marking to pick it up
+          (it is circled), then an edge or end to put it inside, or a ringed vertex to put it on (the marking
+          again puts it down). Where it was, the point left inside an edge is merged back into the edge. The
+          marking keeps its name, so the choices stay. <span class="btn">↶ Undo</span> takes changes back;
+          <span class="btn">Send to main app</span> hands the changed library to the main app, which offers to
+          add it (at once if it is open, otherwise when it next opens). Only types without derived types, and
+          not derived themselves, can be changed — a type opened alone with <span class="btn">M</span> always can.</li>
       <li>Hovering names the end or marking and says what a click does; the line under the picture lists the
           choices. The picture zooms (wheel / pinch).</li>
     </ul></li>
@@ -875,7 +882,8 @@ of the edge the point of the cone with a + b equal to the <strong>size</strong> 
       app's current library instead.</li>
   <li><span class="btn">Main app's library</span> reloads the library you are working on in the main app;
       <span class="btn">Import…</span> loads a library file or a saved session; <span class="btn">Save session</span>
-      saves all of it as one file.</li>
+      saves all of it as one file; <span class="btn">Send to main app</span> hands the library, with any changes
+      made here, to the main app, which offers to add it.</li>
   <li><span class="btn">Copy</span> beside a picture copies it as a PNG; <span class="btn">SVG</span> downloads it
       as an SVG file.</li>
 </ul>
