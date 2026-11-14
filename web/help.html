@@ -273,6 +273,8 @@ panel (right). A top bar runs across.</p>
       edit (<a href="#propagation">§10</a>).</li>
   <li><span class="btn">🗑</span> on each row opens the <a href="#delete">delete dialog</a> for that type,
       without selecting it.</li>
+  <li><span class="btn">M</span> on each row opens the <a href="#moduli">moduli map</a> in a new tab with that
+      type alone.</li>
   <li><strong>Reordering:</strong> drag a type by its <span class="btn">⠿</span> grip to move it among its
       <em>siblings</em>: the other roots, or the other types derived from the same parent. Its derived types
       move with it. A type never changes parent this way, since that would change its derivation, so only
@@ -394,7 +396,9 @@ shown instead.</p>
 <p>Buttons for the operations: <span class="btn">Edit end slope…</span> (<a href="#slope">§9.2</a>),
 <span class="btn">Add marking…</span> (<a href="#marking">§9.3</a>), <span class="btn">Contract edge…</span>
 (<a href="#contract">§9.4</a>), <span class="btn">Resolve vertex…</span> (<a href="#resolve">§9.5</a>) and
-<span class="btn">Evaluation matrix…</span> (<a href="#evaluation">§12</a>). A button is disabled, with
+<span class="btn">Evaluation matrix…</span> (<a href="#evaluation">§12</a>) and
+<span class="btn">Moduli map…</span>, which opens the <a href="#moduli">moduli map</a> on this type alone
+(it needs five ends and markings). A button is disabled, with
 the reason on hover, when the type does not allow it: slope editing needs two ends, contracting
 needs a bounded edge, and resolving needs a vertex of valence ≥ 4.</p>
 
@@ -770,15 +774,25 @@ library that share a degree Δ and markings — points of one moduli space M<sub
       edge shrinks to length 0, the curve becomes a type of lower dimension, and on the other side other types
       take over. The page draws the regions and walls, exactly.</li>
 </ul>
-<p>Open it with <span class="btn">Moduli map…</span> in the main app (it takes the current library), or
-directly; it remembers its own session.</p>
+<p>Open it from the main app: <span class="btn">M</span> on a type's row, or
+<span class="btn">Moduli map…</span> among the type's actions, opens it with <strong>that type alone</strong>;
+<span class="btn">Moduli map…</span> in the top bar opens it with the whole library. It can also be opened
+directly, and remembers its own session.</p>
 
 <h3 id="moduli-setup">18.1 Setup</h3>
 <ul>
   <li><strong>Types</strong> — the groups of the library: types with the same ends (names and directions)
       and the same marking names. Pick one. The line under it lists Δ, the markings and the dimension.</li>
-  <li><strong>Evaluated markings</strong> — the <em>k</em> markings whose positions are fixed points of the plane.</li>
-  <li><strong>Legs of M<sub>0,5</sub></strong> — tick exactly five ends or markings.</li>
+  <li><strong>The picture</strong> — a type of the group, on which you choose by clicking (or tapping):
+    <ul>
+      <li><span class="btn">Legs of M₀,₅</span>: click ends and markings to make them legs, or not —
+          exactly five. Chosen ends are drawn thick in the accent color, chosen markings ringed in it.</li>
+      <li><span class="btn">Evaluated markings</span>: click markings to fix them at points of the plane
+          (the <em>k</em> evaluated markings), shown in orange squares.</li>
+      <li>Hovering names the end or marking and says what a click does; the line under the picture lists the
+          choices. The picture zooms (wheel / pinch).</li>
+    </ul></li>
+  <li><strong>Choose from lists instead</strong> — the same choices as checkboxes.</li>
   <li>A status line checks the dimensions (and says what to change if they do not match).</li>
   <li><strong>Points in ℝ²</strong> — the positions of the evaluated markings, as numbers or fractions
       (<code>3/2</code>). You can also drag them on the curve (<a href="#moduli-curves">§18.4</a>).

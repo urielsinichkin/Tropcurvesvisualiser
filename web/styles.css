@@ -169,6 +169,9 @@ section {
 .type-item:hover .row-del, .type-item.selected .row-del, .row-del:focus-visible { opacity: 1; }
 .row-del:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
 @media (hover: none) { .row-del { opacity: .8; } }
+/* open the type in the moduli map: a letter in a ring, the delete's twin */
+.row-moduli { font-weight: 700; font-size: 12px; color: var(--accent); }
+.row-moduli:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .type-item.holds-selection { border-color: var(--accent); border-style: dashed; }
 .twisty:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 
@@ -511,3 +514,15 @@ button.linklike { border: none; background: none; padding: 0; color: var(--accen
 @media (max-width: 700px) {
   .moduli-page #mm-chart, .moduli-page #mm-overview, .moduli-page #mm-figure { height: auto; aspect-ratio: 3 / 2; }
 }
+/* the moduli page's picture for choosing legs and evaluated markings */
+.mm-pick { margin-top: 10px; }
+.mm-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-pick .mm-small { margin: 6px 0 4px; }
+.moduli-page #mm-pick-svg { height: clamp(200px, 30vh, 320px); }
+@media (max-width: 700px) { .moduli-page #mm-pick-svg { height: auto; aspect-ratio: 3 / 2; } }
+.mm-pick .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
+.mm-key { display: inline-block; width: 14px; height: 14px; box-sizing: border-box; }
+.mm-key-leg { border: 3px solid var(--accent); border-radius: 50%; }
+.mm-key-ev { border: 3px solid var(--warn); border-radius: 3px; }
+.mm-lists { margin-top: 8px; font-size: 13px; }
+.mm-lists > summary { cursor: pointer; color: var(--muted); }

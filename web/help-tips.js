@@ -31,6 +31,7 @@ const HELP = {
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
+        <li><b>M</b> — open the moduli map with this type alone, in a new tab.</li>
         <li><b>⠿</b> — drag to reorder a type among its siblings (its derived types come along; it never changes parent). Saved with the library.</li>
       </ul>`,
   },
@@ -66,7 +67,7 @@ const HELP = {
       <ul>
         <li><b>Type</b> — name; description (free text, saved as you type); <i>follow parent</i> (whether the parent's edits reach this type); <b>Duplicate</b> (independent copy as a new root); <b>Delete…</b>.</li>
         <li><b>Refined multiplicity</b> — the Göttsche–Schroeter multiplicity, each vertex's factor and the value at q = 1 (or why it is undefined).</li>
-        <li><b>Actions</b> — Edit end slope…, Add marking…, Contract edge…, Resolve vertex…, Evaluation matrix… (disabled, with the reason on hover, when not possible).</li>
+        <li><b>Actions</b> — Edit end slope…, Add marking…, Contract edge…, Resolve vertex…, Evaluation matrix…, Moduli map… (this type alone, in a new tab) (disabled, with the reason on hover, when not possible).</li>
         <li><b>Markings</b> / <b>Edges &amp; ends</b> — color (swatch, ▾ presets, hex code, ⟲ back to default) and name of each; ✕ removes a marking.</li>
         <li><b>⚙ Layout</b> — choose the order of these parts and which are shown.</li>
       </ul>
@@ -265,8 +266,8 @@ const HELP = {
     html: `<p>Which moduli space and which map.</p>
       <ul>
         <li><b>Types</b> — a group of the library: same ends and same markings.</li>
-        <li><b>Evaluated markings</b> — the k markings fixed at points of the plane.</li>
-        <li><b>Legs of M<sub>0,5</sub></b> — exactly five ends or markings.</li>
+        <li><b>The picture</b> — choose on a type of the group by clicking: in <b>Legs of M₀,₅</b> click ends and markings (exactly five; shown thick / ringed in green); in <b>Evaluated markings</b> click markings to fix them at points of ℝ² (orange squares). Hover says what a click does. It zooms.</li>
+        <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
         <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>
         <li>The fold at the bottom lists every type: multiplicity and cone, or why it only appears on walls.</li>

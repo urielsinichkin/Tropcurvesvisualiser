@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "56";
+const APP_VERSION = "57";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "48";
+const STYLES_VERSION = "49";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -174,6 +174,17 @@ window.addEventListener("error", ev => {
   if (ev.error || ev.message) reportError(ev.error || ev.message);
 });
 window.addEventListener("unhandledrejection", ev => reportError(ev.reason || "an operation failed"));
+
+// The moduli map page, in a new tab: on the whole library (which it reads
+// from the autosave), or on just these types (handed over in their own key).
+const MODULI_HANDOFF_KEY = "tropcurves.moduli.handoff.v1";
+function openModuli(ids) {
+  autosave();
+  if (!ids) { window.open("../moduli/?from=app", "_blank"); return; }
+  try { localStorage.setItem(MODULI_HANDOFF_KEY, api("export_subset", ids)); }
+  catch (e) { alert("Could not hand the type over: " + e.message); return; }
+  window.open("../moduli/?from=types", "_blank");
+}
 
 function autosave() {
   try { localStorage.setItem(STORAGE_KEY, api("save")); markSaved(); }
@@ -497,10 +508,7 @@ function wireGlobalButtons() {
   bind("panel-layout", "onclick", openPanelLayoutDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
-  bind("btn-moduli", "onclick", () => {
-    autosave();     // the moduli page reads the library from here
-    window.open("../moduli/?from=app", "_blank");
-  });
+  bind("btn-moduli", "onclick", () => openModuli(null));
   bind("paint-curve", "onclick", openPaintDialog);
   bind("paint-change", "onclick", openPaintDialog);
   bind("paint-cancel", "onclick", stopPainting);
@@ -2037,7 +2045,13 @@ function renderTypeList() {
     del.title = `Delete ${n.name}…`;
     del.setAttribute("aria-label", `Delete ${n.name}`);
     del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
-    li.appendChild(del);
+    const mod = document.createElement("button");
+    mod.className = "row-del row-moduli";
+    mod.textContent = "M";
+    mod.title = `Open ${n.name} alone in the moduli map`;
+    mod.setAttribute("aria-label", `Open ${n.name} in the moduli map`);
+    mod.onclick = ev => { ev.stopPropagation(); openModuli([n.id]); };
+    li.append(mod, del);
     // the grip, for a type that has siblings to move among
     if (siblings > 1) {
       const grip = sortGrip(n.name);
@@ -3161,6 +3175,8 @@ function renderControls() {
          "this type has no vertex of valence 4 or more to resolve", openResolveDialog),
       mk("Evaluation matrix…", c.vertices.length >= 1,
          "this type has no vertices", openEvalDialog),
+      mk("Moduli map…", ends.length + c.markings.length >= 5,
+         "the moduli map needs at least five ends and markings", () => openModuli([selectedId])),
     ]));
     return g;
   };
