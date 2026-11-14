@@ -267,6 +267,7 @@ const HELP = {
         <li><b>Markings</b> — click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.</li>
         <li><b>Legs of M₀,₅</b> — click five ends or markings (thick / ringed in green).</li>
         <li><b>Evaluated</b> — click the markings fixed at points of the plane (orange squares).</li>
+        <li><b>Slopes</b> — click an end (violet), then a dependent end (dashed orange), type the new direction and <b>Apply</b>; the dependent end absorbs the change.</li>
         <li>The line under the picture says what is still needed: |Δ| + n − 1 = 2k + 2, and the map must be invertible on the type (else it says why). Then <b>Start →</b>.</li>
         <li>The picture zooms (wheel / pinch).</li>
       </ul>`,

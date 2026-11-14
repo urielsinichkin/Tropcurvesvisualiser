@@ -469,6 +469,8 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .mw-small { font-size: 12px; margin: 6px 0; }
 #mw-paste summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .mw-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.mw-slope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; font-size: 14px; }
+.mw-slope input[type=number] { width: 4.2em; }
 #mw-type .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
 .mm-key { display: inline-block; width: 14px; height: 14px; box-sizing: border-box; }
 .mm-key-leg { border: 3px solid var(--accent); border-radius: 50%; }
