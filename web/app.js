@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "55";
+const APP_VERSION = "56";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "46";
+const STYLES_VERSION = "48";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -73,6 +73,7 @@ if (!LIBRARY_MODE) ensureFreshPage();
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
+const DESC_SHOWN = 80;     // characters of a description shown in the types list
 const LAYOUT_KEY = "tropcurves.layout.v1";         // side-panel widths, per browser
 
 let pyodide = null;
@@ -2001,15 +2002,19 @@ function renderTypeList() {
     li.onclick = () => selectNode(n.id);
     const warn = n.status !== "ok" ? `<span class="badge warn">needs attention</span>` : "";
     const hidden = folded ? `<span class="badge" title="derived types folded away">+${countBelow(n)}</span>` : "";
-    // a description shows as one line under the counts; all of it on hover
+    // a description shows as one short line under the counts; all of it on
+    // hover (and in the Edit panel)
     const desc = (n.description || "").trim();
+    const first = desc.split("\n")[0];
+    const shown = first.length > DESC_SHOWN ? first.slice(0, DESC_SHOWN - 1).trimEnd() + "…"
+      : first + (desc.includes("\n") ? " …" : "");
     if (desc) li.title = desc;
     li.innerHTML = `<span class="tree-indent" style="width:${depth * 12}px"></span>
       <span class="twisty-slot"></span>
-      <span style="flex:1;min-width:0">
+      <span class="tbody">
         <span class="tname">${escapeHtml(n.name)}</span> ${warn} ${hidden}<br/>
         <span class="tmeta">${n.num_ends} ends · ${n.num_bounded} edges · ${n.num_markings} marks${n.parent_id ? (n.follow_parent ? " · follows" : " · detached") : ""}</span>
-        ${desc ? `<span class="tdesc">${escapeHtml(desc.split("\n")[0])}</span>` : ""}
+        ${desc ? `<span class="tdesc">${escapeHtml(shown)}</span>` : ""}
       </span>`;
     if (kids.length) {
       const tw = document.createElement("button");

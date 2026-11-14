@@ -111,7 +111,8 @@ button.danger { color: var(--danger); }
 }
 body.resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 900px) {
-  #app { grid-template-columns: 1fr; grid-template-areas: "types" "views" "controls"; }
+  /* minmax(0, ...): a long unbroken line (a type's description) must not widen the column */
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "types" "views" "controls"; }
   .splitter { display: none; }
 }
 
@@ -364,9 +365,13 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
   font: inherit; font-size: 13px; width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2em;
   padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
 }
+.type-item .tbody { flex: 1; min-width: 0; overflow: hidden; }
 .type-item .tdesc {
   display: block; font-size: 12px; color: var(--muted); font-style: italic;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* takes the row's width but adds none of its own: one unbroken line would
+     otherwise size the list (a grid) and the page to its full length */
+  width: 0; min-width: 100%;
 }
 
 /* help buttons and popovers */
