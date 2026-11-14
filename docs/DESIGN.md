@@ -433,6 +433,14 @@ bar (`--topbar-h`, kept current by a ResizeObserver) and the Types, curve and
 Edit columns each scroll on their own; the page does not scroll. The stacked
 layout scrolls as one page, as before.
 
+In the list, a description shows as its first line, cut to `DESC_SHOWN` (80)
+characters with an ellipsis (the row clips it too, to its own width). The
+line has `width: 0; min-width: 100%`, so it adds nothing to the row's
+intrinsic width: otherwise one long unbroken line sized the list (a grid
+with an auto column) and, on a phone, the whole page. The one-column phone
+layout also uses `minmax(0, 1fr)`, since a plain `1fr` track grows to its
+content's min-content width.
+
 ### 3.4 Help and documentation
 
 `web/help.html` is the user guide: every feature, by panel and dialog, with a

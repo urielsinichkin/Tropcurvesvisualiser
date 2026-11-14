@@ -27,7 +27,7 @@ const HELP = {
     html: `<p>The library: every type, with derived types indented under the type they came from.</p>
       <ul>
         <li><b>Click</b> a type to show and edit it.</li>
-        <li>Each row: name; counts of ends, bounded edges, markings; <i>follows</i> / <i>detached</i> for derived types; the first line of its description, if any (hover for all of it).</li>
+        <li>Each row: name; counts of ends, bounded edges, markings; <i>follows</i> / <i>detached</i> for derived types; its description, if any, cut to one short line (hover for all of it, or see the Edit panel).</li>
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
