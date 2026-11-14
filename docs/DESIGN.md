@@ -392,6 +392,16 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   with the preimages on both sides, form the log.
 - *Session*: library text, setup, points, the point, chart, size and path,
   autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
+- *One type*: a type's row button **M** (and the action *Moduli map…*) hands
+  `export_subset([id])` over in `localStorage` (`tropcurves.moduli.handoff.v1`,
+  read once and removed) and opens `../moduli/?from=types`; the top bar's
+  button still passes the whole library (`?from=app`).
+- *Choosing on a picture*: the setup draws a type of the group (the one shown
+  large if it is there) with `drawCurve`, ends and markings pickable
+  (`routePicks` events), in two modes -- legs of M_0,5 or evaluated markings;
+  chosen legs are drawn thick / ringed in the accent, evaluated markings in
+  orange squares. The svg is kept across redraws so its `makeZoomable` zoom
+  survives. The checkbox lists remain, folded, as the list alternative.
 
 ### Stale cached pages
 

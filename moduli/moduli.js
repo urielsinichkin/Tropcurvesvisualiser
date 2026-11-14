@@ -69,9 +69,16 @@ async function mmBoot() {
   wireMenu();
   trackTopbarHeight();
   mmWire();
-  const fromApp = new URLSearchParams(location.search).has("from");
+  const from = new URLSearchParams(location.search).get("from");
+  const fromApp = !!from;
   if (fromApp) history.replaceState(null, "", location.pathname);
   let restored = false;
+  if (from === "types") {
+    // the main app handed over chosen types (a type's "M" button)
+    let text = null;
+    try { text = localStorage.getItem(MODULI_HANDOFF_KEY); localStorage.removeItem(MODULI_HANDOFF_KEY); } catch (e) { /* none */ }
+    if (text) { mmLoadLibrary(text); mmAutosave(); return; }
+  }
   if (!fromApp) {
     try {
       const saved = localStorage.getItem(MM_KEY);
@@ -255,6 +262,7 @@ function mmConfigChanged(fresh) {
       mmRecomputeAll();
     }
   }
+  if (!ok || !MM.m) { MM.pre = null; MM.overview = null; }
   mmRenderSetup();
   if (!ok || !MM.m) mmClearViews();
   mmAutosave();
@@ -293,6 +301,23 @@ function mmRenderSetup() {
     `<br>markings: ${g.markings.map(escapeHtml).join(", ") || "none"} · dim M<sub>0,n</sub>(ℝ², Δ) = ${g.dim}`;
   body.appendChild(info);
 
+  const setEvaluated = (n, on) => {
+    cfg.evaluated = on ? g.markings.filter(m => m === n || cfg.evaluated.includes(m))
+                       : cfg.evaluated.filter(m => m !== n);
+    mmGuard(() => mmConfigChanged(true));
+  };
+  const setLeg = (n, on) => {
+    cfg.legs = mmLegOrder(g, on ? [...cfg.legs, n] : cfg.legs.filter(x => x !== n));
+    mmGuard(() => mmConfigChanged(true));
+  };
+  mmPickPicture(body, g, cfg, setEvaluated, setLeg);
+
+  // the same choices as lists, for those who prefer them
+  const lists = document.createElement("details");
+  lists.className = "mm-lists";
+  lists.open = !!MM.listsOpen;
+  lists.ontoggle = () => { MM.listsOpen = lists.open; };
+  lists.innerHTML = "<summary>Choose from lists instead</summary>";
   const ticks = (title, names, chosen, onSet, note) => {
     const box = document.createElement("fieldset");
     box.className = "mm-ticks";
@@ -307,19 +332,13 @@ function mmRenderSetup() {
       box.appendChild(l);
     });
     if (note) { const s = document.createElement("div"); s.className = "muted mm-small"; s.textContent = note; box.appendChild(s); }
-    body.appendChild(box);
+    lists.appendChild(box);
   };
-  ticks("Evaluated markings (k = " + cfg.evaluated.length + ")", g.markings, cfg.evaluated, (n, on) => {
-    cfg.evaluated = on ? g.markings.filter(m => m === n || cfg.evaluated.includes(m))
-                       : cfg.evaluated.filter(m => m !== n);
-    mmGuard(() => mmConfigChanged(true));
-  });
+  ticks("Evaluated markings (k = " + cfg.evaluated.length + ")", g.markings, cfg.evaluated, setEvaluated);
   const legNames = [...g.ends.map(e => e.name), ...g.markings];
-  ticks("Legs of M0,5 (" + cfg.legs.length + " of 5)", legNames, cfg.legs, (n, on) => {
-    const legs = on ? [...cfg.legs, n] : cfg.legs.filter(x => x !== n);
-    cfg.legs = mmLegOrder(g, legs);
-    mmGuard(() => mmConfigChanged(true));
-  }, "Rays of M0,5 are named by the two legs on one side.");
+  ticks("Legs of M0,5 (" + cfg.legs.length + " of 5)", legNames, cfg.legs, setLeg,
+        "Rays of M0,5 are named by the two legs on one side.");
+  body.appendChild(lists);
 
   const st = document.createElement("div");
   st.className = "status";
@@ -327,7 +346,11 @@ function mmRenderSetup() {
   else if (MM.check && !MM.check.ok) { st.classList.add("warn"); st.textContent = MM.check.message; }
   else if (MM.check) {
     st.textContent = `dim ${MM.check.dim} = 2·${cfg.evaluated.length} + 2 ✓`;
-    if (!MM.m) { st.classList.add("warn"); st.textContent += " — but no type maps onto an open cone, so nothing to show."; }
+    if (!MM.m) {
+      st.classList.add("warn");
+      st.textContent += " — but with these choices no type here is full-dimensional (its map is not " +
+        "invertible, or it lands on a ray of M₀,₅), so there is nothing to show. Try other legs or markings.";
+    }
   }
   body.appendChild(st);
 
@@ -377,6 +400,106 @@ function mmRenderSetup() {
     d.appendChild(ul);
     body.appendChild(d);
   }
+}
+
+// The choices on a picture of a type of the group: in "legs" mode a click
+// on an end or a marking makes it one of the five legs of M_0,5 (or not), in
+// "points" mode a click on a marking fixes it at a point of the plane.
+function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
+  const mode = MM.pickMode || "legs";
+  const box = document.createElement("div");
+  box.className = "mm-pick";
+  const tabs = document.createElement("div");
+  tabs.className = "mm-tabs";
+  tabs.setAttribute("role", "tablist");
+  [["legs", `Legs of M₀,₅ (${cfg.legs.length} of 5)`], ["points", `Evaluated markings (k = ${cfg.evaluated.length})`]]
+    .forEach(([m, label]) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "small" + (m === mode ? " primary" : "");
+      b.textContent = label;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", m === mode ? "true" : "false");
+      b.onclick = () => { MM.pickMode = m; mmRenderSetup(); };
+      tabs.appendChild(b);
+    });
+  const hint = document.createElement("p");
+  hint.className = "muted mm-small";
+  hint.textContent = mode === "legs"
+    ? "Click ends and markings to make them legs of M₀,₅ (exactly five)."
+    : "Click markings to fix them at points of the plane.";
+  // one svg, kept across redraws so its zoom survives
+  if (!MM.pickSvg) {
+    MM.pickSvg = document.createElementNS(SVGNS, "svg");
+    MM.pickSvg.id = "mm-pick-svg";
+    MM.pickSvg.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);
+    MM.pickSvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  }
+  const status = document.createElement("div");
+  status.className = "pick-status";
+  const legend = document.createElement("div");
+  legend.className = "sub-legend";
+  legend.innerHTML = `<span><span class="mm-key mm-key-leg"></span>leg of M₀,₅</span>
+    <span><span class="mm-key mm-key-ev"></span>evaluated (a point in ℝ²)</span>`;
+  box.append(tabs, hint, MM.pickSvg, status, legend);
+  body.appendChild(box);
+  if (!MM.pickSvg._zoom) MM.pickSvg._zoom = makeZoomable(MM.pickSvg);
+
+  // the type drawn: the one shown large if it is in the group, else the first
+  const ids = g.types.map(t => t.id);
+  const id = (MM.pre && MM.pre.preimages.length && ids.includes(MM.pre.preimages[0].type))
+    ? (MM.selected && ids.includes(MM.selected) ? MM.selected : MM.pre.preimages[0].type) : ids[0];
+  let data;
+  try { data = api("render", id); } catch (e) { status.textContent = e.message; return; }
+  const drawn = drawCurve(data, {
+    svgId: "mm-pick-svg",
+    pickEdge: e => mode === "legs" && e.kind === "end",
+    pickMarking: () => true,
+  });
+  const svg = drawn.svg;
+  // what is chosen: legs thick in the accent, evaluated markings ringed
+  data.curve.edges.forEach(e => {
+    if (e.kind === "end" && cfg.legs.includes(e.name) && drawn.lines[e.id]) {
+      drawn.lines[e.id].setAttribute("stroke", "var(--accent)");
+      drawn.lines[e.id].setAttribute("stroke-width", 5);
+    }
+  });
+  const T = drawn.T;
+  data.curve.markings.forEach(m => {
+    const p = T(m.at);
+    const marks = [];
+    if (cfg.evaluated.includes(m.name)) {
+      marks.push(svgEl("rect", { x: p[0] - 13, y: p[1] - 13, width: 26, height: 26, rx: 4, fill: "none",
+        stroke: "var(--warn)", "stroke-width": 3, "pointer-events": "none" }));
+    }
+    if (cfg.legs.includes(m.name)) {
+      marks.push(svgEl("circle", { cx: p[0], cy: p[1], r: 9, fill: "none", stroke: "var(--accent)",
+        "stroke-width": 3.5, "pointer-events": "none" }));
+    }
+    // under the pick targets, which drawCurve put last
+    const first = svg.querySelector(".pick-hit");
+    marks.forEach(el => svg.insertBefore(el, first));
+  });
+  const describe = t => {
+    const name = t.kind === "edge" ? t.edge.name : t.marking.name;
+    const what = t.kind === "edge" ? "end" : "marking";
+    const leg = cfg.legs.includes(name), ev = cfg.evaluated.includes(name);
+    const now = [leg ? "a leg" : "", ev ? "evaluated" : ""].filter(Boolean).join(" and ") || "not chosen";
+    const act = mode === "legs" ? (leg ? "click to drop it as a leg" : "click to make it a leg")
+      : (ev ? "click to free it" : "click to fix it at a point");
+    return `${what} ${name}: ${now} — ${act}`;
+  };
+  const idle = mode === "legs" ? `Legs: ${cfg.legs.join(", ") || "none"}`
+    : `Evaluated: ${cfg.evaluated.join(", ") || "none"}`;
+  status.textContent = idle;
+  [...drawn.edgePicks, ...drawn.markPicks].forEach(t => {
+    t.hit.addEventListener("pick-enter", () => { status.textContent = describe(t); });
+    t.hit.addEventListener("pick-leave", () => { status.textContent = idle; });
+    t.hit.addEventListener("pick-click", () => {
+      const name = t.kind === "edge" ? t.edge.name : t.marking.name;
+      if (mode === "legs") setLeg(name, !cfg.legs.includes(name));
+      else setEvaluated(name, !cfg.evaluated.includes(name));
+    });
+  });
 }
 
 function mmGuard(f) { try { f(); } catch (e) { reportError(e); } }
