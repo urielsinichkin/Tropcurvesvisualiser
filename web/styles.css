@@ -526,3 +526,6 @@ button.linklike { border: none; background: none; padding: 0; color: var(--accen
 .mm-key-ev { border: 3px solid var(--warn); border-radius: 3px; }
 .mm-lists { margin-top: 8px; font-size: 13px; }
 .mm-lists > summary { cursor: pointer; color: var(--muted); }
+/* the line above the chart keeps one height, or the chart would move under a
+   finger dragging in it whenever the text wraps differently */
+#mm-where { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -482,11 +482,15 @@ class Session:
         st = self._moduli_setup(cfg)
         info = moduli.group_info(st.maps[0].curve)
         out = moduli.check(info, len(st.evaluated))
-        out["types"] = [{
-            "id": t.id, "name": t.name, "cell_dim": t.cell_dim, "full": t.full,
-            "cone": [list(s) for s in t.cone],
-            "multiplicity": int(t.det) if t.det is not None else None,
-        } for t in st.maps]
+        out["types"] = []
+        for t in st.maps:
+            why = moduli.explain(t, st.evaluated, st.legs)
+            out["types"].append({
+                "id": t.id, "name": t.name, "cell_dim": t.cell_dim, "full": t.full,
+                "cone": [list(s) for s in t.cone],
+                "multiplicity": int(t.det) if t.det is not None else None,
+                "why": why,
+            })
         return out
 
     def moduli_initial(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -517,6 +521,20 @@ class Session:
             cone = tuple(sorted(tuple(sorted(s)) for s in c))
             out.append({"cone": [list(s) for s in cone], "regions": moduli.regions(st, cone, R)})
         return out
+
+    def moduli_images(self, config: Dict[str, Any], radius: Any) -> List[Dict[str, Any]]:
+        """Where the types that are not full-dimensional have curves over the
+        points: their images in M_0,5 (points, segments, regions), each with
+        the reason it is not full-dimensional."""
+        return moduli.images(self._moduli_setup(config), Fraction(str(radius)))
+
+    def moduli_on_image(self, config: Dict[str, Any], type_id: str, radius: Any,
+                        frac: Any) -> Dict[str, Any]:
+        """The exact point at a fraction along a type's image (a segment)."""
+        st = self._moduli_setup(config)
+        cone, ls = moduli.on_image(st, type_id, Fraction(str(radius)),
+                                   Fraction(str(frac)).limit_denominator(10 ** 6))
+        return moduli.point_json(cone, ls)
 
     def moduli_overview(self, config: Dict[str, Any], size: Any) -> List[Dict[str, Any]]:
         return moduli.overview(self._moduli_setup(config), Fraction(str(size)))

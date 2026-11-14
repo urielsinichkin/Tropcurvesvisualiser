@@ -392,6 +392,24 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   with the preimages on both sides, form the log.
 - *Session*: library text, setup, points, the point, chart, size and path,
   autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
+- *Types that are not full-dimensional* (`explain`, `image`, `fibre_point`):
+  the reason in words -- lower dimension; the points tied (a left-kernel
+  vector of the ev rows); one or no inner edge (ray, apex); or the points
+  fixing a combination of the M_0,5 lengths (a left-kernel vector of
+  [ev; ft] with a non-zero ft part, read as `mu . (lengths) = lambda . p`).
+  For the last kinds the image of the fibre over the points is computed
+  exactly: the fibre `z = z0 + N w`, `l_e > 0`, the cone coordinates
+  `y = F z` added as equalities, `w` eliminated by Fourier-Motzkin (strict
+  flags carried, so an empty open set is recognised); the result clips the
+  triangle `a + b <= R` to a region, segment or point. Over a point of it the
+  type has a positive-dimensional fibre, of which `_interior_point`
+  (eliminate, then choose each variable between its bounds) gives one curve,
+  shown and not counted. Lower-dimensional types are skipped: they live on
+  walls, already drawn. The page draws the images in orange, snaps onto them
+  (`moduli_on_image`, an exact point at a fraction of the segment), marks
+  them in the overview, and recomputes them only when a point of the plane is
+  let go (they are slower than the regions). With no full-dimensional type
+  the starting point is taken on such an image.
 - *One type*: a type's row button **M** (and the action *Moduli map…*) hands
   `export_subset([id])` over in `localStorage` (`tropcurves.moduli.handoff.v1`,
   read once and removed) and opens `../moduli/?from=types`; the top bar's
