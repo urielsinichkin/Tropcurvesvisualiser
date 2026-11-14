@@ -446,12 +446,31 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
 
 Phones restore old tabs from cache, so `index.html` can be an old copy naming
 an old `styles.css?v=` and lacking newer scripts and buttons, while `app.js`
-(loaded with a time token) is current. `app.js` repairs the page at load
+(revalidated on every load) is current. `app.js` repairs the page at load
 (`ensureFreshPage`): it links the stylesheet version it expects
 (`STYLES_VERSION`, kept equal to index.html's by a test) when the page names
 another, loads `help-tips.js` if missing, and adds the top bar's Help button.
 The help popover also carries the layout it needs inline, so it shows even
 under an old stylesheet.
+
+### Caching
+
+GitHub Pages serves every file with `Cache-Control: max-age=600` and an
+ETag. The pages' loaders fetch their scripts (`help-tips.js`, `app.js`,
+`moduli.js`) with `cache: "no-cache"` and run them in order (as inline
+scripts named with `//# sourceURL`), and `bootCore` fetches the Python
+package the same way, all files at once. "no-cache" means *revalidate*: the
+browser sends the ETag and gets a `304` with no body when the file is
+unchanged. So a refresh always runs the latest code, and an unchanged file
+costs a tiny round trip instead of a download. (Before: the package was
+fetched one file at a time with "no-store", downloading ~215 KB on every load,
+and the scripts carried a per-minute token, downloading ~235 KB again after
+any minute -- yet a refresh within the deploy's minute could still run the old
+app.js.) Measured against a local server with the same headers: a refresh or
+a later visit went from ~220-450 KB to ~8 KB. `styles.css` keeps its
+`?v=`, which `ensureFreshPage` relies on; `file:` pages fall back to script
+tags with the minute token. Pyodide comes from its CDN under a versioned URL
+and is cached by the browser for long.
 
 ### 3.3 Reordering lists
 

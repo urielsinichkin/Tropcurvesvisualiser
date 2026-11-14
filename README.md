@@ -52,10 +52,12 @@ its wall crossings; open it from the app's **Moduli map…** button.
 Browsers cache these files aggressively, and a stale script paired with a fresh
 `index.html` silently breaks newly added controls.
 
-`app.js` handles itself: `index.html` loads it with a time-based token
-(`app.js?t=<minute>`), so it can never be more than a minute stale — **even if
-`index.html` itself was served from cache**. That matters because a fixed
-`?v=N` lives *inside* `index.html`, so a cached page would keep asking for the
+`app.js` handles itself: the loader at the bottom of `index.html` fetches it
+(and `help-tips.js`, and the Python package) with `cache: "no-cache"`, so the
+browser revalidates each file on every load — a changed file arrives at once,
+**even if `index.html` itself was served from cache**, and an unchanged one
+costs a `304 Not Modified` with no body instead of a download. A fixed `?v=N`
+would live *inside* `index.html`, so a cached page would keep asking for the
 old script forever and never learn a new version exists.
 
 When you deploy a change under `web/`, bump:

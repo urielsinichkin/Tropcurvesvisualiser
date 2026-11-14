@@ -162,13 +162,13 @@ section {
 }
 /* per-row delete: faint until the row is pointed at or selected (always
    shown in full on touch, where there is no hover) */
-.row-del {
+.row-del, .row-btn {
   flex: none; width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
   background: transparent; font-size: 14px; line-height: 28px; opacity: .35;
 }
-.type-item:hover .row-del, .type-item.selected .row-del, .row-del:focus-visible { opacity: 1; }
+.type-item:hover :is(.row-del, .row-btn), .type-item.selected :is(.row-del, .row-btn), :is(.row-del, .row-btn):focus-visible { opacity: 1; }
 .row-del:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
-@media (hover: none) { .row-del { opacity: .8; } }
+@media (hover: none) { .row-del, .row-btn { opacity: .8; } }
 /* open the type in the moduli map: a letter in a ring, the delete's twin */
 .row-moduli { font-weight: 700; font-size: 12px; color: var(--accent); }
 .row-moduli:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }

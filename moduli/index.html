@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Moduli map — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=51" />
+<link rel="stylesheet" href="../web/styles.css?v=52" />
 </head>
 <body class="moduli-page">
 <header id="topbar">
@@ -117,20 +117,43 @@ window.TROP_HELP_BASE = "../web/";
 </script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
 <script>
-// fresh scripts, as in web/index.html (a time token, so a cached page still
-// loads current code)
+// As in web/index.html. Load the scripts fresh but cheaply: each is fetched with cache "no-cache",
+// so the browser revalidates it (its ETag) on every load. A changed file
+// arrives at once -- a refresh always shows the latest version, even from a
+// cached copy of this page -- and an unchanged one costs a 304 with no body
+// instead of a download. They run in order (NAMES), the help text first:
+// app.js reads it. Where fetch cannot be used (a file: URL), plain script
+// tags with a per-minute token do the same job less cheaply.
 (function () {
-  var t = Math.floor(Date.now() / 60000);
-  ["../web/help-tips.js", "../web/app.js", "moduli.js"].forEach(function (name) {
-    var s = document.createElement("script");
-    s.src = name + "?t=" + t;
-    s.async = false;
-    s.onerror = function () {
-      var m = document.getElementById("boot-msg");
-      if (m) m.textContent = "Failed to load " + name;
-    };
-    document.body.appendChild(s);
-  });
+  var NAMES = ["../web/help-tips.js", "../web/app.js", "moduli.js"];
+  var failed = function (name) {
+    var m = document.getElementById("boot-msg");
+    if (m) m.textContent = "Failed to load " + name;
+  };
+  var tags = function () {
+    var t = Math.floor(Date.now() / 60000);
+    NAMES.forEach(function (name) {
+      var s = document.createElement("script");
+      s.src = name + "?t=" + t;
+      s.async = false;
+      s.onerror = function () { failed(name); };
+      document.body.appendChild(s);
+    });
+  };
+  if (!window.fetch || location.protocol === "file:") { tags(); return; }
+  Promise.all(NAMES.map(function (name) {
+    return fetch(name, { cache: "no-cache" }).then(function (r) {
+      if (!r.ok) throw new Error(name + ": " + r.status);
+      return r.text();
+    });
+  })).then(function (texts) {
+    texts.forEach(function (text, i) {
+      var s = document.createElement("script");
+      // named, so errors and the debugger point at the file
+      s.textContent = text + "\n//# sourceURL=" + new URL(NAMES[i], location.href).href;
+      document.body.appendChild(s);
+    });
+  }).catch(function () { tags(); });
 })();
 </script>
 </body>
