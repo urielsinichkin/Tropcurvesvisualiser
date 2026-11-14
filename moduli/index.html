@@ -5,21 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Moduli map — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=52" />
+<link rel="stylesheet" href="../web/styles.css?v=53" />
 </head>
 <body class="moduli-page">
 <header id="topbar">
   <h1>Moduli map</h1>
   <button id="btn-menu" aria-label="Menu" aria-controls="menu" aria-expanded="false">☰</button>
   <div class="actions" id="menu">
-    <button id="mm-from-app" title="Load the library you are working on in the main app (it saves itself in this browser)">Main app's library</button>
-    <button id="mm-import" title="Load a library file, or a saved session">Import…</button>
-    <button id="mm-save" title="Save the library, the choices, the points and the point of M0,5 as one file">Save session</button>
-    <button id="mm-send" title="Send this library, with any changes made here, to the main app; it offers to add it">Send to main app</button>
-    <a class="btn-link" href="../web/index.html" title="Back to the main app">Main app</a>
-    <button id="btn-help" title="What the buttons do, and the full guide">? Help</button>
+    <button id="mw-restart" title="Forget this type and start again with a new one">↺ New type</button>
+    <a class="btn-link" href="../web/index.html" title="The main app">Main app</a>
+    <button id="btn-help" title="What this page does, and the full guide">? Help</button>
     <span class="status-line">
-      <span id="mm-saved" class="muted" title="The session is kept in this browser"></span>
+      <span id="mw-saved" class="muted" title="Kept in this browser"></span>
       <span id="app-version" class="muted"></span>
     </span>
   </div>
@@ -30,72 +27,63 @@
   <div id="boot-msg">Loading Python runtime…</div>
 </div>
 
-<main id="mm" hidden>
-  <section id="mm-setup">
-    <div class="section-head"><h2>Setup</h2></div>
-    <div id="mm-setup-body"></div>
-  </section>
-
-  <section id="mm-space">
-    <div class="view-head">
-      <h2>Chart of M₀,₅ <span id="mm-chart-note" class="muted"></span></h2>
-      <span class="row" style="gap:6px">
-        <button id="mm-reset-m" class="small" title="Put the point of M0,5 back where it started">Reset point</button>
-        <button id="mm-range-out" class="small" title="Show more of M0,5 (larger lengths)" aria-label="Zoom out">−</button>
-        <button id="mm-range-in" class="small" title="Show less of M0,5 (smaller lengths)" aria-label="Zoom in">+</button>
-        <button id="mm-copy-chart" class="small" title="Copy as a PNG">Copy</button>
-        <button id="mm-svg-chart" class="small" title="Download as SVG">SVG</button>
-      </span>
+<main id="mw" hidden>
+  <!-- step 1: the type, its markings, the legs and the evaluated markings -->
+  <section id="mw-setup">
+    <div class="section-head"><h2>1. The type</h2></div>
+    <div class="mw-bar">
+      <button id="mw-draw" class="primary">Draw a subdivision…</button>
+      <details id="mw-paste">
+        <summary>or paste as text</summary>
+        <p class="muted mw-small">One cell per line, each a list of lattice points, e.g. <code>[[0,0],[1,0],[0,1]]</code>.</p>
+        <textarea id="mw-paste-text" rows="4" class="dbg-text" placeholder="[[0,0],[1,0],[0,1]]"></textarea>
+        <div><button id="mw-paste-go" class="small">Create</button></div>
+      </details>
     </div>
-    <div class="mm-bar">
-      <label class="check"><input type="checkbox" id="mm-snap" checked> Snap to walls</label>
-      <span id="mm-where" class="muted"></span>
-    </div>
-    <svg id="mm-chart" class="mm-drag" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
-    <div id="mm-chart-legend" class="sub-legend" hidden></div>
-
-    <div class="view-head mm-sub">
-      <h2>Overview <span class="muted">(Petersen graph)</span></h2>
-      <span class="row" style="gap:6px">
-        <button id="mm-copy-overview" class="small" title="Copy as a PNG">Copy</button>
-        <button id="mm-svg-overview" class="small" title="Download as SVG">SVG</button>
-      </span>
-    </div>
-    <div class="mm-bar">
-      <label for="mm-size">Size a + b</label>
-      <input type="range" id="mm-size" min="0" max="1000" step="1" value="500">
-      <span id="mm-size-val" class="muted"></span>
-    </div>
-    <svg id="mm-overview" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
-    <div id="mm-legend" class="sub-legend"></div>
-
-    <details id="mm-path">
-      <summary><h2>Animate a path</h2></summary>
-      <div class="mm-bar">
-        <button id="mm-path-from" class="small" title="Start the path at the current point">From here</button>
-        <button id="mm-path-to" class="small" title="End the path at the current point">To here</button>
-        <button id="mm-path-play" class="small" disabled>▶ Play</button>
-        <button id="mm-path-clear" class="small ghost" disabled>Clear</button>
+    <div id="mw-type" hidden>
+      <div class="mw-tabs" role="tablist">
+        <button data-mode="markings" class="small">Markings</button>
+        <button data-mode="legs" class="small">Legs of M₀,₅</button>
+        <button data-mode="points" class="small">Evaluated</button>
       </div>
-      <input type="range" id="mm-path-t" min="0" max="1000" step="1" value="0" disabled aria-label="Position along the path">
-      <ol id="mm-path-log" class="mm-log"></ol>
-    </details>
+      <p id="mw-hint" class="muted mw-small"></p>
+      <svg id="mw-type-svg" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="mw-pick-status" class="pick-status"></div>
+      <div class="sub-legend">
+        <span><span class="mm-key mm-key-leg"></span>leg of M₀,₅</span>
+        <span><span class="mm-key mm-key-ev"></span>evaluated (a fixed point in ℝ²)</span>
+      </div>
+      <div id="mw-check" class="status"></div>
+      <div class="mw-bar"><button id="mw-start" class="primary" disabled>Start →</button></div>
+    </div>
   </section>
 
-  <section id="mm-curves">
+  <!-- step 2: the curve and its cell of M_0,5 -->
+  <section id="mw-curve-sec" hidden>
     <div class="view-head">
-      <h2>Curve <span id="mm-curve-name" class="muted"></span></h2>
+      <h2>Curve <span id="mw-curve-name" class="muted"></span></h2>
       <span class="row" style="gap:6px">
-        <button id="mm-reset-points" class="small" title="Put the points in the plane back where they started">Reset points</button>
-        <button id="mm-copy-figure" class="small" title="Copy as a PNG with a transparent background">Copy</button>
-        <button id="mm-svg-figure" class="small" title="Download as SVG">SVG</button>
+        <button id="mw-back" class="small" title="Back to the type, its markings and choices">← Type</button>
+        <button id="mw-copy-curve" class="small" title="Copy as a PNG">Copy</button>
       </span>
     </div>
-    <div id="mm-figure-note" class="status"></div>
-    <svg id="mm-figure" class="mm-drag" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
-    <div class="view-head mm-sub"><h2>Preimage <span id="mm-count" class="muted"></span></h2></div>
-    <div id="mm-notes" class="muted"></div>
-    <div id="mm-gallery" class="mm-gallery"></div>
+    <svg id="mw-curve" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="mw-paths" class="sub-legend"></div>
+  </section>
+
+  <section id="mw-cell-sec" hidden>
+    <div class="view-head">
+      <h2>Cell of M₀,₅ <span id="mw-cell-kind" class="muted"></span></h2>
+      <span class="row" style="gap:6px">
+        <button id="mw-copy-cell" class="small" title="Copy as a PNG">Copy</button>
+      </span>
+    </div>
+    <div id="mw-where" class="muted mw-small"></div>
+    <svg id="mw-cell" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="mw-wall" hidden>
+      <p id="mw-wall-text" class="mw-small"></p>
+      <div id="mw-regens" class="mw-regens"></div>
+    </div>
   </section>
 </main>
 
@@ -107,23 +95,23 @@
     </div>
   </div>
 </div>
-<input id="mm-file" type="file" accept="application/json,.json" hidden />
 <a id="download-anchor" hidden></a>
 
 <script>
-// app.js defines the drawing, export and help code, and starts nothing here
+// app.js defines the drawing, the subdivision editor, export and help, and
+// starts nothing here
 window.TROP_LIBRARY_MODE = true;
 window.TROP_HELP_BASE = "../web/";
 </script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
 <script>
-// As in web/index.html. Load the scripts fresh but cheaply: each is fetched with cache "no-cache",
-// so the browser revalidates it (its ETag) on every load. A changed file
-// arrives at once -- a refresh always shows the latest version, even from a
-// cached copy of this page -- and an unchanged one costs a 304 with no body
-// instead of a download. They run in order (NAMES), the help text first:
-// app.js reads it. Where fetch cannot be used (a file: URL), plain script
-// tags with a per-minute token do the same job less cheaply.
+// As in web/index.html. Load the scripts fresh but cheaply: each is fetched
+// with cache "no-cache", so the browser revalidates it (its ETag) on every
+// load. A changed file arrives at once -- a refresh always shows the latest
+// version, even from a cached copy of this page -- and an unchanged one costs
+// a 304 with no body instead of a download. They run in order (NAMES), the
+// help text first: app.js reads it. Where fetch cannot be used (a file: URL),
+// plain script tags with a per-minute token do the same job less cheaply.
 (function () {
   var NAMES = ["../web/help-tips.js", "../web/app.js", "moduli.js"];
   var failed = function (name) {

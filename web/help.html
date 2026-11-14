@@ -123,12 +123,9 @@ th { background: var(--bg); font-weight: 600; }
     <li><a href="#help">Help in the app</a></li>
     <li><a href="#moduli">The moduli map</a>
       <ol>
-        <li><a href="#moduli-setup">Setup</a></li>
-        <li><a href="#moduli-chart">The chart of M<sub>0,5</sub></a></li>
-        <li><a href="#moduli-overview">The overview</a></li>
-        <li><a href="#moduli-curves">The curves over the point</a></li>
-        <li><a href="#moduli-path">Animating a path</a></li>
-        <li><a href="#moduli-session">Sessions and pictures</a></li>
+        <li><a href="#moduli-type">The type</a></li>
+        <li><a href="#moduli-curve">The curve</a></li>
+        <li><a href="#moduli-cell">The cell and its walls</a></li>
       </ol></li>
     <li><a href="#faq">Troubleshooting</a></li>
   </ol>
@@ -199,7 +196,7 @@ panel (right). A top bar runs across.</p>
   <tr><td><span class="btn">New</span></td><td>Create a new root type: from a preset, by drawing a subdivision, or by pasting one as text (<a href="#new">§4</a>).</td></tr>
   <tr><td><span class="btn">🎨 Display</span></td><td>Default colors, label visibility and background (<a href="#settings">§14</a>).</td></tr>
   <tr><td><span class="btn">Multiplicity</span></td><td>Refined multiplicities of all types, and a search for balanced splits (<a href="#multiplicity">§11</a>).</td></tr>
-  <tr><td><span class="btn">Moduli map…</span></td><td>Opens the moduli map explorer on this library in a new tab (<a href="#moduli">§18</a>).</td></tr>
+  <tr><td><span class="btn">Moduli map…</span></td><td>Opens the moduli map in a new tab: draw a type and walk its curve across walls (<a href="#moduli">§18</a>).</td></tr>
   <tr><td><span class="btn">Export…</span></td><td>Save the whole library, or a chosen part of it, as a JSON file (<a href="#export">§13.2</a>).</td></tr>
   <tr><td><span class="btn">Import</span></td><td>Load a JSON file, adding its types to the library or replacing the library (<a href="#import">§13.3</a>).</td></tr>
   <tr><td><span class="btn">☁ Drive…</span></td><td>Save the library to, and open it from, your Google Drive (<a href="#drive">§13.4</a>).</td></tr>
@@ -273,8 +270,6 @@ panel (right). A top bar runs across.</p>
       edit (<a href="#propagation">§10</a>).</li>
   <li><span class="btn">🗑</span> on each row opens the <a href="#delete">delete dialog</a> for that type,
       without selecting it.</li>
-  <li><span class="btn">M</span> on each row opens the <a href="#moduli">moduli map</a> in a new tab with that
-      type alone.</li>
   <li><strong>Reordering:</strong> drag a type by its <span class="btn">⠿</span> grip to move it among its
       <em>siblings</em>: the other roots, or the other types derived from the same parent. Its derived types
       move with it. A type never changes parent this way, since that would change its derivation, so only
@@ -396,9 +391,7 @@ shown instead.</p>
 <p>Buttons for the operations: <span class="btn">Edit end slope…</span> (<a href="#slope">§9.2</a>),
 <span class="btn">Add marking…</span> (<a href="#marking">§9.3</a>), <span class="btn">Contract edge…</span>
 (<a href="#contract">§9.4</a>), <span class="btn">Resolve vertex…</span> (<a href="#resolve">§9.5</a>) and
-<span class="btn">Evaluation matrix…</span> (<a href="#evaluation">§12</a>) and
-<span class="btn">Moduli map…</span>, which opens the <a href="#moduli">moduli map</a> on this type alone
-(it needs five ends and markings). A button is disabled, with
+<span class="btn">Evaluation matrix…</span> (<a href="#evaluation">§12</a>). A button is disabled, with
 the reason on hover, when the type does not allow it: slope editing needs two ends, contracting
 needs a bounded edge, and resolving needs a vertex of valence ≥ 4.</p>
 
@@ -755,164 +748,61 @@ divider resize the panel.</p>
 
 <section class="doc" id="moduli">
 <h2>18. The moduli map — <span class="btn">Moduli map…</span></h2>
-<p>A second page, <a href="../moduli/">moduli/</a>, for watching wall crossings. It takes the types of the
-library that share a degree Δ and markings — points of one moduli space M<sub>0,n</sub>(ℝ², Δ) — and the map</p>
+<p>A second page, <a href="../moduli/">moduli/</a> (opened from the top bar), for walking the curve of one type
+through its moduli space. Choose <em>k</em> markings to <em>evaluate</em> — their images are fixed points of the plane
+— and five <em>legs</em> (ends or markings): the tree they span, with its edge lengths, is a point of the tropical
+M<sub>0,5</sub>. When |Δ| + n − 1 = 2k + 2 (|Δ| ends, n markings) and the map</p>
 <p style="text-align:center">ev × ft : M<sub>0,n</sub>(ℝ², Δ) → (ℝ²)<sup>k</sup> × M<sub>0,5</sub></p>
-<ul>
-  <li><strong>ev</strong> sends a curve to the positions of <em>k</em> chosen markings in the plane.</li>
-  <li><strong>ft</strong> forgets everything but five chosen legs (ends or markings): it keeps the tree they
-      span, with its edge lengths, a point of the tropical M<sub>0,5</sub>.</li>
-  <li>M<sub>0,5</sub> is two-dimensional: 10 rays, one for each way to split the five legs 2 + 3 (named by the
-      two legs on one side, e.g. <code>{a,x3}</code>), and 15 cones, one for each pair of rays with disjoint
-      names. As a graph — rays as vertices, cones as edges — it is the Petersen graph.</li>
-  <li>The two sides have the same dimension when |Δ| + n − 1 = 2k + 2 (|Δ| ends, n markings); the page
-      insists on it. Then, over a general point, there are finitely many curves, each with multiplicity
-      |det| of the map on its type's cell (the evaluation matrix with the two rows of ft added), and their
-      weighted count does not depend on the point.</li>
-  <li>On a cell, the curves over a point of a cone form, for each type, a convex <strong>region</strong>
-      where all its edge lengths are positive. Its sides inside the cone are <strong>walls</strong>: there an
-      edge shrinks to length 0, the curve becomes a type of lower dimension, and on the other side other types
-      take over. The page draws the regions and walls, exactly.</li>
-</ul>
-<p>Open it from the main app: <span class="btn">M</span> on a type's row, or
-<span class="btn">Moduli map…</span> among the type's actions, opens it with <strong>that type alone</strong>;
-<span class="btn">Moduli map…</span> in the top bar opens it with the whole library. It can also be opened
-directly, and remembers its own session.</p>
-<p><strong>The opened type and the types it meets.</strong> The page works with <em>one</em> type, the
-<em>opened type</em> — the one in the setup picture, which edits change — and the types it meets at walls; other
-types of the library are left out of the curves. When the point (or a point you drag in the plane) takes a curve
-across a wall, the edge that shrank to 0 is contracted and the vertex of valence 4 it leaves is resolved the other
-ways, with the main app's own operations: the type on the wall (<em>T / e</em>) and the types beyond it
-(<em>T ⇄ e</em>) are added to the page's library and shown at once, so the curves carry on (with the same weighted
-count). A type already in the library is reused. A note under the curves says what was added. Editing the opened
-type removes the types added at its old walls (<span class="btn">↶ Undo</span> brings them back); <span
-class="btn">Send to main app</span> takes them all to the main app.</p>
+<p>is invertible on the type's cell, the type has exactly one curve through the points over each point of a region
+of its cell of M<sub>0,5</sub>. Moving that point moves the curve; at the region's border — a <em>wall</em> — an edge
+shrinks to length 0, the curve gets a vertex of valence 4, and it can <em>regenerate</em>: back, or on into another
+type. The page shows all this, exactly.</p>
 
-<h3 id="moduli-setup">18.1 Setup</h3>
+<h3 id="moduli-type">18.1 The type</h3>
 <ul>
-  <li><strong>Types</strong> — the groups of the library: types with the same ends (names and directions)
-      and the same marking names. Pick one. The line under it lists Δ, the markings and the dimension.</li>
-  <li><strong>Opened type</strong> (when the group has several) — the type to work with; types added at walls
-      are marked so.</li>
-  <li><strong>The picture</strong> — a type of the group, on which you choose by clicking (or tapping):
+  <li><span class="btn">Draw a subdivision…</span> opens the main app's <a href="#editor">subdivision editor</a>;
+      <span class="btn">Create curve</span> there makes the type, the curve dual to the subdivision. Or paste the
+      cells as text.</li>
+  <li>The picture then has three modes:
     <ul>
-      <li><span class="btn">Legs of M₀,₅</span>: click ends and markings to make them legs, or not —
-          exactly five. Chosen ends are drawn thick in the accent color, chosen markings ringed in it.</li>
-      <li><span class="btn">Evaluated markings</span>: click markings to fix them at points of the plane
-          (the <em>k</em> evaluated markings), shown in orange squares.</li>
-      <li><span class="btn">Move markings</span>: <em>changes the type</em>. Click a marking to pick it up
-          (it is circled), then an edge or end to put it inside, or a ringed vertex to put it on (the marking
-          again puts it down). Where it was, the point left inside an edge is merged back into the edge. The
-          marking keeps its name, so the choices stay. <span class="btn">↶ Undo</span> takes changes back;
-          <span class="btn">Send to main app</span> hands the changed library to the main app, which offers to
-          add it (at once if it is open, otherwise when it next opens). Only types without derived types, and
-          not derived themselves, can be changed — a type opened alone with <span class="btn">M</span> always can.</li>
-      <li><span class="btn">Edit slopes</span>: <em>changes the type and its degree</em>, as
-          <a href="#slope">Edit end slope</a> in the main app. Click the end to change (accent), then another end
-          to be the <em>dependent</em> one (orange; the next end is taken if you do not), type the new direction
-          (integers; a multiple of a primitive vector gives a weight) and press <span class="btn">Apply</span>. The
-          dependent end absorbs the change so the curve stays balanced, and the bounded edges are re-derived. The
-          new degree is another moduli space: the page follows the type to its new group, keeping the legs,
-          evaluated markings and points. <span class="btn">↶ Undo</span> and <span class="btn">Send to main app</span>
-          work as for moving markings.</li>
-      <li>Hovering names the end or marking and says what a click does; the line under the picture lists the
-          choices. The picture zooms (wheel / pinch).</li>
+      <li><span class="btn">Markings</span>: click an edge or end to put a marking inside it, a ringed vertex to put
+          one on it, a marking to take it off (the point it leaves inside an edge is merged back).</li>
+      <li><span class="btn">Legs of M₀,₅</span>: click five ends or markings; they are drawn thick, or ringed, in
+          the accent colour.</li>
+      <li><span class="btn">Evaluated</span>: click the markings to fix at points of the plane (orange squares).</li>
     </ul></li>
-  <li><strong>Choose from lists instead</strong> — the same choices as checkboxes.</li>
-  <li>A status line checks the dimensions (and says what to change if they do not match).</li>
-  <li><strong>Points in ℝ²</strong> — the positions of the evaluated markings, as numbers or fractions
-      (<code>3/2</code>). You can also drag them on the curve (<a href="#moduli-curves">§18.4</a>).
-      <span class="btn">Reset points</span> (also above the curve) puts the points back where they started —
-      where the last starting point put them — leaving the point of M<sub>0,5</sub> where it is;
-      <span class="btn">Reset M₀,₅ point</span> (also <span class="btn">Reset point</span> above the chart) does the
-      same for the point of M<sub>0,5</sub>, leaving the points in the plane.
-      <span class="btn">New starting point</span> picks points and a point of M<sub>0,5</sub> that have a curve
-      over them. After an edit of the type the old points may have no curve of it through them, so then
-      <span class="btn">Reset points</span> chooses new points that do, over the current point of
-      M<sub>0,5</sub> (or, when the type has no curve over it, a whole new starting point).</li>
-  <li><strong>… full-dimensional types, … others</strong> — every type of the group: its multiplicity and cone,
-      or, for the others, <em>why</em> it is not full-dimensional, in words:
-    <ul>
-      <li>its cell has a lower dimension (it only appears on walls);</li>
-      <li>the points are tied on it (e.g. <code>y(x1) − y(x3) = 0</code>), so points in general position have
-          no curve of it;</li>
-      <li>its five legs span a tree with one inner edge (it maps to a ray) or none (the apex);</li>
-      <li>the points fix a length of M<sub>0,5</sub> on it, e.g. <code>{x1,x2} = y(x1) − y(x3)</code>: its
-          curves through the points form a family whose image is a line, not an open set.</li>
-    </ul>
-    When no type is full-dimensional the status line gives these reasons.</li>
-</ul>
-<p>All types of the group are candidates. A type with a contracted edge cannot be in a library, so cones
-needing one (two evaluated-free markings bunched alone) may have no curves at all.</p>
-
-<h3 id="moduli-chart">18.2 The chart of M<sub>0,5</sub></h3>
-<p>M<sub>0,5</sub> cannot be laid flat: three cones meet at every ray. The chart shows five cones that can — a
-5-cycle of the Petersen graph — as a pentagon around the apex: each cone is a triangle between two rays, and
-the length along a ray grows outwards (up to the size in the title, <em>a + b ≤ …</em>).</p>
-<ul>
-  <li><strong>Drag</strong> anywhere in the chart (mouse, finger or Pencil) to move the point. The line under the
-      title says where it is: the cone and both lengths, or the ray.</li>
-  <li><strong>Shaded regions</strong> — where each full-dimensional type has a curve over the point; where they
-      overlap the shade is darker. <strong>Lines</strong> are walls; hover one to see which edge shrinks in which type.</li>
-  <li><strong>⇄</strong> on the two rays of the point's cone: <em>turn the page</em> — show the other cone at
-      that ray instead (the chart becomes another 5-cycle, with the point where it was).</li>
-  <li><strong>Snap to walls</strong> — near a wall the point jumps onto it exactly, so the curves of lower
-      dimension on the wall can be seen; near a ray, onto the ray.</li>
-  <li><span class="btn">Reset point</span> — the point back where the last starting point put it (the points in
-      the plane stay).</li>
-  <li><span class="btn">−</span> / <span class="btn">+</span> — show larger or smaller lengths. The regions are
-      recomputed for the new size.</li>
-  <li><strong>Orange</strong> — where a type that is <em>not</em> full-dimensional (but not of lower dimension)
-      has curves through the points: a segment, a point or a region, exactly (hover for the reason). Over a point
-      there it has a whole family of curves; one of them is shown, marked <em>one of a d-dimensional family
-      (not counted)</em>. Such a set has no area, so the point lands on it only by <strong>snapping</strong>.
-      In the overview, an orange ring marks where it meets the size a + b. While a point of the plane is being
-      dragged the orange marks wait until it is let go.</li>
+  <li>The line under the picture says what is still needed — legs, how many markings to evaluate (or add), and
+      whether the map is invertible on the type (if not, why: for instance the points fixing a length of
+      M<sub>0,5</sub>). When all is well it gives the multiplicity, and <span class="btn">Start →</span> goes on. The
+      fixed points and the starting point of M<sub>0,5</sub> are those of the type's curve at generic lengths.</li>
+  <li><span class="btn">↺ New type</span> in the top bar forgets the type, to draw another. The page keeps everything
+      in this browser.</li>
 </ul>
 
-<h3 id="moduli-overview">18.3 The overview</h3>
-<p>The whole M<sub>0,5</sub> at one size: the Petersen graph, each edge a cone, its two ends its rays, a point
-of the edge the point of the cone with a + b equal to the <strong>size</strong> slider.</p>
+<h3 id="moduli-curve">18.2 The curve</h3>
 <ul>
-  <li>Each edge is colored by the weighted count of curves along it, with ticks where it crosses a wall; the legend
-      names the counts present. The count that covers most of the graph is the accent color.</li>
-  <li>The dot is the current point. Click an edge to move the point into that cone (at the clicked place); the
-      chart turns to show it.</li>
-  <li>The <strong>size</strong> slider scales the point along its ray direction.</li>
+  <li>The curve over the current point, placed in the plane: the evaluated markings sit at their fixed points
+      (orange squares).</li>
+  <li>The <strong>skeleton</strong>: the edges whose lengths add up to each coordinate of the point of
+      M<sub>0,5</sub> — the inner edges of the five legs' tree — form two paths, drawn in red and blue; the line
+      under the picture gives the two lengths.</li>
+  <li><span class="btn">← Type</span> goes back to step 1; <span class="btn">Copy</span> copies the picture.</li>
 </ul>
 
-<h3 id="moduli-curves">18.4 The curves over the point</h3>
+<h3 id="moduli-cell">18.3 The cell and its walls</h3>
 <ul>
-  <li><strong>Preimage</strong> — every curve over the point, as a small picture with its type and
-      multiplicity (<em>on a wall</em> for a type of lower dimension). The heading gives the weighted count.
-      Click one to show it large.</li>
-  <li><strong>Curve</strong> — the chosen curve, placed in the plane: its evaluated markings sit at the points.
-      The ringed points can be <strong>dragged</strong>; while you drag, the picture holds still and the
-      regions, walls, overview and curves follow.</li>
-  <li>When no curve lies over the point the points are drawn alone.</li>
-</ul>
-
-<h3 id="moduli-path">18.5 Animating a path</h3>
-<ol>
-  <li>Move the point to the start and press <span class="btn">From here</span>, then to the end and press
-      <span class="btn">To here</span> (in the same chart: do not turn a page in between).</li>
-  <li><span class="btn">▶ Play</span> moves the point along the straight segment between them in the chart;
-      the slider scrubs it by hand.</li>
-  <li>The log lists every wall and ray the path crosses, with the types that disappear (−) and appear (+)
-      and the weighted count on both sides. Click a <em>t = …</em> to go there.</li>
-</ol>
-
-<h3 id="moduli-session">18.6 Sessions and pictures</h3>
-<ul>
-  <li>The page keeps its session — library, choices, points, the point of M<sub>0,5</sub>, the chart and the
-      path — in this browser, and opens where you left it. Opening it from the main app's button takes the main
-      app's current library instead.</li>
-  <li><span class="btn">Main app's library</span> reloads the library you are working on in the main app;
-      <span class="btn">Import…</span> loads a library file or a saved session; <span class="btn">Save session</span>
-      saves all of it as one file; <span class="btn">Send to main app</span> hands the library, with any changes
-      made here, to the main app, which offers to add it.</li>
-  <li><span class="btn">Copy</span> beside a picture copies it as a PNG; <span class="btn">SVG</span> downloads it
-      as an SVG file.</li>
+  <li>The cell of M<sub>0,5</sub> the type maps to: a <strong>quadrant</strong> (two rays, its axes coloured like the
+      two paths), a <strong>line</strong> (one ray) or a <strong>point</strong> (the apex).</li>
+  <li>Shaded: where the type has a curve through the points. The lines bounding it are its
+      <strong>walls</strong>, each labelled with the edge that shrinks to 0 there.</li>
+  <li><strong>Drag the point</strong> (or tap where it should go). It moves in a straight line until it meets a wall,
+      and stops exactly on it.</li>
+  <li>On a wall the curve is the type with that edge contracted (its cell may be a line, if the edge was the only
+      one of a path), and the small pictures under the cell are its <strong>regenerations</strong>: the ways of
+      resolving the new vertex. <em>back</em> is the type you came from; <em>go on</em> enters a new type, a little
+      way into its region (its new edge short). One that is not full-dimensional for the map cannot be entered
+      (hover for why).</li>
+  <li>Every picture zooms with the mouse wheel or a pinch; on the cell, pinch away from the point.</li>
 </ul>
 </section>
 

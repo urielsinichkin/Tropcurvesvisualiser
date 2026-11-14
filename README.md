@@ -43,9 +43,9 @@ It loads the Pyodide runtime from a CDN on first visit, then reads the
 browser (localStorage); use **Export/Import** to move it between devices.
 
 To publish it, enable GitHub Pages for this repository (served from the repo
-root); the app is then at `…/web/index.html`. A second page, the moduli map explorer
-(`…/moduli/`), shows the map ev × ft to (ℝ²)^k × M₀,₅ for a library's types and
-its wall crossings; open it from the app's **Moduli map…** button.
+root); the app is then at `…/web/index.html`. A second page, the moduli map
+(`…/moduli/`), walks the curve of one drawn type through its moduli space (the map
+ev × ft to (ℝ²)^k × M₀,₅), across walls; open it from the app's **Moduli map…** button.
 
 ### Deploying a change to the web app
 

@@ -334,136 +334,58 @@ or downloaded. The choices for a type are kept for the session.
 
 ### 3.2a The moduli map page (`moduli/`)
 
-A second page, linked from the main app's top bar (**Moduli map…**, which
-autosaves and opens `../moduli/?from=app`; same origin, so the page reads the
-library from the main app's `localStorage` key). It studies
+A second page (the top bar's **Moduli map…** opens it) for walking the curve
+of one type through its moduli space, across walls. (It replaced an earlier,
+larger explorer of whole libraries -- Petersen-graph charts, regions of every
+type, path animation -- which went further than needed.)
 
-    ev x ft : M_{0,n}(R^2, Delta) -> (R^2)^k x M_{0,5}
-
-for a group of library types (same ends by name and direction, same marking
-names: `moduli.signature`), k evaluated markings and five legs, with
-`|Delta| + n - 1 = 2k + 2` required.
-
-**Core (`moduli.py`, exact).** On a type's cell (coordinates as in 3.2, root
+**Map.** One type, `k` evaluated markings and five legs:
+`ev x ft : M_{0,n}(R^2, Delta) -> (R^2)^k x M_{0,5}`, required square
+(`|Delta| + n - 1 = 2k + 2`). On the type's cell (coordinates as in 3.2, root
 the first vertex) the ev rows are `evaluation.row_of`; ft is the tree spanned
-by the five legs: every bounded edge splits the legs, a 2|3 split is a ray of
-M_{0,5} (named by its 2-side, as leg indices), and its length is the sum of
-the `l_e` inducing it. The splits of a type are pairwise compatible, so it maps
-to a cone (2 rays), a ray or the apex. *Full-dimensional* types are those with
-a square invertible matrix and two rays; for them `z = A^{-1}(p, a, b)` is
-affine in the cone coordinates `(a, b)` (a = the first ray in sorted order),
-and the region where the type has a preimage is the triangle `a, b >= 0,
-a + b <= R` clipped by the half-planes `l_e > 0` (Sutherland-Hodgman on
-`Fraction`s, each side labelled with the constraint it lies on; sides on
-`l_e = 0` are the walls). The preimage of a point solves the system exactly for
-every type of the point's cone (unique solution with all `l_e > 0`); lower-
-dimensional types appear only on walls, positive-dimensional fibres are noted.
-The overview intersects every region with the segment `a + b = s` of each of
-the 15 cones (intervals in t, counts per piece). `on_wall` puts a point exactly
-on a wall (one coordinate rounded, the other solved). Multiplicity is
-`|det|` of the square matrix; the weighted count is checked constant at
-generic points in the tests (degree 1 for lines with four markings, 3 for a
-degree with a weight-2 end).
+by the legs: every bounded edge splits them, a 2|3 split is a ray of M_0,5
+(named by its two-element side), its length the sum of the `l_e` inducing it
+-- those edges form a path, the *skeleton* drawn in that ray's colour. The
+splits of a tree are compatible, so the type maps to a cone (two rays), a ray
+or the apex. *Full-dimensional* = square, invertible, two rays; otherwise
+`explain` says why in words (lower dimension; the points tied; one or no inner
+edge; the points fixing a combination of the M_0,5 lengths, read off a
+left-kernel vector of [ev; ft]).
 
-**Page.** `moduli/index.html` loads `web/app.js` with
-`window.TROP_LIBRARY_MODE = true`: app.js then defines its functions (Pyodide
-boot `bootCore`, `api`, `drawCurve` -- which takes `opts.transform` and
-returns its transform -- `standaloneSvg`/`copyPanelPng`, help popovers, whose
-guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
+**Core (`moduli.py`, exact).** `start`: the curve at generic lengths gives
+the fixed points and the starting point. `region`: with the points fixed,
+`z = A^{-1}(p, a, b)` is affine in the cone coordinates; the quadrant
+`[0, R]^2` clipped by `l_e >= 0` (Sutherland-Hodgman on `Fraction`s, each side
+labelled by its constraint) is where the type has a curve, its sides on
+`l_e = 0` the walls. `move`: along a straight segment the lengths are linear,
+so the first edge to reach 0 and the exact point are found directly; the
+point stops there. `contract_at_wall` / `regenerations`: the main app's
+`contract_edge`, then every non-crossing resolution of the merged vertex
+(one of them is the way back; `type_key` -- each bounded edge's leg split by
+name with its direction, plus the ends -- recognises it, and reuses equal
+types in the library). `step_into`: from the wall point, a short step along
+the direction that lengthens the new edge(s) (the gradient of their length
+forms in the new type's cone coordinates, continued across a ray when the
+wall was one), at most half way to the next length reaching 0 -- so the new
+edge is short and every length positive. A wall type is drawn by solving its
+(overdetermined, consistent) system at the wall point.
 
-- *Chart*: M_{0,5} cannot be flat (three cones at every ray), so the chart is a
-  5-cycle of the Petersen graph (12 exist) drawn as a regular pentagon: ray i
-  at angle 90 + 72i, a cone the triangle between two rays, lengths linear
-  outwards (so walls stay straight). Dragging maps the pointer back to (cone,
-  a, b), rounded to R/2000. "⇄" on a ray of the current cone replaces the
-  other cone at that ray by the third one: the unique 5-cycle through
-  (third, current cone, the current cone's other neighbour), rotated so the
-  current cone keeps its place. Snapping finds the nearest wall or ray in
-  picture units and asks `moduli_on_wall` for the exact point.
-- *Overview*: the Petersen graph (outer 5-cycle, inner pentagram), edges
-  coloured by the count at size a + b, ticks at walls; clicking an edge moves
-  the point into that cone.
-- *Curves*: `moduli_preimage` places each curve in the plane (drawn lengths
-  `l_e * weight`, translated so the root sits at `(x0, y0)`). The evaluated
-  points are draggable handles on the big figure; the figure's transform is
-  frozen while dragging. Work is coalesced into one frame
-  (`mmSchedule`); thumbnails are redrawn after a short pause.
-- *Path*: a straight segment in the chart; its crossings with walls and rays,
-  with the preimages on both sides, form the log.
-- *Reset points*: the positions a starting point gave the points are kept
-  (`pointsStart`, saved with the session) and restored on request, leaving
-  the point of M_0,5 alone; likewise the starting point of M_0,5 (`mStart`),
-  restored by *Reset point* (the chart turns to a 5-cycle holding it).
-- *Session*: library text, setup, points, the point, chart, size and path,
-  autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
-- *Types that are not full-dimensional* (`explain`, `image`, `fibre_point`):
-  the reason in words -- lower dimension; the points tied (a left-kernel
-  vector of the ev rows); one or no inner edge (ray, apex); or the points
-  fixing a combination of the M_0,5 lengths (a left-kernel vector of
-  [ev; ft] with a non-zero ft part, read as `mu . (lengths) = lambda . p`).
-  For the last kinds the image of the fibre over the points is computed
-  exactly: the fibre `z = z0 + N w`, `l_e > 0`, the cone coordinates
-  `y = F z` added as equalities, `w` eliminated by Fourier-Motzkin (strict
-  flags carried, so an empty open set is recognised); the result clips the
-  triangle `a + b <= R` to a region, segment or point. Over a point of it the
-  type has a positive-dimensional fibre, of which `_interior_point`
-  (eliminate, then choose each variable between its bounds) gives one curve,
-  shown and not counted. Lower-dimensional types are skipped: they live on
-  walls, already drawn. The page draws the images in orange, snaps onto them
-  (`moduli_on_image`, an exact point at a fraction of the segment), marks
-  them in the overview, and recomputes them only when a point of the plane is
-  let go (they are slower than the regions). With no full-dimensional type
-  the starting point is taken on such an image.
-- *One type*: a type's row button **M** (and the action *Moduli map…*) hands
-  `export_subset([id])` over in `localStorage` (`tropcurves.moduli.handoff.v1`,
-  read once and removed) and opens `../moduli/?from=types`; the top bar's
-  button still passes the whole library (`?from=app`).
-- *Moving markings* (`Workspace.move_marking`, `operations.smooth_vertex`):
-  the marking is removed, the point it leaves inside an edge (a vertex with
-  two straight-through edges and no marking) is merged back (an end keeps its
-  id; of two bounded edges the first keeps its id), and the marking is put
-  inside the target edge (`add_marking_on_edge`, keeping its id, name and
-  color; a target that was merged away maps to the merged edge) or on the
-  target vertex; the curve is validated or the change rolled back. Only on a
-  root type without derived types (their operations name this type's ids).
-  The page's third picture mode does it, with an undo stack of library
-  texts; *Send to main app* leaves the library under
-  `tropcurves.fromModuli.v1`, which the main app takes at start and on the
-  `storage` event, offering it with `offerImport` (add or replace).
-- *Editing slopes*: the fourth picture mode calls `edit_slopes` (the end to
-  change, a dependent end, the new vector) on the drawn type. The degree
-  changes, so the type moves to another group; `mmLibraryChanged(typeId)`
-  follows it there, keeping legs, evaluated markings and points (an undo
-  finds a group where the chosen names exist).
-- *The opened type and wall crossing*: the page's candidate set is
-  `config.types` = the opened type (`base`, the one drawn and edited) plus
-  the types added at walls (`extra`); `_moduli_setup` keeps only those, so the
-  rest of the library is ignored. After each preimage the page compares with
-  the last one: a full-dimensional type that was over the last (points, m) and
-  is not now left through a wall. `moduli.crossing_edge` finds which edge
-  reached length 0 first on the straight way between the two configurations,
-  in the type's cone coordinates continued across a ray (the other coordinate
-  becomes minus the length along the new ray), so ray crossings count too;
-  `neighbours` contracts that edge and applies every non-crossing resolution
-  of the vertex it leaves, except the one giving the type back. The results
-  (the wall type and the ones beyond) become new roots, or existing types when
-  `type_key` (each bounded edge's leg split by name with its direction, plus
-  the ends) matches. Jumps (resets, overview clicks, new starting points) are
-  not moves and add nothing. An edit of the opened type deletes its `extra`
-  (undo restores them). On narrow screens the setup is redrawn only after a
-  drag (and after the click a short touch drag still fires): it sits above
-  the chart, and growing under a finger moved the chart. The ⇄ buttons turn
-  the page on a tap only; a touch that moves from one drags the point (a
-  finger near ⇄ is snapped onto it by the browser).
-- *Reset points after an edit*: `points_through` solves ft(z) = m with the
-  root pinned at the origin, takes an interior point of {l_e > 0} and returns
-  ev(z); when the type has no curve over m, a fresh starting point is taken.
-- *Choosing on a picture*: the setup draws a type of the group (the one shown
-  large if it is there) with `drawCurve`, ends and markings pickable
-  (`routePicks` events), in two modes -- legs of M_0,5 or evaluated markings;
-  chosen legs are drawn thick / ringed in the accent, evaluated markings in
-  orange squares. The svg is kept across redraws so its `makeZoomable` zoom
-  survives. The checkbox lists remain, folded, as the list alternative.
+**Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
+handing the cells to the page) or pasted cells; markings put on and taken off
+on the picture (`moduli_remove_marking` merges the point left inside an edge
+back, `operations.smooth_vertex`); legs and evaluated markings clicked on the
+picture; the check line says what is missing. Step 2: the curve (`drawCurve`
+on the placed picture, skeleton edges recoloured) beside the cell -- a
+quadrant with axes in the paths' colours, region shaded, walls labelled; a
+line; or a point. The point is dragged from itself (its pointer handlers are
+registered before `makeZoomable`'s and stop the event, so the drag is not a
+pan; elsewhere a pinch or wheel zooms and a tap walks the point there),
+coalesced to one `moduli_move` per frame. At a wall the current type becomes
+the wall type and its regenerations show as small pictures; choosing one
+calls `moduli_regenerate`. The view grows (`R`) when the point nears its
+edge. State (library text, choices, current type, points, point, wall) is
+kept under `tropcurves.walk.v1`. web/app.js is loaded in library mode
+(`TROP_LIBRARY_MODE`) for Python, drawing, the editor, zoom, export and help.
 
 ### Stale cached pages
 
@@ -689,7 +611,7 @@ tropcurves/                 # pure-Python core package
   operations.py             # contract, resolve, edit slopes, markings, rename, color
   refined.py                # Goettsche-Schroeter refined multiplicity, balanced splits
   evaluation.py             # evaluation matrix: x/y of markings, cross ratios
-  moduli.py                 # ev x ft to (R^2)^k x M_0,5: cones, preimages, regions, walls
+  moduli.py                 # walking a type across walls: ev x ft to (R^2)^k x M_0,5
   workspace.py              # forest of types + propagation engine
   schema.py                 # versioned JSON (de)serialization
 tests/                      # headless unit tests for the core

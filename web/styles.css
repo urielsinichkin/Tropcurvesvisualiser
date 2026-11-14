@@ -169,9 +169,6 @@ section {
 .type-item:hover :is(.row-del, .row-btn), .type-item.selected :is(.row-del, .row-btn), :is(.row-del, .row-btn):focus-visible { opacity: 1; }
 .row-del:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
 @media (hover: none) { .row-del, .row-btn { opacity: .8; } }
-/* open the type in the moduli map: a letter in a ring, the delete's twin */
-.row-moduli { font-weight: 700; font-size: 12px; color: var(--accent); }
-.row-moduli:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .type-item.holds-selection { border-color: var(--accent); border-style: dashed; }
 .twisty:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 
@@ -455,79 +452,31 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .moduli-page .btn-link { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
   color: var(--ink); text-decoration: none; white-space: nowrap; }
 .moduli-page .btn-link:hover { border-color: var(--accent); }
-#mm {
-  display: grid; gap: 12px; padding: 12px;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-}
-@media (max-width: 1200px) and (min-width: 901px) {
-  #mm { grid-template-columns: minmax(220px, 270px) minmax(0, 1fr); }
-  #mm-curves { grid-column: 2; }
-  #mm-setup { grid-row: span 2; }
-}
-@media (max-width: 900px) { #mm { grid-template-columns: 1fr; } }
-@media (min-width: 901px) {
-  .moduli-page #mm { height: calc(100dvh - var(--topbar-h, 59px)); }
-  .moduli-page #mm > section { max-height: 100%; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
-}
-/* two columns: the page scrolls, not the panels */
-@media (min-width: 901px) and (max-width: 1200px) {
-  .moduli-page #mm { height: auto; }
-  .moduli-page #mm > section { max-height: none; overflow: visible; }
-  html:has(body.moduli-page), body.moduli-page { height: auto; overflow: auto; }
-}
-.moduli-page #mm-chart, .moduli-page #mm-figure { height: clamp(300px, 46vh, 560px); cursor: crosshair; }
-.moduli-page #mm-overview { height: clamp(260px, 34vh, 420px); }
-.mm-sub { margin-top: 14px; }
 .moduli-page .view-head { flex-wrap: wrap; }
-.mm-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; font-size: 13px; }
-.mm-bar input[type=range] { flex: 1; min-width: 120px; }
-.mm-bar label.check { margin: 0; }
-.mm-field { display: grid; gap: 4px; font-size: 13px; }
-.mm-field select { font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--line);
-  background: var(--panel); color: var(--ink); max-width: 100%; }
-.mm-small { font-size: 12px; margin: 6px 0; }
-.mm-ticks { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 10px 0 0;
-  display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.mm-ticks legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
-.mm-ticks label.check { margin: 0; font-size: 14px; }
-.mm-ticks .mm-small { flex-basis: 100%; }
-.mm-point { flex-basis: 100%; display: flex; align-items: center; gap: 4px; font-size: 14px; }
-.mm-point input { width: 7em; }
-.mm-point input.bad { border-color: var(--danger); }
-.mm-types { margin-top: 10px; font-size: 13px; }
-.mm-types summary { cursor: pointer; }
-.mm-types ul { margin: 6px 0 0; padding-left: 18px; max-height: 260px; overflow: auto; }
-.mm-flip { cursor: pointer; }
-.mm-flip:focus-visible circle { stroke-width: 3; }
-.mm-handle { cursor: grab; }
-#mm-path summary { cursor: pointer; list-style: revert; margin: 14px 0 8px; }
-#mm-path summary h2 { display: inline; margin: 0; }
-.mm-log { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: grid; gap: 4px; }
-.mm-gone { color: var(--danger); }
-.mm-came { color: var(--accent); }
-button.linklike { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: inherit; }
-.mm-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
-.mm-card { display: grid; gap: 4px; padding: 6px; text-align: left; font-size: 13px; }
-.mm-card svg { height: 100px; pointer-events: none; }
-.mm-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+/* step 1 alone, centred; step 2: the curve and the cell side by side */
+#mw { display: grid; gap: 12px; padding: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+#mw-setup { grid-column: 1 / -1; max-width: 900px; width: 100%; justify-self: center; }
+@media (max-width: 900px) { #mw { grid-template-columns: minmax(0, 1fr); } }
+/* the main app's columns scroll by themselves; this page scrolls as a page */
+@media (min-width: 901px) { html:has(body.moduli-page), body.moduli-page { height: auto; overflow: auto; } }
+.moduli-page #mw-type-svg { height: clamp(260px, 50vh, 560px); }
+.moduli-page #mw-curve { height: clamp(300px, 62vh, 760px); }
+.moduli-page #mw-cell { height: clamp(260px, 46vh, 560px); }
 @media (max-width: 700px) {
-  .moduli-page #mm-chart, .moduli-page #mm-overview, .moduli-page #mm-figure { height: auto; aspect-ratio: 3 / 2; }
+  .moduli-page #mw-type-svg, .moduli-page #mw-curve, .moduli-page #mw-cell { height: auto; aspect-ratio: 3 / 2; }
 }
-/* the moduli page's picture for choosing legs and evaluated markings */
-.mm-pick { margin-top: 10px; }
-.mm-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.mm-pick .mm-small { margin: 6px 0 4px; }
-.moduli-page #mm-pick-svg { height: clamp(200px, 30vh, 320px); }
-@media (max-width: 700px) { .moduli-page #mm-pick-svg { height: auto; aspect-ratio: 3 / 2; } }
-.mm-pick .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
+.mw-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.mw-small { font-size: 12px; margin: 6px 0; }
+#mw-paste summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.mw-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+#mw-type .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
 .mm-key { display: inline-block; width: 14px; height: 14px; box-sizing: border-box; }
 .mm-key-leg { border: 3px solid var(--accent); border-radius: 50%; }
 .mm-key-ev { border: 3px solid var(--warn); border-radius: 3px; }
-.mm-lists { margin-top: 8px; font-size: 13px; }
-.mm-lists > summary { cursor: pointer; color: var(--muted); }
-/* the line above the chart keeps one height, or the chart would move under a
-   finger dragging in it whenever the text wraps differently */
-#mm-where { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mm-slope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; font-size: 14px; }
-.mm-slope input[type=number] { width: 4.2em; }
+/* one line, so the cell does not move under a finger when it changes */
+#mw-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mw-dot { cursor: grab; }
+.mw-regens { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.mw-regen { display: grid; gap: 4px; padding: 6px; font-size: 13px; }
+.mw-regen svg { height: 80px; pointer-events: none; }
+.mw-regen.back { border-style: dashed; }
