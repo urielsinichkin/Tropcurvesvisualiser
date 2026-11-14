@@ -110,6 +110,7 @@ function mmWire() {
   on("mm-svg-overview", "click", () => mmDownloadSvg("mm-overview", bg(), "m05-overview.svg"));
   on("mm-svg-figure", "click", () => mmDownloadSvg("mm-figure", null, "curve.svg"));
   on("mm-reset-points", "click", () => mmGuard(mmResetPoints));
+  on("mm-reset-m", "click", () => mmGuard(mmResetM));
   on("mm-path-from", "click", () => mmPathEnd("from"));
   on("mm-path-to", "click", () => mmPathEnd("to"));
   on("mm-path-play", "click", mmPathPlay);
@@ -194,7 +195,7 @@ function mmState() {
   return {
     kind: "tropcurves-moduli-session", version: 1, library: MM.library,
     config: MM.config, m: MM.m, cycle: MM.cycle, lastCone: MM.lastCone, R: MM.R,
-    selected: MM.selected, snap: document.getElementById("mm-snap").checked, pointsStart: MM.pointsStart,
+    selected: MM.selected, snap: document.getElementById("mm-snap").checked, pointsStart: MM.pointsStart, mStart: MM.mStart,
     path: { from: MM.path.from, to: MM.path.to, cycle: MM.path.cycle },
   };
 }
@@ -203,6 +204,7 @@ function mmRestore(st) {
   if (!st || st.kind !== "tropcurves-moduli-session" || !st.library) return false;
   document.getElementById("mm-snap").checked = st.snap !== false;
   MM.pointsStart = st.pointsStart || null;
+  MM.mStart = st.mStart || null;
   mmLoadLibrary(st.library, st);
   if (st.path && st.path.from && st.path.cycle) {
     MM.path.from = st.path.from; MM.path.to = st.path.to; MM.path.cycle = st.path.cycle;
@@ -259,6 +261,7 @@ function mmConfigChanged(fresh) {
       if (ini.points) {
         cfg.points = ini.points; MM.m = ini.m;
         MM.pointsStart = JSON.parse(JSON.stringify(ini.points));
+        MM.mStart = JSON.parse(JSON.stringify(ini.m));
         MM.R = mmNice(2.6 * mmSize(MM.m));
       } else { MM.m = null; }
       MM.cycle = null; MM.lastCone = null; MM.selected = null;
@@ -397,9 +400,14 @@ function mmRenderSetup() {
     again.className = "small"; again.textContent = "New starting point";
     again.title = "Points and a point of M0,5 that have a curve over them";
     again.onclick = () => mmGuard(() => mmConfigChanged(true));
+    const resetM = document.createElement("button");
+    resetM.className = "small"; resetM.textContent = "Reset M₀,₅ point";
+    resetM.title = "Put the point of M0,5 back where it started; the points in the plane stay";
+    resetM.disabled = !mmMMoved();
+    resetM.onclick = () => mmGuard(mmResetM);
     const btns = document.createElement("div");
     btns.className = "mm-bar";
-    btns.append(reset, again);
+    btns.append(reset, resetM, again);
     pts.appendChild(btns);
     body.appendChild(pts);
   }
@@ -705,6 +713,27 @@ function mmResetPoints() {
   mmSchedule({ regions: true });
 }
 
+// The same for the point of M_0,5: where the last starting point put it.
+const mmSameM = (a, b) => !!a && !!b && JSON.stringify([a.splits, a.lengths]) === JSON.stringify([b.splits, b.lengths]);
+function mmStartM() {
+  if (MM.mStart) return MM.mStart;
+  const ini = api("moduli_initial", MM.config);
+  if (ini.m) MM.mStart = JSON.parse(JSON.stringify(ini.m));
+  return MM.mStart;
+}
+function mmMMoved() { return !MM.mStart || !mmSameM(MM.m, MM.mStart); }
+function mmResetM() {
+  const start = mmStartM();
+  if (!start) return;
+  mmPathPause();
+  MM.m = JSON.parse(JSON.stringify(start));
+  MM.onWall = null; MM.onImage = null;
+  if (MM.m.splits.length === 2) MM.lastCone = coneKey(MM.m.splits[0], MM.m.splits[1]);
+  const before = (MM.cycle || []).join();
+  mmEnsureCycle();
+  mmSchedule(MM.cycle.join() === before ? { pre: true, overview: true } : { regions: true });
+}
+
 function mmGuard(f) { try { f(); } catch (e) { reportError(e); } }
 
 // --- naming --------------------------------------------------------------------
@@ -834,6 +863,11 @@ let mmChartHits = { walls: [], rays: [], images: [] };
 
 function mmDrawChart() {
   const svg = clearSvg("mm-chart");
+  const moved = MM.m ? mmMMoved() : false;
+  const rb = document.getElementById("mm-reset-m");
+  if (rb) rb.disabled = !moved;
+  const sb = [...document.querySelectorAll("#mm-setup button")].find(b => b.textContent === "Reset M₀,₅ point");
+  if (sb) sb.disabled = !moved;
   mmChartHits = { walls: [], rays: [], images: [] };
   const legendEl = document.getElementById("mm-chart-legend");
   if (legendEl) legendEl.hidden = true;

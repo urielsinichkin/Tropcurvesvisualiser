@@ -392,7 +392,8 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   with the preimages on both sides, form the log.
 - *Reset points*: the positions a starting point gave the points are kept
   (`pointsStart`, saved with the session) and restored on request, leaving
-  the point of M_0,5 alone.
+  the point of M_0,5 alone; likewise the starting point of M_0,5 (`mStart`),
+  restored by *Reset point* (the chart turns to a 5-cycle holding it).
 - *Session*: library text, setup, points, the point, chart, size and path,
   autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
 - *Types that are not full-dimensional* (`explain`, `image`, `fibre_point`):
