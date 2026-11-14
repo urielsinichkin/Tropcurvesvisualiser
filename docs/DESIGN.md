@@ -426,6 +426,11 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   texts; *Send to main app* leaves the library under
   `tropcurves.fromModuli.v1`, which the main app takes at start and on the
   `storage` event, offering it with `offerImport` (add or replace).
+- *Editing slopes*: the fourth picture mode calls `edit_slopes` (the end to
+  change, a dependent end, the new vector) on the drawn type. The degree
+  changes, so the type moves to another group; `mmLibraryChanged(typeId)`
+  follows it there, keeping legs, evaluated markings and points (an undo
+  finds a group where the chosen names exist).
 - *Choosing on a picture*: the setup draws a type of the group (the one shown
   large if it is there) with `drawCurve`, ends and markings pickable
   (`routePicks` events), in two modes -- legs of M_0,5 or evaluated markings;

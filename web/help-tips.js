@@ -269,6 +269,7 @@ const HELP = {
         <li><b>Types</b> — a group of the library: same ends and same markings.</li>
         <li><b>The picture</b> — choose on a type of the group by clicking: in <b>Legs of M₀,₅</b> click ends and markings (exactly five; shown thick / ringed in green); in <b>Evaluated markings</b> click markings to fix them at points of ℝ² (orange squares). Hover says what a click does. It zooms.</li>
         <li><b>Move markings</b> — changes the type: click a marking, then an edge (inside it) or a ringed vertex (onto it). <b>↶ Undo</b>; <b>Send to main app</b> to keep the result there.</li>
+        <li><b>Edit slopes</b> — changes the type's degree: click an end, then a dependent end, type the new direction, <b>Apply</b>. The page follows the type to its new group.</li>
         <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
         <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>

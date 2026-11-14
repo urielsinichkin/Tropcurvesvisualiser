@@ -421,14 +421,14 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   tabs.className = "mm-tabs";
   tabs.setAttribute("role", "tablist");
   [["legs", `Legs of M₀,₅ (${cfg.legs.length} of 5)`], ["points", `Evaluated markings (k = ${cfg.evaluated.length})`],
-   ["move", "Move markings"]]
+   ["move", "Move markings"], ["slopes", "Edit slopes"]]
     .forEach(([m, label]) => {
       const b = document.createElement("button");
       b.type = "button"; b.className = "small" + (m === mode ? " primary" : "");
       b.textContent = label;
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", m === mode ? "true" : "false");
-      b.onclick = () => { MM.pickMode = m; MM.moveFrom = null; mmRenderSetup(); };
+      b.onclick = () => { MM.pickMode = m; MM.moveFrom = null; MM.slope = null; mmRenderSetup(); };
       tabs.appendChild(b);
     });
   const hint = document.createElement("p");
@@ -436,6 +436,9 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   hint.textContent = mode === "legs"
     ? "Click ends and markings to make them legs of M₀,₅ (exactly five)."
     : mode === "points" ? "Click markings to fix them at points of the plane."
+    : mode === "slopes" ? (MM.slope && MM.slope.edit
+        ? "Type the new direction, and click another end to be the dependent one (it absorbs the change). Then Apply."
+        : "Click the end whose direction to change. This changes the type (and its degree).")
     : MM.moveFrom ? "Now click an edge (the marking goes inside it) or a ringed vertex (onto it); the marking again to put it down."
     : "Click a marking to pick it up, then an edge or a vertex to put it there. This changes the type.";
   // one svg, kept across redraws so its zoom survives
@@ -452,7 +455,7 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   legend.innerHTML = `<span><span class="mm-key mm-key-leg"></span>leg of M₀,₅</span>
     <span><span class="mm-key mm-key-ev"></span>evaluated (a point in ℝ²)</span>`;
   box.append(tabs, hint, MM.pickSvg, status, legend);
-  if (mode === "move") box.appendChild(mmEditBar());
+  if (mode === "move" || mode === "slopes") box.appendChild(mmEditBar());
   body.appendChild(box);
   if (!MM.pickSvg._zoom) MM.pickSvg._zoom = makeZoomable(MM.pickSvg);
 
@@ -466,9 +469,9 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
     data.curve.markings.some(m => m.id === MM.moveFrom) ? MM.moveFrom : null;
   const drawn = drawCurve(data, {
     svgId: "mm-pick-svg",
-    pickEdge: e => (mode === "legs" && e.kind === "end") || (moving && e.kind !== "marking"),
+    pickEdge: e => ((mode === "legs" || mode === "slopes") && e.kind === "end") || (moving && e.kind !== "marking"),
     pickVertex: moving ? (() => true) : null,
-    pickMarking: () => true,
+    pickMarking: () => mode !== "slopes",
   });
   const svg = drawn.svg;
   // what is chosen: legs thick in the accent, evaluated markings ringed
@@ -479,6 +482,7 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
     }
   });
   const T = drawn.T;
+  if (mode === "slopes") mmSlopeMarks(box, data, drawn, id);
   data.curve.markings.forEach(m => {
     const p = T(m.at);
     const marks = [];
@@ -499,6 +503,13 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
     marks.forEach(el => svg.insertBefore(el, first));
   });
   const describe = t => {
+    if (mode === "slopes") {
+      const sl = MM.slope || {};
+      const v = `(${t.edge.vec.join(", ")})`;
+      if (t.edge.id === sl.edit) return `end ${t.edge.name} ${v}: the one being changed — click to choose another`;
+      if (t.edge.id === sl.dep) return `end ${t.edge.name} ${v}: the dependent end`;
+      return `end ${t.edge.name} ${v}: click to ` + (sl.edit ? "make it the dependent end" : "change its direction");
+    }
     if (mode === "move") {
       const mname = id => (data.curve.markings.find(m => m.id === id) || {}).name;
       if (t.kind === "mark") return t.marking.id === moving ? `${t.marking.name}: click to put it down`
@@ -516,18 +527,26 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   };
   const idle = mode === "legs" ? `Legs: ${cfg.legs.join(", ") || "none"}`
     : mode === "points" ? `Evaluated: ${cfg.evaluated.join(", ") || "none"}`
+    : mode === "slopes" ? `Editing the slopes of ${data.name}`
     : `Moving markings of ${data.name}` + (moving ? `: ${(data.curve.markings.find(m => m.id === moving) || {}).name} picked up` : "");
   status.textContent = idle;
   [...drawn.edgePicks, ...drawn.markPicks, ...drawn.vertexPicks].forEach(t => {
     t.hit.addEventListener("pick-enter", () => { status.textContent = describe(t); });
     t.hit.addEventListener("pick-leave", () => { status.textContent = idle; });
     t.hit.addEventListener("pick-click", () => {
+      if (mode === "slopes") {
+        const sl = MM.slope || (MM.slope = {});
+        if (!sl.edit || t.edge.id === sl.edit) { sl.edit = t.edge.id; sl.vec = null; sl.dep = null; }
+        else sl.dep = t.edge.id === sl.dep ? null : t.edge.id;
+        mmRenderSetup();
+        return;
+      }
       if (mode === "move") {
         if (t.kind === "mark") { MM.moveFrom = t.marking.id === moving ? null : t.marking.id; mmRenderSetup(); return; }
         if (!moving) return;
         MM.moveFrom = null;
         mmEdit(() => api("move_marking", id, moving, t.kind === "edge" ? "edge" : "vertex",
-                         t.kind === "edge" ? t.edge.id : t.vertex.id));
+                         t.kind === "edge" ? t.edge.id : t.vertex.id), id);
         mmRenderSetup();
         return;
       }
@@ -538,20 +557,80 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   });
 }
 
+// Slope editing: the end being changed in the accent, the dependent end in
+// orange, and under the picture the new direction and Apply.
+function mmSlopeMarks(box, data, drawn, typeId) {
+  const sl = MM.slope || {};
+  const ends = data.curve.edges.filter(e => e.kind === "end");
+  [[sl.edit, "var(--accent)"], [sl.dep, "var(--warn)"]].forEach(([eid, col]) => {
+    if (eid && drawn.lines[eid]) {
+      drawn.lines[eid].setAttribute("stroke", col);
+      drawn.lines[eid].setAttribute("stroke-width", 6);
+    }
+  });
+  if (!sl.edit || !ends.some(e => e.id === sl.edit)) return;
+  const edit = ends.find(e => e.id === sl.edit);
+  if (!sl.dep || !ends.some(e => e.id === sl.dep)) {
+    sl.dep = (ends.find(e => e.id !== sl.edit) || {}).id || null;
+    if (sl.dep && drawn.lines[sl.dep]) {
+      drawn.lines[sl.dep].setAttribute("stroke", "var(--warn)");
+      drawn.lines[sl.dep].setAttribute("stroke-width", 6);
+    }
+  }
+  const dep = ends.find(e => e.id === sl.dep);
+  const form = document.createElement("div");
+  form.className = "mm-slope";
+  const vec = sl.vec || edit.vec;
+  const num = (v, label) => {
+    const i = document.createElement("input");
+    i.type = "number"; i.step = "1"; i.value = v; i.setAttribute("aria-label", label);
+    i.oninput = () => { sl.vec = [parseInt(xi.value || "0", 10), parseInt(yi.value || "0", 10)]; };
+    return i;
+  };
+  const xi = num(vec[0], "new x"), yi = num(vec[1], "new y");
+  const apply = document.createElement("button");
+  apply.type = "button"; apply.className = "small primary"; apply.textContent = "Apply";
+  apply.onclick = () => {
+    const v = [parseInt(xi.value || "0", 10), parseInt(yi.value || "0", 10)];
+    if (!dep) { alert("Click a second end to be the dependent one."); return; }
+    const ok = mmEdit(() => api("edit_slopes", typeId, edit.id, v, dep.id), typeId);
+    if (ok) { MM.slope = null; mmRenderSetup(); }
+  };
+  const lab = document.createElement("span");
+  lab.innerHTML = `<b>${escapeHtml(edit.name)}</b> (${edit.vec.join(", ")}) → `;
+  const depLab = document.createElement("span");
+  depLab.className = "muted";
+  depLab.innerHTML = dep ? `dependent: <b>${escapeHtml(dep.name)}</b> (${dep.vec.join(", ")})` : "click a dependent end";
+  form.append(lab, "(", xi, ",", yi, ") ", apply, depLab);
+  box.appendChild(form);
+}
+
 // Changing the library from here: each change can be undone, and the result
 // sent to the main app (which offers to add it).
-function mmEdit(change) {
+function mmEdit(change, typeId) {
   const before = MM.library;
   try { change(); } catch (e) { alert(e.message); return false; }
   MM.undo = MM.undo || [];
   MM.undo.push(before);
   if (MM.undo.length > 50) MM.undo.shift();
-  mmLibraryChanged();
+  mmLibraryChanged(typeId);
   return true;
 }
-function mmLibraryChanged() {
+function mmLibraryChanged(typeId) {
   MM.library = api("save");
   MM.groups = api("moduli_groups");
+  // a new slope changes the degree, so the type moves to another group: follow
+  // it there, keeping the choices (the names are the same)
+  const home = typeId && MM.groups.find(g => g.types.some(t => t.id === typeId));
+  if (home && home.key !== MM.config.group) MM.config.group = home.key;
+  // otherwise (an undo, say) a group where the chosen names still exist
+  if (!MM.groups.some(g => g.key === MM.config.group)) {
+    const fits = MM.groups.find(g => {
+      const names = [...g.ends.map(e => e.name), ...g.markings];
+      return MM.config.legs.every(n => names.includes(n)) && MM.config.evaluated.every(n => g.markings.includes(n));
+    });
+    if (fits) MM.config.group = fits.key;
+  }
   // the names are kept, so the group usually is too; if not, start afresh
   if (!MM.groups.some(g => g.key === MM.config.group)) {
     const g = MM.groups[0];
