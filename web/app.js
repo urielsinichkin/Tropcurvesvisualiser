@@ -6,14 +6,17 @@
 const PKG_FILES = [
   "geometry.py", "curve.py", "balancing.py", "newton.py", "layout.py",
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
-  "refined.py", "evaluation.py", "schema.py", "builders.py", "api.py", "__init__.py",
+  "refined.py", "evaluation.py", "moduli.py", "schema.py", "builders.py", "api.py", "__init__.py",
 ];
+// The moduli page (moduli/) loads this file too, for its drawing, export and
+// help code: there it only defines things and does not start the main app.
+const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html fetches this file with a time-based token, so no
 // ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "54";
+const APP_VERSION = "55";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "43";
+const STYLES_VERSION = "46";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -45,6 +48,16 @@ function ensureFreshPage() {
       drive.after(b);
     }
   }
+  if (!document.getElementById("btn-moduli")) {
+    const mult = document.getElementById("btn-mult");
+    if (mult) {
+      const b = document.createElement("button");
+      b.id = "btn-moduli";
+      b.title = "Open the moduli map explorer on this library, in a new tab";
+      b.textContent = "Moduli map…";
+      mult.after(b);
+    }
+  }
   if (!document.getElementById("btn-help")) {
     const drive = document.getElementById("btn-github") || document.getElementById("btn-drive") || document.getElementById("btn-load");
     if (drive) {
@@ -56,7 +69,7 @@ function ensureFreshPage() {
     }
   }
 }
-ensureFreshPage();
+if (!LIBRARY_MODE) ensureFreshPage();
 const STORAGE_KEY = "tropcurves.workspace.v1";
 const SETTINGS_KEY = "tropcurves.settings.v1";
 const COLLAPSED_KEY = "tropcurves.collapsed.v1";   // type-tree view state, per browser
@@ -81,7 +94,31 @@ async function boot() {
   if (ver) ver.textContent = "v" + APP_VERSION;
   applyBackgroundTheme(loadSettings().bgColor); // before anything is painted
   applyPanelWidths(loadLayout());
-  const msg = document.getElementById("boot-msg");
+  await bootCore(document.getElementById("boot-msg"));
+
+  // restore autosave
+  let restored = false;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) { api("load", saved); restored = true; }
+  } catch (e) { /* ignore */ }
+
+  document.getElementById("boot").hidden = true;
+  document.getElementById("app").hidden = false;
+  applyPanelWidths(loadLayout());
+  wireGlobalButtons();
+
+  const nodes = api("list_nodes");
+  if (!nodes.length && !restored) {
+    api("add_preset", "caterpillar_square");
+  }
+  refreshAll();
+  const all = api("list_nodes");
+  if (all.length) selectNode(all[0].id);
+}
+
+// Python and the tropcurves package, with a session to call (both pages).
+async function bootCore(msg) {
   msg.textContent = "Loading Python runtime…";
   pyodide = await loadPyodide();
   msg.textContent = "Loading tropcurves…";
@@ -103,26 +140,6 @@ def call(name, args_json):
         return json.dumps({"__error": str(e)})
 `);
   callFn = pyodide.globals.get("call");
-
-  // restore autosave
-  let restored = false;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) { api("load", saved); restored = true; }
-  } catch (e) { /* ignore */ }
-
-  document.getElementById("boot").hidden = true;
-  document.getElementById("app").hidden = false;
-  applyPanelWidths(loadLayout());
-  wireGlobalButtons();
-
-  const nodes = api("list_nodes");
-  if (!nodes.length && !restored) {
-    api("add_preset", "caterpillar_square");
-  }
-  refreshAll();
-  const all = api("list_nodes");
-  if (all.length) selectNode(all[0].id);
 }
 
 function api(method, ...args) {
@@ -479,6 +496,10 @@ function wireGlobalButtons() {
   bind("panel-layout", "onclick", openPanelLayoutDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
+  bind("btn-moduli", "onclick", () => {
+    autosave();     // the moduli page reads the library from here
+    window.open("../moduli/?from=app", "_blank");
+  });
   bind("paint-curve", "onclick", openPaintDialog);
   bind("paint-change", "onclick", openPaintDialog);
   bind("paint-cancel", "onclick", stopPainting);
@@ -514,6 +535,27 @@ const PAINT_PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray",
   "font-size", "font-family", "font-weight", "text-anchor"];
 
 async function svgToPngBlob(svgId, background) {
+  const clone = standaloneSvg(svgId, background);
+  const w = +clone.getAttribute("width"), h = +clone.getAttribute("height");
+  const xml = new XMLSerializer().serializeToString(clone);
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error("could not rasterize the drawing"));
+    img.src = url;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = w * COPY_SCALE;
+  canvas.height = h * COPY_SCALE;
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  return await new Promise((resolve, reject) =>
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error("could not encode the image")), "image/png"));
+}
+
+// A detached copy of a panel's SVG that reads the same anywhere: paints
+// resolved, the whole figure (not the zoomed part), and a background if given.
+function standaloneSvg(svgId, background) {
   const live = document.getElementById(svgId);
   if (!live) throw new Error("nothing to copy");
   const clone = live.cloneNode(true);
@@ -541,21 +583,7 @@ async function svgToPngBlob(svgId, background) {
     rect.setAttribute("fill", background);
     clone.insertBefore(rect, clone.firstChild);
   }
-
-  const xml = new XMLSerializer().serializeToString(clone);
-  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
-  const img = new Image();
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = () => reject(new Error("could not rasterize the drawing"));
-    img.src = url;
-  });
-  const canvas = document.createElement("canvas");
-  canvas.width = w * COPY_SCALE;
-  canvas.height = h * COPY_SCALE;
-  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-  return await new Promise((resolve, reject) =>
-    canvas.toBlob(b => b ? resolve(b) : reject(new Error("could not encode the image")), "image/png"));
+  return clone;
 }
 
 function flashButton(btn, text) {
@@ -2449,7 +2477,7 @@ function drawCurve(data, opts = {}) {
   const pts = [];
   c.edges.forEach(e => { pts.push(e.from); pts.push(e.to); });
   c.vertices.forEach(v => pts.push([v.x, v.y]));
-  const T = fitTransform(pts);
+  const T = opts.transform || fitTransform(pts);
   const settings = loadSettings();
 
   // The picture is drawn first and the labels last, against everything already
@@ -2558,7 +2586,7 @@ function drawCurve(data, opts = {}) {
   routePicks(svg, [...edgePicks, ...vertexPicks, ...markPicks]);
   placeLabels(svg, wanted, segments, discs);
   return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, markPicks: markPicks,
-           lines: lines };
+           lines: lines, T: T };
 }
 
 // Pick targets overlap -- a short edge lies inside its neighbours' wide hit
@@ -3551,7 +3579,7 @@ function toggleHelp(btn, key) {
   pop.innerHTML = `<div class="help-pop-head"><strong>${escapeHtml(e.title)}</strong>
       <button type="button" class="help-close" aria-label="Close help">✕</button></div>
     <div class="help-pop-body">${e.html}</div>
-    <a class="help-more" href="help.html${e.anchor ? "#" + e.anchor : ""}" target="_blank" rel="noopener">Full guide →</a>`;
+    <a class="help-more" href="${window.TROP_HELP_BASE || ""}help.html${e.anchor ? "#" + e.anchor : ""}" target="_blank" rel="noopener">Full guide →</a>`;
   document.body.appendChild(pop);
   pop.querySelector(".help-close").onclick = closeHelp;
   pop.addEventListener("click", ev => { ev.helpClick = true; });
@@ -4810,7 +4838,7 @@ function colorControl(val, onSet) {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
 
-boot().catch(err => {
+if (!LIBRARY_MODE) boot().catch(err => {
   document.getElementById("boot-msg").innerHTML =
     '<span class="err">Failed to start: ' + escapeHtml(err.message) + "</span>";
   console.error(err);

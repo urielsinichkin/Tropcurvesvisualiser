@@ -11,6 +11,7 @@ const HELP = {
         <li><b>New</b> — a new type: preset, drawn subdivision, or subdivision pasted as text.</li>
         <li><b>🎨 Display</b> — default colors, labels on/off, background.</li>
         <li><b>Multiplicity</b> — refined multiplicities of all types; search for balanced splits.</li>
+        <li><b>Moduli map…</b> — a second page: move a point of M<sub>0,5</sub> and watch the curves over it change (wall crossings).</li>
         <li><b>Export…</b> — save the library, or a chosen part, as a JSON file.</li>
         <li><b>Import</b> — load a JSON file: add to the library or replace it.</li>
         <li><b>☁ Drive…</b> — save to / open from your Google Drive.</li>
@@ -244,6 +245,82 @@ const HELP = {
         <li><b>Valence 4</b> — the three possible results as small pictures; hover to see the pairing, click to apply. <i>Crossing</i> ones cannot be applied.</li>
         <li><b>Valence 5+</b> — tick the edges for one side (or click them on the picture); a note and a preview show the result; <b>Resolve</b> applies it.</li>
         <li>The picture zooms (wheel / pinch).</li>
+      </ul>`,
+  },
+  moduliTop: {
+    title: "The moduli map",
+    anchor: "moduli",
+    html: `<p>Explore ev × ft : M<sub>0,n</sub>(ℝ², Δ) → (ℝ²)<sup>k</sup> × M<sub>0,5</sub>: move a point of M<sub>0,5</sub> (or the points in the plane) and watch the curves over it change across walls.</p>
+      <ul>
+        <li><b>Main app's library</b> — load the library you work on in the main app.</li>
+        <li><b>Import…</b> — a library file or a saved session.</li>
+        <li><b>Save session</b> — library, choices, points and the point of M<sub>0,5</sub> as one file.</li>
+        <li><b>Main app</b> — back to the editor.</li>
+      </ul>
+      <p>The page keeps its session in this browser. Every panel has its own <b>?</b>.</p>`,
+  },
+  moduliSetup: {
+    title: "Setup",
+    anchor: "moduli-setup",
+    html: `<p>Which moduli space and which map.</p>
+      <ul>
+        <li><b>Types</b> — a group of the library: same ends and same markings.</li>
+        <li><b>Evaluated markings</b> — the k markings fixed at points of the plane.</li>
+        <li><b>Legs of M<sub>0,5</sub></b> — exactly five ends or markings.</li>
+        <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
+        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>
+        <li>The fold at the bottom lists every type: multiplicity and cone, or why it only appears on walls.</li>
+      </ul>`,
+  },
+  moduliChart: {
+    title: "The chart of M0,5",
+    anchor: "moduli-chart",
+    html: `<p>Five cones of M<sub>0,5</sub> laid flat around the apex; lengths grow outwards.</p>
+      <ul>
+        <li><b>Drag</b> to move the point (mouse, touch or Pencil).</li>
+        <li>Shaded: where each type has a curve (darker where several do). Lines: <b>walls</b>, where an edge shrinks to 0 — hover for which.</li>
+        <li><b>⇄</b> — turn the page: the other cone at that ray.</li>
+        <li><b>Snap to walls</b> — land exactly on a wall or ray near the pointer.</li>
+        <li><b>− / +</b> — larger or smaller lengths. <b>Copy</b> / <b>SVG</b> — export the picture.</li>
+      </ul>`,
+  },
+  moduliOverview: {
+    title: "The overview",
+    anchor: "moduli-overview",
+    html: `<p>All of M<sub>0,5</sub> at one size a + b: the Petersen graph — vertices are rays, edges are cones.</p>
+      <ul>
+        <li>Edges are colored by the weighted count of curves; ticks mark walls. The legend names the counts.</li>
+        <li>The dot is the point. <b>Click an edge</b> to move into that cone.</li>
+        <li><b>Size</b> — scale the point along its direction.</li>
+      </ul>`,
+  },
+  moduliPath: {
+    title: "Animate a path",
+    anchor: "moduli-path",
+    html: `<p>Play the point along a straight segment of the chart and list the walls it crosses.</p>
+      <ul>
+        <li><b>From here</b> / <b>To here</b> — the ends, at the current point (same chart).</li>
+        <li><b>▶ Play</b> / <b>⏸ Pause</b>, and the slider to scrub.</li>
+        <li>The log: each crossing, the types lost (−) and gained (+), and the counts; click <i>t = …</i> to go there.</li>
+      </ul>`,
+  },
+  moduliFigure: {
+    title: "The curve",
+    anchor: "moduli-curves",
+    html: `<p>One curve over the point, placed in the plane: its evaluated markings sit at the points.</p>
+      <ul>
+        <li><b>Drag a ringed point</b> to move it; regions, walls, overview and curves follow.</li>
+        <li>Pick which curve from the Preimage list below.</li>
+        <li><b>Copy</b> / <b>SVG</b> — export the picture.</li>
+      </ul>`,
+  },
+  moduliGallery: {
+    title: "Preimage",
+    anchor: "moduli-curves",
+    html: `<p>Every curve of the library over the point, with its type and multiplicity (|det| of ev × ft on its cell), and the weighted count.</p>
+      <ul>
+        <li><i>on a wall</i> — a type of lower dimension, there only because the point is on a wall.</li>
+        <li>Click a picture to show it large.</li>
       </ul>`,
   },
 };

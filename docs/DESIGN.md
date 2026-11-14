@@ -332,6 +332,67 @@ Mathematica, Sage, MATLAB, LaTeX, plain) or as a PNG image with optional
 row/column labels, copied to the clipboard for pasting into e.g. Notability
 or downloaded. The choices for a type are kept for the session.
 
+### 3.2a The moduli map page (`moduli/`)
+
+A second page, linked from the main app's top bar (**Moduli map…**, which
+autosaves and opens `../moduli/?from=app`; same origin, so the page reads the
+library from the main app's `localStorage` key). It studies
+
+    ev x ft : M_{0,n}(R^2, Delta) -> (R^2)^k x M_{0,5}
+
+for a group of library types (same ends by name and direction, same marking
+names: `moduli.signature`), k evaluated markings and five legs, with
+`|Delta| + n - 1 = 2k + 2` required.
+
+**Core (`moduli.py`, exact).** On a type's cell (coordinates as in 3.2, root
+the first vertex) the ev rows are `evaluation.row_of`; ft is the tree spanned
+by the five legs: every bounded edge splits the legs, a 2|3 split is a ray of
+M_{0,5} (named by its 2-side, as leg indices), and its length is the sum of
+the `l_e` inducing it. The splits of a type are pairwise compatible, so it maps
+to a cone (2 rays), a ray or the apex. *Full-dimensional* types are those with
+a square invertible matrix and two rays; for them `z = A^{-1}(p, a, b)` is
+affine in the cone coordinates `(a, b)` (a = the first ray in sorted order),
+and the region where the type has a preimage is the triangle `a, b >= 0,
+a + b <= R` clipped by the half-planes `l_e > 0` (Sutherland-Hodgman on
+`Fraction`s, each side labelled with the constraint it lies on; sides on
+`l_e = 0` are the walls). The preimage of a point solves the system exactly for
+every type of the point's cone (unique solution with all `l_e > 0`); lower-
+dimensional types appear only on walls, positive-dimensional fibres are noted.
+The overview intersects every region with the segment `a + b = s` of each of
+the 15 cones (intervals in t, counts per piece). `on_wall` puts a point exactly
+on a wall (one coordinate rounded, the other solved). Multiplicity is
+`|det|` of the square matrix; the weighted count is checked constant at
+generic points in the tests (degree 1 for lines with four markings, 3 for a
+degree with a weight-2 end).
+
+**Page.** `moduli/index.html` loads `web/app.js` with
+`window.TROP_LIBRARY_MODE = true`: app.js then defines its functions (Pyodide
+boot `bootCore`, `api`, `drawCurve` -- which takes `opts.transform` and
+returns its transform -- `standaloneSvg`/`copyPanelPng`, help popovers, whose
+guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
+
+- *Chart*: M_{0,5} cannot be flat (three cones at every ray), so the chart is a
+  5-cycle of the Petersen graph (12 exist) drawn as a regular pentagon: ray i
+  at angle 90 + 72i, a cone the triangle between two rays, lengths linear
+  outwards (so walls stay straight). Dragging maps the pointer back to (cone,
+  a, b), rounded to R/2000. "⇄" on a ray of the current cone replaces the
+  other cone at that ray by the third one: the unique 5-cycle through
+  (third, current cone, the current cone's other neighbour), rotated so the
+  current cone keeps its place. Snapping finds the nearest wall or ray in
+  picture units and asks `moduli_on_wall` for the exact point.
+- *Overview*: the Petersen graph (outer 5-cycle, inner pentagram), edges
+  coloured by the count at size a + b, ticks at walls; clicking an edge moves
+  the point into that cone.
+- *Curves*: `moduli_preimage` places each curve in the plane (drawn lengths
+  `l_e * weight`, translated so the root sits at `(x0, y0)`). The evaluated
+  points are draggable handles on the big figure; the figure's transform is
+  frozen while dragging. Work is coalesced into one frame
+  (`mmSchedule`); thumbnails are redrawn after a short pause.
+- *Path*: a straight segment in the chart; its crossings with walls and rays,
+  with the preimages on both sides, form the log.
+- *Session*: library text, setup, points, the point, chart, size and path,
+  autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
+
 ### Stale cached pages
 
 Phones restore old tabs from cache, so `index.html` can be an old copy naming
@@ -529,10 +590,12 @@ tropcurves/                 # pure-Python core package
   operations.py             # contract, resolve, edit slopes, markings, rename, color
   refined.py                # Goettsche-Schroeter refined multiplicity, balanced splits
   evaluation.py             # evaluation matrix: x/y of markings, cross ratios
+  moduli.py                 # ev x ft to (R^2)^k x M_0,5: cones, preimages, regions, walls
   workspace.py              # forest of types + propagation engine
   schema.py                 # versioned JSON (de)serialization
 tests/                      # headless unit tests for the core
 web/                        # static site (HTML/CSS/JS/SVG) + Pyodide bootstrap
+moduli/                     # the moduli map page (uses web/app.js in library mode)
 docs/                       # DESIGN.md, POSTPONED.md
 ```
 

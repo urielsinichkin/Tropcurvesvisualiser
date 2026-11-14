@@ -25,7 +25,7 @@ from .refined import (
     maximal_balanced_subsets, MultiplicityError, MAX_SPLIT_ITEMS, MAX_MAXIMAL_ITEMS,
 )
 from .workspace import Workspace
-from . import schema, builders, evaluation
+from . import schema, builders, evaluation, moduli
 
 
 class Session:
@@ -34,6 +34,7 @@ class Session:
     def __init__(self) -> None:
         self.ws = Workspace()
         self._layout_cache: Dict[Any, Any] = {}
+        self._moduli_cache: Dict[Any, Any] = {}
 
     # --- layout -----------------------------------------------------------
     @staticmethod
@@ -451,6 +452,83 @@ class Session:
             })
         return {"ok": True, "at_q_1": at_q_1, "count": len(found),
                 "truncated": len(found) > limit, "results": results}
+
+    # --- the moduli map ev x ft (see ``moduli``) -------------------------
+    def moduli_groups(self) -> List[Dict[str, Any]]:
+        """The library's types grouped by degree and markings: each group is
+        one moduli space M_{0,n}(R^2, Delta)."""
+        groups: Dict[str, Dict[str, Any]] = {}
+        for nid, n in self.ws.nodes.items():
+            key = moduli.signature(n.curve)
+            g = groups.get(key)
+            if g is None:
+                g = groups[key] = {"key": key, **moduli.group_info(n.curve), "types": []}
+            g["types"].append({"id": nid, "name": n.name})
+        return list(groups.values())
+
+    def _moduli_setup(self, config: Dict[str, Any]) -> "moduli.Setup":
+        key = config.get("group")
+        types = [(nid, n.name, n.curve) for nid, n in self.ws.nodes.items()
+                 if moduli.signature(n.curve) == key]
+        if not types:
+            raise ValueError("no types in that group")
+        return moduli.Setup(types, config.get("evaluated") or [], config.get("legs") or [],
+                            config.get("points") or {}, cache=self._moduli_cache)
+
+    def moduli_check(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Do the dimensions match, and how does each type map? (Points are
+        not needed.)"""
+        cfg = dict(config, points={m: [0, 0] for m in config.get("evaluated") or []})
+        st = self._moduli_setup(cfg)
+        info = moduli.group_info(st.maps[0].curve)
+        out = moduli.check(info, len(st.evaluated))
+        out["types"] = [{
+            "id": t.id, "name": t.name, "cell_dim": t.cell_dim, "full": t.full,
+            "cone": [list(s) for s in t.cone],
+            "multiplicity": int(t.det) if t.det is not None else None,
+        } for t in st.maps]
+        return out
+
+    def moduli_initial(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Points and an M_0,5 point that have a preimage, to start from."""
+        cfg = dict(config, points={m: [0, 0] for m in config.get("evaluated") or []})
+        points, m = moduli.initial_point(self._moduli_setup(cfg))
+        return {"points": points, "m": m}
+
+    def moduli_preimage(self, config: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
+        st = self._moduli_setup(config)
+        cone, lengths = moduli.parse_point(m)
+
+        def render(t, z):
+            return moduli.picture(st, t, z, self._render_curve)
+
+        out = moduli.preimage(st, cone, lengths, render)
+        out["m"] = moduli.point_json(cone, lengths)
+        return out
+
+    def moduli_regions(self, config: Dict[str, Any], cones: List[List[List[int]]],
+                       radius: Any) -> List[Dict[str, Any]]:
+        """For each cone (two splits), where each full-dimensional type has a
+        preimage (up to a + b = radius) and its walls."""
+        st = self._moduli_setup(config)
+        R = Fraction(str(radius))
+        out = []
+        for c in cones:
+            cone = tuple(sorted(tuple(sorted(s)) for s in c))
+            out.append({"cone": [list(s) for s in cone], "regions": moduli.regions(st, cone, R)})
+        return out
+
+    def moduli_overview(self, config: Dict[str, Any], size: Any) -> List[Dict[str, Any]]:
+        return moduli.overview(self._moduli_setup(config), Fraction(str(size)))
+
+    def moduli_on_wall(self, config: Dict[str, Any], cone: List[List[int]], type_id: str,
+                       edge_id: str, a: Any, b: Any) -> Dict[str, Any]:
+        """The exact point of a wall nearest to (a, b) in a cone."""
+        st = self._moduli_setup(config)
+        cn = tuple(sorted(tuple(sorted(s)) for s in cone))
+        c2, ls = moduli.on_wall(st, cn, type_id, edge_id,
+                                Fraction(str(a)), Fraction(str(b)))
+        return moduli.point_json(c2, ls)
 
     # --- render data ----------------------------------------------------
     def render(self, node_id: str) -> Dict[str, Any]:
