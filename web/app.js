@@ -12,15 +12,15 @@ const PKG_FILES = [
 // help code: there it only defines things and does not start the main app.
 const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
-// at a glance. (index.html fetches this file with a time-based token, so no
-// ?v= bump is needed here -- only styles.css still uses a manual one.)
-const APP_VERSION = "62";
+// at a glance. (index.html revalidates this file on every load, so no ?v=
+// bump is needed for it -- only styles.css still uses a manual one.)
+const APP_VERSION = "63";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "51";
+const STYLES_VERSION = "52";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
-// app.js itself is always fresh (index.html loads it with a time token), so it
+// app.js itself is always fresh (index.html revalidates it on every load), so it
 // brings the rest up to date: the current stylesheet, the help text, and the
 // top bar's Help button.
 function ensureFreshPage() {
@@ -80,14 +80,21 @@ let pyodide = null;
 let callFn = null;
 let selectedId = null;
 
-async function fetchPkgFile(name) {
-  for (const base of ["../tropcurves/", "tropcurves/"]) {
-    try {
-      const r = await fetch(base + name, { cache: "no-store" });
-      if (r.ok) return await r.text();
-    } catch (e) { /* try next */ }
-  }
-  throw new Error("could not fetch " + name);
+// The package's files, all at once. "no-cache" revalidates each against the
+// server (a 304 with no body when unchanged), so they are never stale and
+// never downloaded again for nothing. The package sits beside web/ on the
+// site, or inside the served folder when that is the repository root.
+async function fetchPkgFiles() {
+  const get = async (base, name) => {
+    const r = await fetch(base + name, { cache: "no-cache" });
+    if (!r.ok) throw new Error("could not fetch " + name + " (" + r.status + ")");
+    return r.text();
+  };
+  let base = "../tropcurves/", first;
+  try { first = await get(base, PKG_FILES[0]); }
+  catch (e) { base = "tropcurves/"; first = await get(base, PKG_FILES[0]); }
+  const rest = await Promise.all(PKG_FILES.slice(1).map(f => get(base, f)));
+  return [first, ...rest];
 }
 
 async function boot() {
@@ -126,10 +133,8 @@ async function bootCore(msg) {
   pyodide = await loadPyodide();
   msg.textContent = "Loading tropcurves…";
   pyodide.FS.mkdir("tropcurves");
-  for (const f of PKG_FILES) {
-    const text = await fetchPkgFile(f);
-    pyodide.FS.writeFile("tropcurves/" + f, text);
-  }
+  const texts = await fetchPkgFiles();
+  PKG_FILES.forEach((f, i) => pyodide.FS.writeFile("tropcurves/" + f, texts[i]));
   pyodide.runPython(`
 import sys, json, traceback
 if '.' not in sys.path: sys.path.insert(0, '.')
@@ -2060,7 +2065,7 @@ function renderTypeList() {
     del.setAttribute("aria-label", `Delete ${n.name}`);
     del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
     const mod = document.createElement("button");
-    mod.className = "row-del row-moduli";
+    mod.className = "row-btn row-moduli";
     mod.textContent = "M";
     mod.title = `Open ${n.name} alone in the moduli map`;
     mod.setAttribute("aria-label", `Open ${n.name} in the moduli map`);

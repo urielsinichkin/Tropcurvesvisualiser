@@ -69,3 +69,18 @@ def test_moduli_page_shares_the_stylesheet_version():
     moduli = (ROOT / "moduli" / "index.html").read_text()
     v = re.search(r'styles\.css\?v=(\d+)', index).group(1)
     assert f"../web/styles.css?v={v}" in moduli
+
+
+def test_scripts_and_package_are_revalidated_not_refetched():
+    """Both pages fetch their scripts, and app.js the Python package, with
+    cache "no-cache": a refresh always gets a changed file, and an unchanged
+    one costs a 304 instead of a download ("no-store" would download it every
+    time; a time token in the URL, after every minute)."""
+    app = (ROOT / "web" / "app.js").read_text()
+    assert 'cache: "no-cache"' in app and "no-store" not in app
+    for page, names in [("web/index.html", ['"help-tips.js"', '"app.js"']),
+                        ("moduli/index.html", ['"../web/help-tips.js"', '"../web/app.js"', '"moduli.js"'])]:
+        html = (ROOT / page).read_text()
+        loader = html[html.rindex("<script>"):]
+        assert 'fetch(name, { cache: "no-cache" })' in loader, page
+        assert "[" + ", ".join(names) + "]" in loader, page
