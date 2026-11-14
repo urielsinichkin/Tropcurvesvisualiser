@@ -397,3 +397,15 @@ def test_moving_markings_is_refused_on_derived_types():
         s.move_marking(nid, m, "edge", "l7")
     with pytest.raises(ValueError, match="derived from another"):
         s.move_marking(child, m, "edge", "l7")
+
+
+def test_a_new_slope_moves_the_type_to_another_group_and_can_free_it():
+    s, cfg = _walled()
+    nid = next(iter(s.ws.nodes))
+    s.edit_slopes(nid, "l2", [-1, 1], "l3")       # x1's horizontal end now goes up-left
+    groups = s.moduli_groups()
+    assert len(groups) == 1 and groups[0]["key"] != cfg["group"]
+    out = s.moduli_check(dict(cfg, group=groups[0]["key"]))
+    t = out["types"][0]
+    # c0 is no longer pinned at the height of x1, so nothing fixes {x1,x2}
+    assert out["ok"] and t["full"] and t["multiplicity"] > 0 and t["why"] is None

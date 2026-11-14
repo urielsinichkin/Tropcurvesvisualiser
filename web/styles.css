@@ -529,3 +529,5 @@ button.linklike { border: none; background: none; padding: 0; color: var(--accen
 /* the line above the chart keeps one height, or the chart would move under a
    finger dragging in it whenever the text wraps differently */
 #mm-where { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-slope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; font-size: 14px; }
+.mm-slope input[type=number] { width: 4.2em; }

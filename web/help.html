@@ -796,6 +796,14 @@ directly, and remembers its own session.</p>
           <span class="btn">Send to main app</span> hands the changed library to the main app, which offers to
           add it (at once if it is open, otherwise when it next opens). Only types without derived types, and
           not derived themselves, can be changed — a type opened alone with <span class="btn">M</span> always can.</li>
+      <li><span class="btn">Edit slopes</span>: <em>changes the type and its degree</em>, as
+          <a href="#slope">Edit end slope</a> in the main app. Click the end to change (accent), then another end
+          to be the <em>dependent</em> one (orange; the next end is taken if you do not), type the new direction
+          (integers; a multiple of a primitive vector gives a weight) and press <span class="btn">Apply</span>. The
+          dependent end absorbs the change so the curve stays balanced, and the bounded edges are re-derived. The
+          new degree is another moduli space: the page follows the type to its new group, keeping the legs,
+          evaluated markings and points. <span class="btn">↶ Undo</span> and <span class="btn">Send to main app</span>
+          work as for moving markings.</li>
       <li>Hovering names the end or marking and says what a click does; the line under the picture lists the
           choices. The picture zooms (wheel / pinch).</li>
     </ul></li>
