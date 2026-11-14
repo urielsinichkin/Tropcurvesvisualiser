@@ -5,7 +5,7 @@ Python core in `tropcurves/` (exact arithmetic, no SageMath), run in the
 browser by Pyodide; the UI is `web/` (plain HTML/CSS/JS, no build step),
 served by GitHub Pages at https://urielsinichkin.github.io/Tropcurvesvisualiser/web/.
 `docs/DESIGN.md` is the design record -- keep it current with each change.
-A second page, `moduli/` (the moduli map explorer), loads `web/app.js` in
+A second page, `moduli/` (the moduli map: a walk across walls for one type), loads `web/app.js` in
 library mode (`window.TROP_LIBRARY_MODE`) for Python, drawing, export and help,
 and links `web/styles.css` at the same `?v=` (a test checks).
 

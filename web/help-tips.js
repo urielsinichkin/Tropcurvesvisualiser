@@ -11,7 +11,7 @@ const HELP = {
         <li><b>New</b> — a new type: preset, drawn subdivision, or subdivision pasted as text.</li>
         <li><b>🎨 Display</b> — default colors, labels on/off, background.</li>
         <li><b>Multiplicity</b> — refined multiplicities of all types; search for balanced splits.</li>
-        <li><b>Moduli map…</b> — a second page: move a point of M<sub>0,5</sub> and watch the curves over it change (wall crossings).</li>
+        <li><b>Moduli map…</b> — a second page: draw a type, then walk its curve through the moduli space, across walls.</li>
         <li><b>Export…</b> — save the library, or a chosen part, as a JSON file.</li>
         <li><b>Import</b> — load a JSON file: add to the library or replace it.</li>
         <li><b>☁ Drive…</b> — save to / open from your Google Drive.</li>
@@ -31,7 +31,6 @@ const HELP = {
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
-        <li><b>M</b> — open the moduli map with this type alone, in a new tab.</li>
         <li><b>⠿</b> — drag to reorder a type among its siblings (its derived types come along; it never changes parent). Saved with the library.</li>
       </ul>`,
   },
@@ -67,7 +66,7 @@ const HELP = {
       <ul>
         <li><b>Type</b> — name; description (free text, saved as you type); <i>follow parent</i> (whether the parent's edits reach this type); <b>Duplicate</b> (independent copy as a new root); <b>Delete…</b>.</li>
         <li><b>Refined multiplicity</b> — the Göttsche–Schroeter multiplicity, each vertex's factor and the value at q = 1 (or why it is undefined).</li>
-        <li><b>Actions</b> — Edit end slope…, Add marking…, Contract edge…, Resolve vertex…, Evaluation matrix…, Moduli map… (this type alone, in a new tab) (disabled, with the reason on hover, when not possible).</li>
+        <li><b>Actions</b> — Edit end slope…, Add marking…, Contract edge…, Resolve vertex…, Evaluation matrix… (disabled, with the reason on hover, when not possible).</li>
         <li><b>Markings</b> / <b>Edges &amp; ends</b> — color (swatch, ▾ presets, hex code, ⟲ back to default) and name of each; ✕ removes a marking.</li>
         <li><b>⚙ Layout</b> — choose the order of these parts and which are shown.</li>
       </ul>
@@ -251,83 +250,46 @@ const HELP = {
   moduliTop: {
     title: "The moduli map",
     anchor: "moduli",
-    html: `<p>Explore ev × ft : M<sub>0,n</sub>(ℝ², Δ) → (ℝ²)<sup>k</sup> × M<sub>0,5</sub>: move a point of M<sub>0,5</sub> (or the points in the plane) and watch the curves over it change across walls.</p>
+    html: `<p>Walk the curve of one type through its moduli space, across walls: with k markings fixed at points of the plane and five legs giving a point of M<sub>0,5</sub>, move that point and watch the curve change.</p>
       <ul>
-        <li><b>Main app's library</b> — load the library you work on in the main app.</li>
-        <li><b>Import…</b> — a library file or a saved session.</li>
-        <li><b>Save session</b> — library, choices, points and the point of M<sub>0,5</sub> as one file.</li>
-        <li><b>Send to main app</b> — the library, with changes made here; the main app offers to add it.</li>
-        <li><b>Main app</b> — back to the editor.</li>
+        <li>1 — draw the type, put markings on it, choose the legs and the evaluated markings.</li>
+        <li>2 — the curve, and its cell of M<sub>0,5</sub>: drag the point; at a wall, choose how the curve regenerates.</li>
+        <li><b>↺ New type</b> — forget this type and draw another. <b>Main app</b> — back to the editor.</li>
       </ul>
-      <p>The page keeps its session in this browser. Every panel has its own <b>?</b>.</p>`,
+      <p>The page keeps its state in this browser. Every panel has its own <b>?</b>.</p>`,
   },
-  moduliSetup: {
-    title: "Setup",
-    anchor: "moduli-setup",
-    html: `<p>Which moduli space and which map.</p>
+  moduliType: {
+    title: "The type",
+    anchor: "moduli-type",
+    html: `<p>The combinatorial type to walk with, and the map.</p>
       <ul>
-        <li><b>Types</b> — a group of the library: same ends and same markings. <b>Opened type</b> — the one shown, edited and drawn in the curves; when its curves cross a wall, the types beyond it are added (and listed here).</li>
-        <li><b>The picture</b> — choose on a type of the group by clicking: in <b>Legs of M₀,₅</b> click ends and markings (exactly five; shown thick / ringed in green); in <b>Evaluated markings</b> click markings to fix them at points of ℝ² (orange squares). Hover says what a click does. It zooms.</li>
-        <li><b>Move markings</b> — changes the type: click a marking, then an edge (inside it) or a ringed vertex (onto it). <b>↶ Undo</b>; <b>Send to main app</b> to keep the result there.</li>
-        <li><b>Edit slopes</b> — changes the type's degree: click an end, then a dependent end, type the new direction, <b>Apply</b>. The page follows the type to its new group.</li>
-        <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
-        <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
-        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>Reset points</b> puts them back where they started — after an edit, at points with a curve of the edited type (the point of M<sub>0,5</sub> stays), <b>Reset M₀,₅ point</b> the point of M<sub>0,5</sub> (the points stay); <b>New starting point</b> picks a point with a curve over it.</li>
-        <li>The fold at the bottom lists every type: multiplicity and cone, or why it is not full-dimensional (e.g. the points fix a length of M<sub>0,5</sub> on it).</li>
+        <li><b>Draw a subdivision…</b> — the main app's editor; the curve is its dual (or paste the cells as text).</li>
+        <li><b>Markings</b> — click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.</li>
+        <li><b>Legs of M₀,₅</b> — click five ends or markings (thick / ringed in green).</li>
+        <li><b>Evaluated</b> — click the markings fixed at points of the plane (orange squares).</li>
+        <li>The line under the picture says what is still needed: |Δ| + n − 1 = 2k + 2, and the map must be invertible on the type (else it says why). Then <b>Start →</b>.</li>
+        <li>The picture zooms (wheel / pinch).</li>
       </ul>`,
   },
-  moduliChart: {
-    title: "The chart of M0,5",
-    anchor: "moduli-chart",
-    html: `<p>Five cones of M<sub>0,5</sub> laid flat around the apex; lengths grow outwards.</p>
-      <ul>
-        <li><b>Drag</b> to move the point (mouse, touch or Pencil).</li>
-        <li>Shaded: where each type has a curve (darker where several do). Lines: <b>walls</b>, where an edge shrinks to 0 — hover for which.</li>
-        <li><b>⇄</b> — turn the page: the other cone at that ray.</li>
-        <li><b>Reset point</b> — the point back where it started (the points in the plane stay).</li>
-        <li><b>Orange</b> — where a type that is not full-dimensional has curves through the points (hover for why). Snap onto it to see one of its curves (not counted).</li>
-        <li>Crossing a wall adds the types on its other side, so the curves carry on.</li>
-        <li><b>Snap to walls</b> — land exactly on a wall or ray near the pointer.</li>
-        <li><b>− / +</b> — larger or smaller lengths. <b>Copy</b> / <b>SVG</b> — export the picture.</li>
-      </ul>`,
-  },
-  moduliOverview: {
-    title: "The overview",
-    anchor: "moduli-overview",
-    html: `<p>All of M<sub>0,5</sub> at one size a + b: the Petersen graph — vertices are rays, edges are cones.</p>
-      <ul>
-        <li>Edges are colored by the weighted count of curves; ticks mark walls. The legend names the counts.</li>
-        <li>The dot is the point. <b>Click an edge</b> to move into that cone.</li>
-        <li><b>Size</b> — scale the point along its direction.</li>
-      </ul>`,
-  },
-  moduliPath: {
-    title: "Animate a path",
-    anchor: "moduli-path",
-    html: `<p>Play the point along a straight segment of the chart and list the walls it crosses.</p>
-      <ul>
-        <li><b>From here</b> / <b>To here</b> — the ends, at the current point (same chart).</li>
-        <li><b>▶ Play</b> / <b>⏸ Pause</b>, and the slider to scrub.</li>
-        <li>The log: each crossing, the types lost (−) and gained (+), and the counts; click <i>t = …</i> to go there.</li>
-      </ul>`,
-  },
-  moduliFigure: {
+  moduliCurve: {
     title: "The curve",
-    anchor: "moduli-curves",
-    html: `<p>One curve over the point, placed in the plane: its evaluated markings sit at the points.</p>
+    anchor: "moduli-curve",
+    html: `<p>The curve over the current point, placed in the plane: its evaluated markings sit at their fixed points (orange squares).</p>
       <ul>
-        <li><b>Drag a ringed point</b> to move it; regions, walls, overview and curves follow. <b>Reset points</b> puts them back where they started.</li>
-        <li>Pick which curve from the Preimage list below.</li>
-        <li><b>Copy</b> / <b>SVG</b> — export the picture.</li>
+        <li>The two <b>skeleton paths</b>, in red and blue: the edges whose lengths add up to the two coordinates of the point of M<sub>0,5</sub> (the line below gives them).</li>
+        <li><b>← Type</b> — back to step 1. <b>Copy</b> — the picture as a PNG.</li>
+        <li>Zoom: wheel / pinch.</li>
       </ul>`,
   },
-  moduliGallery: {
-    title: "Preimage",
-    anchor: "moduli-curves",
-    html: `<p>Every curve of the library over the point, with its type and multiplicity (|det| of ev × ft on its cell), and the weighted count.</p>
+  moduliCell: {
+    title: "The cell of M0,5",
+    anchor: "moduli-cell",
+    html: `<p>The cell of M<sub>0,5</sub> the type maps to: a quadrant (its axes in the colours of the two paths), a line or a point.</p>
       <ul>
-        <li><i>on a wall</i> — a type of lower dimension, there only because the point is on a wall.</li>
-        <li>Click a picture to show it large.</li>
+        <li>Shaded: where the type has a curve through the points. Lines: its <b>walls</b>, each where an edge shrinks to 0.</li>
+        <li><b>Drag the point</b> (or tap where it should go): it moves until it meets a wall, and stops there.</li>
+        <li>On a wall the curve has a vertex of valence 4; the small pictures are its <b>regenerations</b> — <i>back</i>, or <i>go on</i> into a new type, a little way in.</li>
+        <li>Zoom: wheel / pinch (away from the point). <b>Copy</b> — the picture as a PNG.</li>
       </ul>`,
   },
 };

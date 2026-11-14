@@ -18,7 +18,7 @@ from .balancing import resolve_slopes
 from .newton import newton_polygon
 from .layout import embed, end_ray_length, display_lengths, layout_reference
 from .subdivision import build_subdivision, SubdivisionError
-from .operations import resolutions, resolution_for_subset, apply_resolution
+from .operations import resolutions, resolution_for_subset, apply_resolution, smooth_vertex
 from .subdivision_import import import_subdivision
 from .refined import (
     refined_multiplicity, vertex_multiplicities, balanced_split, balanced_split_numbers,
@@ -34,7 +34,6 @@ class Session:
     def __init__(self) -> None:
         self.ws = Workspace()
         self._layout_cache: Dict[Any, Any] = {}
-        self._moduli_cache: Dict[Any, Any] = {}
 
     # --- layout -----------------------------------------------------------
     @staticmethod
@@ -465,150 +464,134 @@ class Session:
         return {"ok": True, "at_q_1": at_q_1, "count": len(found),
                 "truncated": len(found) > limit, "results": results}
 
-    # --- the moduli map ev x ft (see ``moduli``) -------------------------
-    def moduli_groups(self) -> List[Dict[str, Any]]:
-        """The library's types grouped by degree and markings: each group is
-        one moduli space M_{0,n}(R^2, Delta)."""
-        groups: Dict[str, Dict[str, Any]] = {}
-        for nid, n in self.ws.nodes.items():
-            key = moduli.signature(n.curve)
-            g = groups.get(key)
-            if g is None:
-                g = groups[key] = {"key": key, **moduli.group_info(n.curve), "types": []}
-            g["types"].append({"id": nid, "name": n.name})
-        return list(groups.values())
+    # --- the moduli map: a walk across walls (see ``moduli``) -----------
+    # Every call names the type, the evaluated markings and the five legs;
+    # points are {marking: [x, y]} and a point of M_0,5 is {splits, lengths}
+    # (rationals as strings, see ``moduli.point_json``).
+    def _walk_map(self, node_id: str, evaluated: List[str], legs: List[str]) -> "moduli.TypeMap":
+        n = self.ws.nodes[node_id]
+        if len(legs) != 5 or len(set(legs)) != 5:
+            raise ValueError("choose exactly five different legs")
+        return moduli.TypeMap(n.id, n.name, n.curve, evaluated, legs)
 
-    def _moduli_setup(self, config: Dict[str, Any]) -> "moduli.Setup":
-        key = config.get("group")
-        only = set(config.get("types") or [])      # the page's own set, when it has one
-        types = [(nid, n.name, n.curve) for nid, n in self.ws.nodes.items()
-                 if moduli.signature(n.curve) == key and (not only or nid in only)]
-        if not types:
-            raise ValueError("no types in that group")
-        return moduli.Setup(types, config.get("evaluated") or [], config.get("legs") or [],
-                            config.get("points") or {}, cache=self._moduli_cache)
-
-    def moduli_check(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Do the dimensions match, and how does each type map? (Points are
-        not needed.)"""
-        cfg = dict(config, points={m: [0, 0] for m in config.get("evaluated") or []})
-        st = self._moduli_setup(cfg)
-        info = moduli.group_info(st.maps[0].curve)
-        out = moduli.check(info, len(st.evaluated))
-        out["types"] = []
-        for t in st.maps:
-            why = moduli.explain(t, st.evaluated, st.legs)
-            out["types"].append({
-                "id": t.id, "name": t.name, "cell_dim": t.cell_dim, "full": t.full,
-                "cone": [list(s) for s in t.cone],
-                "multiplicity": int(t.det) if t.det is not None else None,
-                "why": why,
-            })
+    @staticmethod
+    def _walk_points(t: "moduli.TypeMap", evaluated: List[str], points: Dict[str, Any]) -> List[Fraction]:
+        out: List[Fraction] = []
+        for m in evaluated:
+            xy = points.get(m)
+            if xy is None:
+                raise ValueError(f"no point given for {m!r}")
+            out += [Fraction(str(xy[0])), Fraction(str(xy[1]))]
         return out
 
-    def moduli_initial(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Points and an M_0,5 point that have a preimage, to start from."""
-        cfg = dict(config, points={m: [0, 0] for m in config.get("evaluated") or []})
-        points, m = moduli.initial_point(self._moduli_setup(cfg))
-        return {"points": points, "m": m}
+    def moduli_remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
+        """Take a marking off the type, merging the point it leaves inside an
+        edge back into the edge (unlike ``remove_marking``)."""
+        node = self.ws.nodes[node_id]
+        c = node.curve
+        m = c.edges.get(marking_id)
+        if m is None or m.kind is not EdgeKind.MARKING:
+            raise ValueError(f"{marking_id!r} is not a marking")
+        at = m.tail
+        del c.edges[marking_id]
+        smooth_vertex(c, at)
+        c.validate()
+        self.ws._propagate(node_id)
+        return self.node_summary(node_id)
 
-    def moduli_preimage(self, config: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
-        st = self._moduli_setup(config)
-        cone, lengths = moduli.parse_point(m)
-
-        def render(t, z):
-            return moduli.picture(st, t, z, self._render_curve)
-
-        out = moduli.preimage(st, cone, lengths, render)
-        out["m"] = moduli.point_json(cone, lengths)
+    def moduli_check(self, node_id: str, evaluated: List[str], legs: List[str]) -> Dict[str, Any]:
+        """Dimensions, invertibility (with the reason when not) and the cone."""
+        t = self._walk_map(node_id, evaluated, legs)
+        out = moduli.check(t)
+        out["why"] = moduli.explain(t, evaluated, legs)
+        out["cone"] = [list(sp) for sp in t.cone]
         return out
 
-    def moduli_regions(self, config: Dict[str, Any], cones: List[List[List[int]]],
-                       radius: Any) -> List[Dict[str, Any]]:
-        """For each cone (two splits), where each full-dimensional type has a
-        preimage (up to a + b = radius) and its walls."""
-        st = self._moduli_setup(config)
-        R = Fraction(str(radius))
-        out = []
-        for c in cones:
-            cone = tuple(sorted(tuple(sorted(s)) for s in c))
-            out.append({"cone": [list(s) for s in cone], "regions": moduli.regions(st, cone, R)})
-        return out
+    def moduli_start(self, node_id: str, evaluated: List[str], legs: List[str]) -> Dict[str, Any]:
+        """Points and a point of M_0,5 with a curve of the type over them."""
+        t = self._walk_map(node_id, evaluated, legs)
+        p, ls = moduli.start(t)
+        return {"points": {m: [str(p[2 * i]), str(p[2 * i + 1])] for i, m in enumerate(evaluated)},
+                "m": moduli.point_json(t.cone, ls)}
 
-    def moduli_images(self, config: Dict[str, Any], radius: Any) -> List[Dict[str, Any]]:
-        """Where the types that are not full-dimensional have curves over the
-        points: their images in M_0,5 (points, segments, regions), each with
-        the reason it is not full-dimensional."""
-        return moduli.images(self._moduli_setup(config), Fraction(str(radius)))
-
-    def moduli_on_image(self, config: Dict[str, Any], type_id: str, radius: Any,
-                        frac: Any) -> Dict[str, Any]:
-        """The exact point at a fraction along a type's image (a segment)."""
-        st = self._moduli_setup(config)
-        cone, ls = moduli.on_image(st, type_id, Fraction(str(radius)),
-                                   Fraction(str(frac)).limit_denominator(10 ** 6))
-        return moduli.point_json(cone, ls)
-
-    def moduli_cross(self, config: Dict[str, Any], type_id: str, points_before: Dict[str, Any],
-                     m_before: Dict[str, Any], m_after: Dict[str, Any]) -> Dict[str, Any]:
-        """A curve of ``type_id`` was over (points_before, m_before) and is not
-        over (config's points, m_after): if it left through a wall, add the
-        types on the wall and on its other side to the library (new roots,
-        built by contracting the shrinking edge and resolving the vertex it
-        leaves; a type already in the library is reused). Returns their ids."""
-        st = self._moduli_setup(config)
-        t = next((x for x in st.maps if x.id == type_id), None)
-        if t is None:
-            return {"edge": None, "types": []}
-        before = self._moduli_setup(dict(config, points=points_before))
-        eid = moduli.crossing_edge(t, before.p, moduli.parse_point(m_before), st.p,
-                                   moduli.parse_point(m_after))
-        if eid is None:
-            return {"edge": None, "types": []}
-        node = self.ws.nodes[type_id]
-        ename = node.curve.edges[eid].name
-        wall, others = moduli.neighbours(node.curve, eid)
-        known = {moduli.type_key(n.curve): nid for nid, n in self.ws.nodes.items()}
-        ids, added = [], []
-        for c, name in [(wall, f"{node.name} / {ename}")] + [
-                (c, f"{node.name} ⇄ {ename}" + (f" ({i + 1})" if len(others) > 1 else ""))
-                for i, c in enumerate(others)]:
-            key = moduli.type_key(c)
-            if key in known:
-                ids.append(known[key])
-                continue
-            new = self.ws.add_root(c, name=name)
-            known[key] = new.id
-            ids.append(new.id)
-            added.append(new.id)
-        return {"edge": ename, "types": ids, "added": added, "wall": ids[0]}
-
-    def moduli_points_through(self, config: Dict[str, Any], type_id: str,
-                              m: Dict[str, Any]) -> Dict[str, Any]:
-        """Points with a curve of the type through them over the point m of
-        M_0,5 (None when the type has no curve over m at all)."""
-        cfg = dict(config, points={k: [0, 0] for k in config.get("evaluated") or []})
-        st = self._moduli_setup(cfg)
-        t = next((x for x in st.maps if x.id == type_id), None)
-        if t is None:
-            return {"points": None}
+    def moduli_view(self, node_id: str, evaluated: List[str], legs: List[str],
+                    points: Dict[str, Any], m: Dict[str, Any], radius: Any) -> Dict[str, Any]:
+        """Everything the explorer draws: the curve over the point (placed in
+        the plane), its skeleton, the cell of M_0,5 with the point in it, and
+        (for a full-dimensional type) the region and its walls up to radius."""
+        t = self._walk_map(node_id, evaluated, legs)
+        p = self._walk_points(t, evaluated, points)
         cone, ls = moduli.parse_point(m)
-        p = moduli.points_through(t, cone, ls)
-        if p is None:
-            return {"points": None}
-        return {"points": {mk: [str(p[2 * i]), str(p[2 * i + 1])] for i, mk in enumerate(st.evaluated)}}
+        out: Dict[str, Any] = {"id": node_id, "name": self.ws.nodes[node_id].name,
+                               "full": t.full, "cone": [list(sp) for sp in t.cone],
+                               "skeleton": moduli.skeleton(t),
+                               "multiplicity": int(t.det) if t.det is not None else None}
+        y = moduli._cone_coords(t.cone, cone, ls)
+        out["coords"] = [str(v) for v in y] if y is not None else None
+        z = moduli.curve_at(t, p, y) if y is not None else None
+        out["picture"] = moduli.picture(t, z, self._render_curve) if z is not None else None
+        out["lengths"] = ({e.name: str(z[t.index[e.id]]) for e in t.bounded} if z is not None else None)
+        out["region"] = moduli.region(t, p, Fraction(str(radius))) if t.full else None
+        why = moduli.explain(t, evaluated, legs)
+        out["why"] = why["reason"] if why else ""
+        return out
 
-    def moduli_overview(self, config: Dict[str, Any], size: Any) -> List[Dict[str, Any]]:
-        return moduli.overview(self._moduli_setup(config), Fraction(str(size)))
+    def moduli_move(self, node_id: str, evaluated: List[str], legs: List[str],
+                    points: Dict[str, Any], y_from: List[Any], y_to: List[Any]) -> Dict[str, Any]:
+        """Move the point of M_0,5 (cone coordinates) and stop at the first wall."""
+        t = self._walk_map(node_id, evaluated, legs)
+        if not t.full:
+            raise ValueError("the point only moves on a full-dimensional type")
+        p = self._walk_points(t, evaluated, points)
+        y, eid = moduli.move(t, p, [Fraction(str(v)) for v in y_from], [Fraction(str(v)) for v in y_to])
+        y = [max(v, Fraction(0)) for v in y]
+        names = {e.id: e.name for e in t.bounded}
+        return {"m": moduli.point_json(t.cone, y), "coords": [str(v) for v in y],
+                "wall": {"edge": eid, "name": names[eid]} if eid else None}
 
-    def moduli_on_wall(self, config: Dict[str, Any], cone: List[List[int]], type_id: str,
-                       edge_id: str, a: Any, b: Any) -> Dict[str, Any]:
-        """The exact point of a wall nearest to (a, b) in a cone."""
-        st = self._moduli_setup(config)
-        cn = tuple(sorted(tuple(sorted(s)) for s in cone))
-        c2, ls = moduli.on_wall(st, cn, type_id, edge_id,
-                                Fraction(str(a)), Fraction(str(b)))
-        return moduli.point_json(c2, ls)
+    def _walk_root(self, curve: Curve) -> str:
+        """The library's type equal to this curve, or a new root holding it."""
+        key = moduli.type_key(curve)
+        for nid, n in self.ws.nodes.items():
+            if moduli.type_key(n.curve) == key:
+                return nid
+        return self.ws.add_root(curve).id
+
+    def moduli_wall(self, node_id: str, edge_id: str, evaluated: List[str],
+                    legs: List[str]) -> Dict[str, Any]:
+        """The type on the wall where edge_id shrank to 0 (kept in the library)
+        and its regenerations: each resolution of the vertex left there, drawn
+        small, with whether it is the type we came from and whether the point
+        can move on it."""
+        node = self.ws.nodes[node_id]
+        wall, vertex = moduli.contract_at_wall(node.curve, edge_id)
+        wall_id = self._walk_root(wall)
+        back = moduli.type_key(node.curve)
+        regs = []
+        for i, c in enumerate(moduli.regenerations(wall, vertex)):
+            t = moduli.TypeMap("", "", c, evaluated, legs)
+            why = moduli.explain(t, evaluated, legs)
+            regs.append({"index": i, "back": moduli.type_key(c) == back, "full": t.full,
+                         "why": why["reason"] if why else "", "picture": self._render_curve(c)})
+        return {"wall_id": wall_id, "vertex": vertex, "edge": node.curve.edges[edge_id].name,
+                "regenerations": regs}
+
+    def moduli_regenerate(self, wall_id: str, vertex: str, index: int, evaluated: List[str],
+                          legs: List[str], points: Dict[str, Any], m: Dict[str, Any],
+                          scale: Any) -> Dict[str, Any]:
+        """Leave the wall into a regeneration: its type (an existing equal one
+        is reused) and a point of M_0,5 a little way into its region."""
+        wall = self.ws.nodes[wall_id].curve
+        c = moduli.regenerations(wall, vertex)[int(index)]
+        nid = self._walk_root(c)
+        t = self._walk_map(nid, evaluated, legs)
+        p = self._walk_points(t, evaluated, points)
+        y = moduli.step_into(t, p, moduli.parse_point(m), Fraction(str(scale)))
+        if y is None:
+            why = moduli.explain(t, evaluated, legs)
+            return {"id": nid, "m": None,
+                    "why": why["reason"] if why else "its new edge does not grow when the point moves"}
+        return {"id": nid, "m": moduli.point_json(t.cone, y)}
 
     # --- render data ----------------------------------------------------
     def render(self, node_id: str) -> Dict[str, Any]:

@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "64";
+const APP_VERSION = "66";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "52";
+const STYLES_VERSION = "53";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -53,7 +53,7 @@ function ensureFreshPage() {
     if (mult) {
       const b = document.createElement("button");
       b.id = "btn-moduli";
-      b.title = "Open the moduli map explorer on this library, in a new tab";
+      b.title = "Open the moduli map explorer in a new tab";
       b.textContent = "Moduli map…";
       mult.after(b);
     }
@@ -123,8 +123,6 @@ async function boot() {
   refreshAll();
   const all = api("list_nodes");
   if (all.length) selectNode(all[0].id);
-  takeFromModuli();
-  window.addEventListener("storage", ev => { if (ev.key === FROM_MODULI_KEY && ev.newValue) takeFromModuli(); });
 }
 
 // Python and the tropcurves package, with a session to call (both pages).
@@ -181,29 +179,6 @@ window.addEventListener("error", ev => {
   if (ev.error || ev.message) reportError(ev.error || ev.message);
 });
 window.addEventListener("unhandledrejection", ev => reportError(ev.reason || "an operation failed"));
-
-// The moduli map page, in a new tab: on the whole library (which it reads
-// from the autosave), or on just these types (handed over in their own key).
-const MODULI_HANDOFF_KEY = "tropcurves.moduli.handoff.v1";
-// ... and back: the moduli page leaves a library here (types changed there);
-// the main app offers to add it, at once if open, else when it next starts
-const FROM_MODULI_KEY = "tropcurves.fromModuli.v1";
-function takeFromModuli() {
-  let raw = null;
-  try { raw = localStorage.getItem(FROM_MODULI_KEY); } catch (e) { return; }
-  if (!raw) return;
-  try { localStorage.removeItem(FROM_MODULI_KEY); } catch (e) { /* ignore */ }
-  let text = null;
-  try { text = JSON.parse(raw).library; } catch (e) { return; }
-  if (text) offerImport(text, "from the moduli map");
-}
-function openModuli(ids) {
-  autosave();
-  if (!ids) { window.open("../moduli/?from=app", "_blank"); return; }
-  try { localStorage.setItem(MODULI_HANDOFF_KEY, api("export_subset", ids)); }
-  catch (e) { alert("Could not hand the type over: " + e.message); return; }
-  window.open("../moduli/?from=types", "_blank");
-}
 
 function autosave() {
   try { localStorage.setItem(STORAGE_KEY, api("save")); markSaved(); }
@@ -527,7 +502,7 @@ function wireGlobalButtons() {
   bind("panel-layout", "onclick", openPanelLayoutDialog);
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
-  bind("btn-moduli", "onclick", () => openModuli(null));
+  bind("btn-moduli", "onclick", () => window.open("../moduli/", "_blank"));
   bind("paint-curve", "onclick", openPaintDialog);
   bind("paint-change", "onclick", openPaintDialog);
   bind("paint-cancel", "onclick", stopPainting);
@@ -1690,10 +1665,13 @@ function closeModal() {
 const ED_VBW = 680, ED_VBH = 440, ED_PAD = 28;
 let ED = null;
 
-function openSubdivisionEditor() {
+// With onCreate, the cells go to it (the moduli page uses the editor so)
+// instead of becoming a type of the library.
+function openSubdivisionEditor(onCreate) {
   const card = document.querySelector("#modal .modal-card");
   if (card) card.classList.add("wide");
-  ED = { xmin: 0, xmax: 5, ymin: 0, ymax: 5, cells: [], current: [] };
+  ED = { xmin: 0, xmax: 5, ymin: 0, ymax: 5, cells: [], current: [],
+         onCreate: typeof onCreate === "function" ? onCreate : null };
   const body = document.getElementById("modal-body");
   body.innerHTML = `
     <h2>Draw a subdivision</h2>
@@ -1827,6 +1805,7 @@ function edCreate() {
   if (ED.current.length) { err.textContent = "finish or clear the current cell first"; return; }
   if (!ED.cells.length) { err.textContent = "draw at least one cell"; return; }
   try {
+    if (ED.onCreate) { const f = ED.onCreate, cells = ED.cells; f(cells); closeModal(); return; }
     const summ = api("add_from_subdivision", ED.cells, null);
     closeModal(); refreshAll(); selectNode(summ.id); autosave();
   } catch (e) { err.textContent = e.message; }
@@ -2064,13 +2043,7 @@ function renderTypeList() {
     del.title = `Delete ${n.name}…`;
     del.setAttribute("aria-label", `Delete ${n.name}`);
     del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
-    const mod = document.createElement("button");
-    mod.className = "row-btn row-moduli";
-    mod.textContent = "M";
-    mod.title = `Open ${n.name} alone in the moduli map`;
-    mod.setAttribute("aria-label", `Open ${n.name} in the moduli map`);
-    mod.onclick = ev => { ev.stopPropagation(); openModuli([n.id]); };
-    li.append(mod, del);
+    li.append(del);
     // the grip, for a type that has siblings to move among
     if (siblings > 1) {
       const grip = sortGrip(n.name);
@@ -3194,8 +3167,6 @@ function renderControls() {
          "this type has no vertex of valence 4 or more to resolve", openResolveDialog),
       mk("Evaluation matrix…", c.vertices.length >= 1,
          "this type has no vertices", openEvalDialog),
-      mk("Moduli map…", ends.length + c.markings.length >= 5,
-         "the moduli map needs at least five ends and markings", () => openModuli([selectedId])),
     ]));
     return g;
   };
