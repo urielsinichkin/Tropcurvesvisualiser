@@ -96,6 +96,7 @@ function mmWire() {
   on("mm-import", "click", () => document.getElementById("mm-file").click());
   on("mm-file", "change", mmImportFile);
   on("mm-save", "click", () => downloadJSON(JSON.stringify(mmState(), null, 1), "moduli-session.json"));
+  on("mm-send", "click", ev => mmSendToApp(ev.target));
   on("modal-cancel", "click", closeModal);
   on("mm-range-in", "click", () => mmSetRange(MM.R / 1.5));
   on("mm-range-out", "click", () => mmSetRange(MM.R * 1.5));
@@ -419,21 +420,24 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   const tabs = document.createElement("div");
   tabs.className = "mm-tabs";
   tabs.setAttribute("role", "tablist");
-  [["legs", `Legs of M₀,₅ (${cfg.legs.length} of 5)`], ["points", `Evaluated markings (k = ${cfg.evaluated.length})`]]
+  [["legs", `Legs of M₀,₅ (${cfg.legs.length} of 5)`], ["points", `Evaluated markings (k = ${cfg.evaluated.length})`],
+   ["move", "Move markings"]]
     .forEach(([m, label]) => {
       const b = document.createElement("button");
       b.type = "button"; b.className = "small" + (m === mode ? " primary" : "");
       b.textContent = label;
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", m === mode ? "true" : "false");
-      b.onclick = () => { MM.pickMode = m; mmRenderSetup(); };
+      b.onclick = () => { MM.pickMode = m; MM.moveFrom = null; mmRenderSetup(); };
       tabs.appendChild(b);
     });
   const hint = document.createElement("p");
   hint.className = "muted mm-small";
   hint.textContent = mode === "legs"
     ? "Click ends and markings to make them legs of M₀,₅ (exactly five)."
-    : "Click markings to fix them at points of the plane.";
+    : mode === "points" ? "Click markings to fix them at points of the plane."
+    : MM.moveFrom ? "Now click an edge (the marking goes inside it) or a ringed vertex (onto it); the marking again to put it down."
+    : "Click a marking to pick it up, then an edge or a vertex to put it there. This changes the type.";
   // one svg, kept across redraws so its zoom survives
   if (!MM.pickSvg) {
     MM.pickSvg = document.createElementNS(SVGNS, "svg");
@@ -448,6 +452,7 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
   legend.innerHTML = `<span><span class="mm-key mm-key-leg"></span>leg of M₀,₅</span>
     <span><span class="mm-key mm-key-ev"></span>evaluated (a point in ℝ²)</span>`;
   box.append(tabs, hint, MM.pickSvg, status, legend);
+  if (mode === "move") box.appendChild(mmEditBar());
   body.appendChild(box);
   if (!MM.pickSvg._zoom) MM.pickSvg._zoom = makeZoomable(MM.pickSvg);
 
@@ -457,9 +462,12 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
     ? (MM.selected && ids.includes(MM.selected) ? MM.selected : MM.pre.preimages[0].type) : ids[0];
   let data;
   try { data = api("render", id); } catch (e) { status.textContent = e.message; return; }
+  const moving = mode === "move" && MM.moveFrom &&
+    data.curve.markings.some(m => m.id === MM.moveFrom) ? MM.moveFrom : null;
   const drawn = drawCurve(data, {
     svgId: "mm-pick-svg",
-    pickEdge: e => mode === "legs" && e.kind === "end",
+    pickEdge: e => (mode === "legs" && e.kind === "end") || (moving && e.kind !== "marking"),
+    pickVertex: moving ? (() => true) : null,
     pickMarking: () => true,
   });
   const svg = drawn.svg;
@@ -482,11 +490,22 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
       marks.push(svgEl("circle", { cx: p[0], cy: p[1], r: 9, fill: "none", stroke: "var(--accent)",
         "stroke-width": 3.5, "pointer-events": "none" }));
     }
+    if (m.id === moving) {         // picked up
+      marks.push(svgEl("circle", { cx: p[0], cy: p[1], r: 17, fill: "var(--accent)", "fill-opacity": 0.25,
+        stroke: "var(--accent)", "stroke-width": 2, "pointer-events": "none" }));
+    }
     // under the pick targets, which drawCurve put last
     const first = svg.querySelector(".pick-hit");
     marks.forEach(el => svg.insertBefore(el, first));
   });
   const describe = t => {
+    if (mode === "move") {
+      const mname = id => (data.curve.markings.find(m => m.id === id) || {}).name;
+      if (t.kind === "mark") return t.marking.id === moving ? `${t.marking.name}: click to put it down`
+        : `marking ${t.marking.name}: click to pick it up`;
+      if (t.kind === "edge") return `${t.edge.kind === "end" ? "end" : "edge"} ${t.edge.name}: move ${mname(moving)} inside it`;
+      return `this vertex: move ${mname(moving)} onto it`;
+    }
     const name = t.kind === "edge" ? t.edge.name : t.marking.name;
     const what = t.kind === "edge" ? "end" : "marking";
     const leg = cfg.legs.includes(name), ev = cfg.evaluated.includes(name);
@@ -496,17 +515,79 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
     return `${what} ${name}: ${now} — ${act}`;
   };
   const idle = mode === "legs" ? `Legs: ${cfg.legs.join(", ") || "none"}`
-    : `Evaluated: ${cfg.evaluated.join(", ") || "none"}`;
+    : mode === "points" ? `Evaluated: ${cfg.evaluated.join(", ") || "none"}`
+    : `Moving markings of ${data.name}` + (moving ? `: ${(data.curve.markings.find(m => m.id === moving) || {}).name} picked up` : "");
   status.textContent = idle;
-  [...drawn.edgePicks, ...drawn.markPicks].forEach(t => {
+  [...drawn.edgePicks, ...drawn.markPicks, ...drawn.vertexPicks].forEach(t => {
     t.hit.addEventListener("pick-enter", () => { status.textContent = describe(t); });
     t.hit.addEventListener("pick-leave", () => { status.textContent = idle; });
     t.hit.addEventListener("pick-click", () => {
+      if (mode === "move") {
+        if (t.kind === "mark") { MM.moveFrom = t.marking.id === moving ? null : t.marking.id; mmRenderSetup(); return; }
+        if (!moving) return;
+        MM.moveFrom = null;
+        mmEdit(() => api("move_marking", id, moving, t.kind === "edge" ? "edge" : "vertex",
+                         t.kind === "edge" ? t.edge.id : t.vertex.id));
+        mmRenderSetup();
+        return;
+      }
       const name = t.kind === "edge" ? t.edge.name : t.marking.name;
       if (mode === "legs") setLeg(name, !cfg.legs.includes(name));
       else setEvaluated(name, !cfg.evaluated.includes(name));
     });
   });
+}
+
+// Changing the library from here: each change can be undone, and the result
+// sent to the main app (which offers to add it).
+function mmEdit(change) {
+  const before = MM.library;
+  try { change(); } catch (e) { alert(e.message); return false; }
+  MM.undo = MM.undo || [];
+  MM.undo.push(before);
+  if (MM.undo.length > 50) MM.undo.shift();
+  mmLibraryChanged();
+  return true;
+}
+function mmLibraryChanged() {
+  MM.library = api("save");
+  MM.groups = api("moduli_groups");
+  // the names are kept, so the group usually is too; if not, start afresh
+  if (!MM.groups.some(g => g.key === MM.config.group)) {
+    const g = MM.groups[0];
+    MM.config = mmDefaults(g) || { group: g.key, evaluated: [], legs: [], points: {} };
+    mmGuard(() => mmConfigChanged(true));
+  } else {
+    try { mmConfigChanged(false); } catch (e) { mmGuard(() => mmConfigChanged(true)); }
+  }
+  mmAutosave();
+}
+function mmUndo() {
+  if (!MM.undo || !MM.undo.length) return;
+  const text = MM.undo.pop();
+  api("load", text);
+  mmLibraryChanged();
+}
+function mmEditBar() {
+  const bar = document.createElement("div");
+  bar.className = "mm-bar";
+  const undo = document.createElement("button");
+  undo.type = "button"; undo.className = "small"; undo.textContent = "↶ Undo";
+  undo.disabled = !(MM.undo && MM.undo.length);
+  undo.title = "Undo the last change to the type";
+  undo.onclick = () => mmGuard(mmUndo);
+  const send = document.createElement("button");
+  send.type = "button"; send.className = "small"; send.textContent = "Send to main app";
+  send.title = "The main app offers to add this library (now if it is open, else when it next opens)";
+  send.onclick = () => mmSendToApp(send);
+  bar.append(undo, send);
+  return bar;
+}
+function mmSendToApp(btn) {
+  try {
+    localStorage.setItem(FROM_MODULI_KEY, JSON.stringify({ at: Date.now(), library: api("save") }));
+    flashButton(btn, "Sent ✓");
+  } catch (e) { alert("Could not send it: " + e.message); }
 }
 
 function mmGuard(f) { try { f(); } catch (e) { reportError(e); } }

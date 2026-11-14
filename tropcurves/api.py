@@ -197,6 +197,18 @@ class Session:
         mid = self.ws.add_marking_on_edge(node_id, edge_id, name=name or None, color=color)
         return {"marking_id": mid, **self.node_summary(node_id)}
 
+    def move_marking(self, node_id: str, marking_id: str, target_kind: str,
+                     target_id: str) -> Dict[str, Any]:
+        """Move a marking into an edge (``target_kind`` "edge") or onto a
+        vertex ("vertex"); see ``Workspace.move_marking``."""
+        if target_kind == "edge":
+            self.ws.move_marking(node_id, marking_id, edge=target_id)
+        elif target_kind == "vertex":
+            self.ws.move_marking(node_id, marking_id, vertex=target_id)
+        else:
+            raise ValueError(f"unknown target kind {target_kind!r}")
+        return self.node_summary(node_id)
+
     def remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
         self.ws.remove_marking(node_id, marking_id)
         return self.node_summary(node_id)

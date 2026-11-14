@@ -20,6 +20,7 @@ later without reworking the model -- see ``docs/POSTPONED.md``.
 
 from __future__ import annotations
 
+import copy
 import itertools
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -33,6 +34,7 @@ from .operations import (
     resolution_for_sides,
     apply_resolution,
     add_marking_on_edge,
+    smooth_vertex,
     EdgeMarkingResult,
     Resolution,
     _fresh_edge_id,
@@ -399,6 +401,52 @@ class Workspace:
             out.append(nid)
             stack.extend(node.children)
         return out
+
+    def move_marking(self, node_id: str, marking_id: str, *, edge: Optional[str] = None,
+                     vertex: Optional[str] = None) -> None:
+        """Move a marking to the inside of an edge (``edge``) or onto a vertex
+        (``vertex``), keeping its id, name and color. Where it was, a point
+        left inside an edge is merged back into it.
+
+        Only for a type with no derived types: theirs refer to this type's
+        vertices and edges, which the move renames.
+        """
+        node = self._get(node_id)
+        if self.descendants(node_id):
+            raise ValueError("this type has derived types, which a move would break; "
+                             "move markings on a type without derived types")
+        if node.parent_id is not None:
+            raise ValueError("this type is derived from another and would be rebuilt from it; "
+                             "move markings on a root type (a type opened alone is one)")
+        if (edge is None) == (vertex is None):
+            raise ValueError("give an edge or a vertex to move the marking to")
+        c = node.curve
+        m = c.edges.get(marking_id)
+        if m is None or m.kind is not EdgeKind.MARKING:
+            raise ValueError(f"{marking_id!r} is not a marking")
+        if vertex is not None and vertex == m.tail:
+            return
+        before = copy.deepcopy(c)
+        try:
+            name, color, at = m.name, m.color, m.tail
+            del c.edges[marking_id]
+            merged = smooth_vertex(c, at)
+            if edge is not None:
+                if merged and edge == merged[1]:
+                    edge = merged[0]
+                if edge not in c.edges or c.edges[edge].kind is EdgeKind.MARKING:
+                    raise ValueError(f"unknown edge {edge!r}")
+                add_marking_on_edge(c, edge, marking_id=marking_id, name=name, color=color,
+                                    reserved=self._subtree_ids(node_id))
+            else:
+                if vertex not in c.vertices:
+                    raise ValueError("that vertex was only the marking's own point")
+                c.add_marking(marking_id, vertex, name=name, color=color)
+            c.validate()
+        except Exception:
+            node.curve = before
+            raise
+        self._propagate(node_id)
 
     def remove_marking(self, node_id: str, marking_id: str) -> None:
         node = self._get(node_id)

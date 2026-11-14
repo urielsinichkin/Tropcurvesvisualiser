@@ -256,6 +256,7 @@ const HELP = {
         <li><b>Main app's library</b> — load the library you work on in the main app.</li>
         <li><b>Import…</b> — a library file or a saved session.</li>
         <li><b>Save session</b> — library, choices, points and the point of M<sub>0,5</sub> as one file.</li>
+        <li><b>Send to main app</b> — the library, with changes made here; the main app offers to add it.</li>
         <li><b>Main app</b> — back to the editor.</li>
       </ul>
       <p>The page keeps its session in this browser. Every panel has its own <b>?</b>.</p>`,
@@ -267,6 +268,7 @@ const HELP = {
       <ul>
         <li><b>Types</b> — a group of the library: same ends and same markings.</li>
         <li><b>The picture</b> — choose on a type of the group by clicking: in <b>Legs of M₀,₅</b> click ends and markings (exactly five; shown thick / ringed in green); in <b>Evaluated markings</b> click markings to fix them at points of ℝ² (orange squares). Hover says what a click does. It zooms.</li>
+        <li><b>Move markings</b> — changes the type: click a marking, then an edge (inside it) or a ringed vertex (onto it). <b>↶ Undo</b>; <b>Send to main app</b> to keep the result there.</li>
         <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
         <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>

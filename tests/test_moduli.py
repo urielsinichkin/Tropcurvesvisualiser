@@ -342,3 +342,58 @@ def test_full_dimensional_types_have_no_image_entry(weighted):
     cfg = dict(cfg, points=_random_points(rng, cfg["evaluated"]))
     ids = {t["id"] for t in s.moduli_check(cfg)["types"] if t["full"]}
     assert not ids & {i["type"] for i in s.moduli_images(cfg, 30)}
+
+
+def test_moving_a_marking_between_edges_and_vertices():
+    s, _cfg = _walled()
+    nid = next(iter(s.ws.nodes))
+    c = s.ws.nodes[nid].curve
+    n_vertices, n_bounded = len(c.vertices), len(c.bounded)
+    x3 = next(e for e in c.markings if e.name == "x3")
+    old_vertex = x3.tail                       # c2_1, inside the edge e8 + the end l4
+    # into the end l7: c2_1 is merged away (e8 and l4 are one end again), and
+    # l7 is cut in two
+    s.move_marking(nid, x3.id, "edge", "l7")
+    c = s.ws.nodes[nid].curve
+    assert old_vertex not in c.vertices
+    assert len(c.vertices) == n_vertices and len(c.bounded) == n_bounded
+    x3 = c.edges[x3.id]
+    assert x3.name == "x3" and x3.kind.value == "marking"
+    assert {e.id for e in c.incident(x3.tail)} >= {"l7", x3.id}
+    l4 = c.edges["l4"]
+    assert l4.tail == "c2" and l4.vec.to_list() == [-1, 0]
+    c.validate()
+    # onto a vertex: c3 (where l5 leaves)
+    s.move_marking(nid, x3.id, "vertex", "c3")
+    c = s.ws.nodes[nid].curve
+    assert c.edges[x3.id].tail == "c3"
+    assert len(c.vertices) == n_vertices - 1
+    c.validate()
+    # back into a bounded edge, e3 (id e5): split in two with the same direction
+    s.move_marking(nid, x3.id, "edge", "e5")
+    c = s.ws.nodes[nid].curve
+    v = c.edges[x3.id].tail
+    vecs = sorted(tuple(e.outgoing(v).to_list()) for e in c.incident(v) if e.kind.value == "bounded")
+    assert vecs == [(-2, 1), (2, -1)]
+    c.validate()
+    # the moduli map sees the moved marking (same group: same names)
+    marks = ["x1", "x2", "x3", "x4", "x5"]
+    out = s.moduli_check({"group": s.moduli_groups()[0]["key"], "evaluated": marks, "legs": marks})
+    assert out["ok"] and len(out["types"]) == 1
+    # a move that would merge the target into another edge goes to the merged one
+    x1 = next(e for e in c.markings if e.name == "x1")
+    s.move_marking(nid, x1.id, "edge", "b1")   # b1 (e6) holds x1's own point: it merges into l2
+    c = s.ws.nodes[nid].curve
+    c.validate()
+    assert c.edges[x1.id].name == "x1"
+
+
+def test_moving_markings_is_refused_on_derived_types():
+    s, _cfg = _walled()
+    nid = next(iter(s.ws.nodes))
+    child = s.contract(nid, "e8")["id"]
+    m = next(e.id for e in s.ws.nodes[nid].curve.markings)
+    with pytest.raises(ValueError, match="derived types"):
+        s.move_marking(nid, m, "edge", "l7")
+    with pytest.raises(ValueError, match="derived from another"):
+        s.move_marking(child, m, "edge", "l7")

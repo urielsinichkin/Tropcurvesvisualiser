@@ -414,6 +414,18 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   `export_subset([id])` over in `localStorage` (`tropcurves.moduli.handoff.v1`,
   read once and removed) and opens `../moduli/?from=types`; the top bar's
   button still passes the whole library (`?from=app`).
+- *Moving markings* (`Workspace.move_marking`, `operations.smooth_vertex`):
+  the marking is removed, the point it leaves inside an edge (a vertex with
+  two straight-through edges and no marking) is merged back (an end keeps its
+  id; of two bounded edges the first keeps its id), and the marking is put
+  inside the target edge (`add_marking_on_edge`, keeping its id, name and
+  color; a target that was merged away maps to the merged edge) or on the
+  target vertex; the curve is validated or the change rolled back. Only on a
+  root type without derived types (their operations name this type's ids).
+  The page's third picture mode does it, with an undo stack of library
+  texts; *Send to main app* leaves the library under
+  `tropcurves.fromModuli.v1`, which the main app takes at start and on the
+  `storage` event, offering it with `offerImport` (add or replace).
 - *Choosing on a picture*: the setup draws a type of the group (the one shown
   large if it is there) with `drawCurve`, ends and markings pickable
   (`routePicks` events), in two modes -- legs of M_0,5 or evaluated markings;
