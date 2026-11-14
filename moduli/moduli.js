@@ -71,7 +71,7 @@ function mwWire() {
   on("mw-start", "click", () => mwGuard(mwStart));
   on("mw-back", "click", () => { MW.step = "setup"; mwShow(); mwSave(); });
   document.querySelectorAll(".mw-tabs button").forEach(b => {
-    b.onclick = () => { MW.mode = b.dataset.mode; mwDrawType(); mwSave(); };
+    b.onclick = () => { MW.mode = b.dataset.mode; MW.slope = null; mwDrawType(); mwSave(); };
   });
   const bg = () => resolvedVar("--panel", "#ffffff");
   on("mw-copy-curve", "click", ev => copyPanelPng("mw-curve", null, ev.target, "curve.png"));
@@ -171,13 +171,17 @@ function mwDrawType() {
     markings: "Click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.",
     legs: "Click ends and markings: the five legs whose tree is the point of M₀,₅.",
     points: "Click markings to fix them at points of the plane.",
+    slopes: MW.slope && MW.slope.edit
+      ? "Click another end to be the dependent one (it absorbs the change), type the new direction, and Apply."
+      : "Click the end whose direction to change. The bounded edges follow by balancing.",
   }[mode];
   const drawn = drawCurve(data, {
     svgId: "mw-type-svg",
-    pickEdge: e => (mode === "markings" && e.kind !== "marking") || (mode === "legs" && e.kind === "end"),
+    pickEdge: e => (mode === "markings" && e.kind !== "marking") || ((mode === "legs" || mode === "slopes") && e.kind === "end"),
     pickVertex: mode === "markings" ? (() => true) : null,
-    pickMarking: () => true,
+    pickMarking: () => mode !== "slopes",
   });
+  mwSlopeForm(data, drawn);
   const svg = drawn.svg, T = drawn.T;
   data.curve.edges.forEach(e => {
     if (e.kind === "end" && MW.legs.includes(e.name) && drawn.lines[e.id]) {
@@ -199,9 +203,16 @@ function mwDrawType() {
   const status = document.getElementById("mw-pick-status");
   const idle = mode === "legs" ? `Legs: ${MW.legs.join(", ") || "none"}`
     : mode === "points" ? `Evaluated: ${MW.evaluated.join(", ") || "none"}`
+    : mode === "slopes" ? `Ends: ${data.curve.edges.filter(e => e.kind === "end").map(e => `${e.name} (${e.vec.join(", ")})`).join(", ")}`
     : `${names.ends.length} ends, ${names.marks.length} markings`;
   status.textContent = idle;
   const describe = t => {
+    if (mode === "slopes") {
+      const sl = MW.slope || {}, v = `(${t.edge.vec.join(", ")})`;
+      if (t.edge.id === sl.edit) return `end ${t.edge.name} ${v}: the one being changed — click to choose again`;
+      if (t.edge.id === sl.dep) return `end ${t.edge.name} ${v}: the dependent end`;
+      return `end ${t.edge.name} ${v}: click to ` + (sl.edit ? "make it the dependent end" : "change its direction");
+    }
     if (mode === "markings") {
       if (t.kind === "mark") return `marking ${t.marking.name}: click to take it off`;
       if (t.kind === "edge") return `${t.edge.kind === "end" ? "end" : "edge"} ${t.edge.name}: click to put a marking inside it`;
@@ -215,6 +226,13 @@ function mwDrawType() {
     t.hit.addEventListener("pick-enter", () => { status.textContent = describe(t); });
     t.hit.addEventListener("pick-leave", () => { status.textContent = idle; });
     t.hit.addEventListener("pick-click", () => mwGuard(() => {
+      if (mode === "slopes") {
+        const sl = MW.slope || (MW.slope = {});
+        if (!sl.edit || t.edge.id === sl.edit) { sl.edit = t.edge.id; sl.dep = null; sl.vec = null; }
+        else sl.dep = t.edge.id === sl.dep ? null : t.edge.id;
+        mwDrawType();
+        return;
+      }
       if (mode === "markings") {
         if (t.kind === "mark") api("moduli_remove_marking", MW.base, t.marking.id);
         else if (t.kind === "edge") api("add_marking_on_edge", MW.base, t.edge.id, "", "");
@@ -233,6 +251,56 @@ function mwDrawType() {
     }));
   });
   mwCheck(names);
+}
+
+// Slopes: the end being changed in violet, the dependent end dashed orange;
+// under the picture the new direction and Apply (the main app's edit_slopes:
+// the dependent end absorbs the change, the bounded edges are re-derived).
+const SLOPE_COLOR = "#8e5bd8";
+function mwSlopeForm(data, drawn) {
+  const form = document.getElementById("mw-slope");
+  form.innerHTML = "";
+  form.hidden = MW.mode !== "slopes";
+  if (MW.mode !== "slopes") return;
+  const sl = MW.slope || {};
+  const ends = data.curve.edges.filter(e => e.kind === "end");
+  const edit = ends.find(e => e.id === sl.edit);
+  if (!edit) { form.hidden = true; return; }
+  if (!ends.some(e => e.id === sl.dep)) sl.dep = (ends.find(e => e.id !== edit.id) || {}).id || null;
+  const dep = ends.find(e => e.id === sl.dep);
+  const mark = (e, dashed) => {
+    const ln = e && drawn.lines[e.id];
+    if (!ln) return;
+    ln.setAttribute("stroke", dashed ? "var(--warn)" : SLOPE_COLOR);
+    ln.setAttribute("stroke-width", 6);
+    if (dashed) ln.setAttribute("stroke-dasharray", "10 6");
+  };
+  mark(edit, false); mark(dep, true);
+  const vec = sl.vec || edit.vec;
+  const num = (v, label) => {
+    const i = document.createElement("input");
+    i.type = "number"; i.step = "1"; i.value = v; i.setAttribute("aria-label", label);
+    i.oninput = () => { sl.vec = [parseInt(xi.value || "0", 10), parseInt(yi.value || "0", 10)]; };
+    return i;
+  };
+  const xi = num(vec[0], "new x"), yi = num(vec[1], "new y");
+  const apply = document.createElement("button");
+  apply.type = "button"; apply.className = "small primary"; apply.textContent = "Apply";
+  apply.onclick = () => {
+    const v = [parseInt(xi.value || "0", 10), parseInt(yi.value || "0", 10)];
+    if (!dep) { alert("Click a second end to be the dependent one."); return; }
+    try { api("edit_slopes", MW.base, edit.id, v, dep.id); }
+    catch (e) { alert("Cannot: " + e.message); return; }
+    MW.slope = null;
+    mwDrawType();
+    mwSave();
+  };
+  const lab = document.createElement("span");
+  lab.innerHTML = `<b style="color:${SLOPE_COLOR}">${escapeHtml(edit.name)}</b> (${edit.vec.join(", ")}) → `;
+  const depLab = document.createElement("span");
+  depLab.className = "muted";
+  depLab.innerHTML = dep ? `dependent: <b>${escapeHtml(dep.name)}</b> (${dep.vec.join(", ")})` : "click a dependent end";
+  form.append(lab, "(", xi, ",", yi, ") ", apply, depLab);
 }
 
 // the order the core sees the legs in: ends, then markings, by name

@@ -373,8 +373,10 @@ edge is short and every length positive. A wall type is drawn by solving its
 **Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
 handing the cells to the page) or pasted cells; markings put on and taken off
 on the picture (`moduli_remove_marking` merges the point left inside an edge
-back, `operations.smooth_vertex`); legs and evaluated markings clicked on the
-picture; the check line says what is missing. Step 2: the curve (`drawCurve`
+back, `operations.smooth_vertex`); slopes changed as in the main app
+(`edit_slopes`: an end, a dependent end absorbing the change, the new
+vector); legs and evaluated markings clicked on the picture; the check line
+says what is missing. Step 2: the curve (`drawCurve`
 on the placed picture, skeleton edges recoloured) beside the cell -- a
 quadrant with axes in the paths' colours, region shaded, walls labelled; a
 line; or a point. The point is dragged from itself (its pointer handlers are
