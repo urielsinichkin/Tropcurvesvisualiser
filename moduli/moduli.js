@@ -109,6 +109,7 @@ function mmWire() {
   on("mm-svg-chart", "click", () => mmDownloadSvg("mm-chart", bg(), "m05-chart.svg"));
   on("mm-svg-overview", "click", () => mmDownloadSvg("mm-overview", bg(), "m05-overview.svg"));
   on("mm-svg-figure", "click", () => mmDownloadSvg("mm-figure", null, "curve.svg"));
+  on("mm-reset-points", "click", () => mmGuard(mmResetPoints));
   on("mm-path-from", "click", () => mmPathEnd("from"));
   on("mm-path-to", "click", () => mmPathEnd("to"));
   on("mm-path-play", "click", mmPathPlay);
@@ -193,7 +194,7 @@ function mmState() {
   return {
     kind: "tropcurves-moduli-session", version: 1, library: MM.library,
     config: MM.config, m: MM.m, cycle: MM.cycle, lastCone: MM.lastCone, R: MM.R,
-    selected: MM.selected, snap: document.getElementById("mm-snap").checked,
+    selected: MM.selected, snap: document.getElementById("mm-snap").checked, pointsStart: MM.pointsStart,
     path: { from: MM.path.from, to: MM.path.to, cycle: MM.path.cycle },
   };
 }
@@ -201,6 +202,7 @@ function mmState() {
 function mmRestore(st) {
   if (!st || st.kind !== "tropcurves-moduli-session" || !st.library) return false;
   document.getElementById("mm-snap").checked = st.snap !== false;
+  MM.pointsStart = st.pointsStart || null;
   mmLoadLibrary(st.library, st);
   if (st.path && st.path.from && st.path.cycle) {
     MM.path.from = st.path.from; MM.path.to = st.path.to; MM.path.cycle = st.path.cycle;
@@ -256,6 +258,7 @@ function mmConfigChanged(fresh) {
       const ini = api("moduli_initial", cfg);
       if (ini.points) {
         cfg.points = ini.points; MM.m = ini.m;
+        MM.pointsStart = JSON.parse(JSON.stringify(ini.points));
         MM.R = mmNice(2.6 * mmSize(MM.m));
       } else { MM.m = null; }
       MM.cycle = null; MM.lastCone = null; MM.selected = null;
@@ -385,11 +388,19 @@ function mmRenderSetup() {
       });
       pts.appendChild(row);
     });
+    const reset = document.createElement("button");
+    reset.className = "small"; reset.textContent = "Reset points";
+    reset.title = "Put the points back where they started; the point of M0,5 stays";
+    reset.disabled = !mmPointsMoved();
+    reset.onclick = () => mmGuard(mmResetPoints);
     const again = document.createElement("button");
     again.className = "small"; again.textContent = "New starting point";
     again.title = "Points and a point of M0,5 that have a curve over them";
     again.onclick = () => mmGuard(() => mmConfigChanged(true));
-    pts.appendChild(again);
+    const btns = document.createElement("div");
+    btns.className = "mm-bar";
+    btns.append(reset, again);
+    pts.appendChild(btns);
     body.appendChild(pts);
   }
 
@@ -667,6 +678,31 @@ function mmSendToApp(btn) {
     localStorage.setItem(FROM_MODULI_KEY, JSON.stringify({ at: Date.now(), library: api("save") }));
     flashButton(btn, "Sent ✓");
   } catch (e) { alert("Could not send it: " + e.message); }
+}
+
+// The points' starting positions: those of the last starting point (or,
+// for a session saved before they were kept, a fresh starting point's).
+function mmStartPoints() {
+  const cfg = MM.config;
+  const ok = p => p && cfg.evaluated.every(m => p[m]);
+  if (ok(MM.pointsStart)) return MM.pointsStart;
+  const ini = api("moduli_initial", cfg);
+  if (ok(ini.points)) MM.pointsStart = JSON.parse(JSON.stringify(ini.points));
+  return ok(MM.pointsStart) ? MM.pointsStart : null;
+}
+function mmPointsMoved() {
+  const st = MM.pointsStart, cfg = MM.config;
+  if (!st) return true;           // not known yet: let the button find out
+  return cfg.evaluated.some(m => !st[m] || st[m][0] !== cfg.points[m][0] || st[m][1] !== cfg.points[m][1]);
+}
+function mmResetPoints() {
+  const start = mmStartPoints();
+  if (!start) return;
+  MM.config.evaluated.forEach(m => { MM.config.points[m] = [...start[m]]; });
+  MM.onWall = null; MM.onImage = null;      // the walls move with the points
+  MM.frame = null;
+  mmRenderSetup();
+  mmSchedule({ regions: true });
 }
 
 function mmGuard(f) { try { f(); } catch (e) { reportError(e); } }
@@ -1233,6 +1269,8 @@ function mmWireFigure() {
 }
 
 function mmDrawFigure() {
+  const rb = document.getElementById("mm-reset-points");
+  if (rb) rb.disabled = !mmPointsMoved();
   const note = document.getElementById("mm-figure-note");
   const name = document.getElementById("mm-curve-name");
   const pts = MM.config.evaluated.map(m => MM.config.points[m].map(eval_frac));

@@ -390,6 +390,9 @@ guide link is prefixed by `TROP_HELP_BASE`) and starts nothing. `moduli.js`:
   (`mmSchedule`); thumbnails are redrawn after a short pause.
 - *Path*: a straight segment in the chart; its crossings with walls and rays,
   with the preimages on both sides, form the log.
+- *Reset points*: the positions a starting point gave the points are kept
+  (`pointsStart`, saved with the session) and restored on request, leaving
+  the point of M_0,5 alone.
 - *Session*: library text, setup, points, the point, chart, size and path,
   autosaved under `tropcurves.moduli.v1` and saved/loaded as a file.
 - *Types that are not full-dimensional* (`explain`, `image`, `fibre_point`):

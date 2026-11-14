@@ -272,7 +272,7 @@ const HELP = {
         <li><b>Edit slopes</b> — changes the type's degree: click an end, then a dependent end, type the new direction, <b>Apply</b>. The page follows the type to its new group.</li>
         <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
-        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>New starting point</b> picks a point with a curve over it.</li>
+        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>Reset points</b> puts them back where they started (the point of M<sub>0,5</sub> stays); <b>New starting point</b> picks a point with a curve over it.</li>
         <li>The fold at the bottom lists every type: multiplicity and cone, or why it is not full-dimensional (e.g. the points fix a length of M<sub>0,5</sub> on it).</li>
       </ul>`,
   },
@@ -314,7 +314,7 @@ const HELP = {
     anchor: "moduli-curves",
     html: `<p>One curve over the point, placed in the plane: its evaluated markings sit at the points.</p>
       <ul>
-        <li><b>Drag a ringed point</b> to move it; regions, walls, overview and curves follow.</li>
+        <li><b>Drag a ringed point</b> to move it; regions, walls, overview and curves follow. <b>Reset points</b> puts them back where they started.</li>
         <li>Pick which curve from the Preimage list below.</li>
         <li><b>Copy</b> / <b>SVG</b> — export the picture.</li>
       </ul>`,
