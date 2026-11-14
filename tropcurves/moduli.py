@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from .curve import Curve, EdgeKind
 from .evaluation import _bounded_by_name, natural_key, row_of
 from .layout import embed
+from .operations import contract_edge, resolutions, apply_resolution
 
 Split = Tuple[int, int]           # the two-element side, as indices into the legs
 Cone = Tuple[Split, ...]          # sorted; 0, 1 or 2 splits
@@ -799,3 +800,122 @@ def on_image(st: Setup, type_id: str, R: Fraction, frac: Fraction):
     frac = min(max(frac, Fraction(0)), Fraction(1))
     q = [P[i] + frac * (Q[i] - P[i]) for i in range(len(P))]
     return parse_point(point_json(t.cone, q))
+
+
+# --- crossing walls: the types on the other side --------------------------------
+# A curve of a full-dimensional type leaves its region when some edge length
+# reaches 0. There the edge contracts to a vertex of valence 4 (a type of
+# lower dimension, on the wall), and the other ways of resolving that vertex
+# are the types that carry on, on the other side. They are built with the main
+# app's own operations (contract, resolve).
+
+def type_key(curve: Curve) -> frozenset:
+    """What makes two types the same, whatever their ids: for every bounded
+    edge, the legs (by name) on one side of it and its direction, plus the
+    ends' directions. A tree with named leaves is determined by its splits."""
+    legs = {e.id: e.name for e in curve.edges.values() if e.kind is not EdgeKind.BOUNDED}
+    names = sorted(legs.values())
+    anchor = names[0] if names else ""
+    out = {("end", e.name, e.vec.x, e.vec.y) for e in curve.ends}
+    for e in curve.bounded:
+        side = _side(curve, e)
+        here = tuple(sorted(n for i, n in legs.items() if curve.edges[i].tail in side))
+        vec = e.vec
+        if anchor not in here:                  # orient from the anchor's side
+            here = tuple(sorted(set(names) - set(here)))
+            vec = -vec
+        out.add(("edge", here, vec.x, vec.y))
+    return frozenset(out)
+
+
+def _side(curve: Curve, e) -> set:
+    seen = {e.tail}
+    stack = [e.tail]
+    while stack:
+        v = stack.pop()
+        for f in curve.incident(v):
+            if f.kind is not EdgeKind.BOUNDED or f.id == e.id:
+                continue
+            w = f.other(v)
+            if w not in seen:
+                seen.add(w)
+                stack.append(w)
+    return seen
+
+
+def _cone_coords(cone: Cone, m_cone: Cone, m_lengths: List[Fraction]) -> Optional[List[Fraction]]:
+    """A point of M_0,5 in the coordinates of ``cone``, continued linearly
+    across one of its rays: in a neighbouring cone (sharing a ray) the other
+    coordinate is minus the length along the new ray. None for a point that is
+    not in the cone, on its rays or next to it."""
+    have = dict(zip(m_cone, m_lengths))
+    out = [have.get(sp, Fraction(0)) for sp in cone]
+    others = [sp for sp in m_cone if sp not in cone]
+    if len(others) > 1 or (others and len(cone) != 2):
+        return None
+    if others:
+        missing = [i for i, sp in enumerate(cone) if sp not in have]
+        if len(missing) != 1:
+            return None
+        out[missing[0]] = -have[others[0]]
+    return out
+
+
+def crossing_edge(t: TypeMap, p0: List[Fraction], m0: Tuple[Cone, List[Fraction]],
+                  p1: List[Fraction], m1: Tuple[Cone, List[Fraction]]) -> Optional[str]:
+    """The edge of a full-dimensional type whose length reaches 0 first on the
+    straight way from (p0, m0), where the type has a curve, to (p1, m1); None
+    when it has a curve all the way, or the way is not a continuous one."""
+    if not t.full:
+        return None
+    y0 = _cone_coords(t.cone, *m0)
+    y1 = _cone_coords(t.cone, *m1)
+    if y0 is None or y1 is None:
+        return None
+    def lengths(p, y):
+        r = list(p) + list(y)
+        return {e.id: sum((t.inv[t.index[e.id]][j] * r[j] for j in range(t.n)), Fraction(0))
+                for e in t.bounded}
+    l0, l1 = lengths(p0, y0), lengths(p1, y1)
+    best = None
+    for eid, a in l0.items():
+        b = l1[eid]
+        if a > 0 and b <= 0:
+            s = a / (a - b)
+            if best is None or s < best[0]:
+                best = (s, eid)
+    return best[1] if best else None
+
+
+def neighbours(curve: Curve, edge_id: str):
+    """(the type on the wall, [the types on the other side]) when ``edge_id``
+    shrinks to 0; the type itself is left out."""
+    res = contract_edge(curve, edge_id)
+    wall = res.curve
+    v = res.merged_vertex
+    me = type_key(curve)
+    others = []
+    if wall.valence(v) >= 4:
+        for r in resolutions(wall, v):
+            c = apply_resolution(wall, r).curve
+            if type_key(c) != me:
+                others.append(c)
+    return wall, others
+
+
+def points_through(t: TypeMap, cone: Cone, lengths: List[Fraction]) -> Optional[List[Fraction]]:
+    """Points in the plane with a curve of the type over them and over the
+    given point of M_0,5 (the root at the origin), or None."""
+    if t.cone != cone:
+        return None
+    pin = [[1 if j == 0 else 0 for j in range(t.n)], [1 if j == 1 else 0 for j in range(t.n)]]
+    rows = [t.splits[sp] for sp in t.cone] + pin
+    sol = _affine_solutions(rows, list(lengths) + [Fraction(0), Fraction(0)], t.n)
+    if sol is None:
+        return None
+    z0, N = sol
+    w = _interior_point(_length_cons(t, z0, N), len(N))
+    if w is None:
+        return None
+    z = [z0[i] + sum((N[j][i] * w[j] for j in range(len(N))), Fraction(0)) for i in range(t.n)]
+    return [sum((Fraction(r[j]) * z[j] for j in range(t.n)), Fraction(0)) for r in t.ev_rows]

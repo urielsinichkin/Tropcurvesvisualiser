@@ -266,13 +266,13 @@ const HELP = {
     anchor: "moduli-setup",
     html: `<p>Which moduli space and which map.</p>
       <ul>
-        <li><b>Types</b> — a group of the library: same ends and same markings.</li>
+        <li><b>Types</b> — a group of the library: same ends and same markings. <b>Opened type</b> — the one shown, edited and drawn in the curves; when its curves cross a wall, the types beyond it are added (and listed here).</li>
         <li><b>The picture</b> — choose on a type of the group by clicking: in <b>Legs of M₀,₅</b> click ends and markings (exactly five; shown thick / ringed in green); in <b>Evaluated markings</b> click markings to fix them at points of ℝ² (orange squares). Hover says what a click does. It zooms.</li>
         <li><b>Move markings</b> — changes the type: click a marking, then an edge (inside it) or a ringed vertex (onto it). <b>↶ Undo</b>; <b>Send to main app</b> to keep the result there.</li>
         <li><b>Edit slopes</b> — changes the type's degree: click an end, then a dependent end, type the new direction, <b>Apply</b>. The page follows the type to its new group.</li>
         <li><b>Choose from lists instead</b> — the same choices as checkboxes.</li>
         <li>The status line checks |Δ| + n − 1 = 2k + 2.</li>
-        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>Reset points</b> puts them back where they started (the point of M<sub>0,5</sub> stays), <b>Reset M₀,₅ point</b> the point of M<sub>0,5</sub> (the points stay); <b>New starting point</b> picks a point with a curve over it.</li>
+        <li><b>Points in ℝ²</b> — type coordinates (fractions allowed) or drag them on the curve. <b>Reset points</b> puts them back where they started — after an edit, at points with a curve of the edited type (the point of M<sub>0,5</sub> stays), <b>Reset M₀,₅ point</b> the point of M<sub>0,5</sub> (the points stay); <b>New starting point</b> picks a point with a curve over it.</li>
         <li>The fold at the bottom lists every type: multiplicity and cone, or why it is not full-dimensional (e.g. the points fix a length of M<sub>0,5</sub> on it).</li>
       </ul>`,
   },
@@ -286,6 +286,7 @@ const HELP = {
         <li><b>⇄</b> — turn the page: the other cone at that ray.</li>
         <li><b>Reset point</b> — the point back where it started (the points in the plane stay).</li>
         <li><b>Orange</b> — where a type that is not full-dimensional has curves through the points (hover for why). Snap onto it to see one of its curves (not counted).</li>
+        <li>Crossing a wall adds the types on its other side, so the curves carry on.</li>
         <li><b>Snap to walls</b> — land exactly on a wall or ray near the pointer.</li>
         <li><b>− / +</b> — larger or smaller lengths. <b>Copy</b> / <b>SVG</b> — export the picture.</li>
       </ul>`,

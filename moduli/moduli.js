@@ -171,7 +171,7 @@ function mmLoadLibrary(text, keep) {
     MM.config = null;
     const g = [...MM.groups].sort((a, b) => b.types.length - a.types.length)
       .find(g => mmDefaults(g)) || MM.groups[0];
-    if (g) { MM.config = mmDefaults(g) || { group: g.key, evaluated: [], legs: [], points: {} }; }
+    if (g) { MM.config = mmDefaults(g) || { group: g.key, evaluated: [], legs: [], points: {}, base: g.types[0].id, extra: [] }; }
     mmConfigChanged(true);
   }
 }
@@ -183,7 +183,19 @@ function mmDefaults(g) {
   const ev = g.markings.slice(0, k);
   const legs = [...g.ends.map(e => e.name), ...g.markings.filter(m => !ev.includes(m)), ...ev].slice(0, 5);
   if (legs.length < 5) return null;
-  return { group: g.key, evaluated: ev, legs: mmLegOrder(g, legs), points: {} };
+  return { group: g.key, evaluated: ev, legs: mmLegOrder(g, legs), points: {}, base: g.types[0].id, extra: [] };
+}
+
+// The types the page works with: the opened type (shown in the setup picture,
+// the one edits change) and the types added at walls it crossed. Other types
+// of the library are left out. config.types is what the core is given.
+function mmCandidates() {
+  const cfg = MM.config, g = mmGroup();
+  if (!cfg || !g) return;
+  const ids = g.types.map(t => t.id);
+  if (!ids.includes(cfg.base)) cfg.base = ids[0];
+  cfg.extra = (cfg.extra || []).filter(id => ids.includes(id) && id !== cfg.base);
+  cfg.types = [cfg.base, ...cfg.extra];
 }
 const mmGroup = () => MM.config && MM.groups.find(g => g.key === MM.config.group);
 // legs in a fixed order (ends, then markings, by name), whatever order ticked
@@ -195,7 +207,7 @@ function mmState() {
   return {
     kind: "tropcurves-moduli-session", version: 1, library: MM.library,
     config: MM.config, m: MM.m, cycle: MM.cycle, lastCone: MM.lastCone, R: MM.R,
-    selected: MM.selected, snap: document.getElementById("mm-snap").checked, pointsStart: MM.pointsStart, mStart: MM.mStart,
+    selected: MM.selected, snap: document.getElementById("mm-snap").checked, pointsStart: MM.pointsStart, mStart: MM.mStart, edited: !!MM.edited,
     path: { from: MM.path.from, to: MM.path.to, cycle: MM.path.cycle },
   };
 }
@@ -205,6 +217,7 @@ function mmRestore(st) {
   document.getElementById("mm-snap").checked = st.snap !== false;
   MM.pointsStart = st.pointsStart || null;
   MM.mStart = st.mStart || null;
+  MM.edited = !!st.edited;
   mmLoadLibrary(st.library, st);
   if (st.path && st.path.from && st.path.cycle) {
     MM.path.from = st.path.from; MM.path.to = st.path.to; MM.path.cycle = st.path.cycle;
@@ -246,11 +259,13 @@ function mmAutosave() {
 // curve over it; otherwise keep the points and the point of M_0,5.
 function mmConfigChanged(fresh) {
   MM.check = null;
+  MM.lastPre = null;          // a new setup is not a move: no walls crossed
+  mmCandidates();
   const cfg = MM.config;
   let ok = false;
   if (cfg && cfg.legs.length === 5) {
     try {
-      MM.check = api("moduli_check", { group: cfg.group, evaluated: cfg.evaluated, legs: cfg.legs });
+      MM.check = api("moduli_check", { group: cfg.group, evaluated: cfg.evaluated, legs: cfg.legs, types: cfg.types });
       ok = MM.check.ok;
     } catch (e) { MM.check = { ok: false, message: e.message, types: [] }; }
   }
@@ -262,6 +277,7 @@ function mmConfigChanged(fresh) {
         cfg.points = ini.points; MM.m = ini.m;
         MM.pointsStart = JSON.parse(JSON.stringify(ini.points));
         MM.mStart = JSON.parse(JSON.stringify(ini.m));
+        MM.edited = false;
         MM.R = mmNice(2.6 * mmSize(MM.m));
       } else { MM.m = null; }
       MM.cycle = null; MM.lastCone = null; MM.selected = null;
@@ -297,13 +313,34 @@ function mmRenderSetup() {
   });
   sel.onchange = () => {
     const gr = MM.groups.find(x => x.key === sel.value);
-    MM.config = mmDefaults(gr) || { group: gr.key, evaluated: [], legs: [], points: {} };
+    MM.config = mmDefaults(gr) || { group: gr.key, evaluated: [], legs: [], points: {}, base: gr.types[0].id, extra: [] };
     mmGuard(() => mmConfigChanged(true));
   };
   const lab = document.createElement("label");
   lab.className = "mm-field"; lab.append("Types ", sel);
   body.appendChild(lab);
   if (!g) return;
+  // the opened type: the one shown and edited; the curves are of it and of
+  // the types added where it crosses walls
+  if (g.types.length > 1) {
+    const tsel = document.createElement("select");
+    tsel.id = "mm-base";
+    const added = new Set(cfg.extra || []);
+    g.types.forEach(t => {
+      const o = document.createElement("option");
+      o.value = t.id;
+      o.textContent = t.name + (added.has(t.id) ? " (added at a wall)" : "");
+      o.selected = t.id === cfg.base;
+      tsel.appendChild(o);
+    });
+    tsel.onchange = () => {
+      cfg.base = tsel.value; cfg.extra = [];
+      mmGuard(() => mmConfigChanged(true));
+    };
+    const tl = document.createElement("label");
+    tl.className = "mm-field"; tl.append("Opened type ", tsel);
+    body.appendChild(tl);
+  }
   const info = document.createElement("p");
   info.className = "muted mm-small";
   info.innerHTML = "Δ: " + g.ends.map(e => `${escapeHtml(e.name)} (${e.vec.join(", ")})`).join(", ") +
@@ -480,8 +517,7 @@ function mmPickPicture(body, g, cfg, setEvaluated, setLeg) {
 
   // the type drawn: the one shown large if it is in the group, else the first
   const ids = g.types.map(t => t.id);
-  const id = (MM.pre && MM.pre.preimages.length && ids.includes(MM.pre.preimages[0].type))
-    ? (MM.selected && ids.includes(MM.selected) ? MM.selected : MM.pre.preimages[0].type) : ids[0];
+  const id = ids.includes(cfg.base) ? cfg.base : ids[0];
   let data;
   try { data = api("render", id); } catch (e) { status.textContent = e.message; return; }
   const moving = mode === "move" && MM.moveFrom &&
@@ -627,8 +663,12 @@ function mmSlopeMarks(box, data, drawn, typeId) {
 // Changing the library from here: each change can be undone, and the result
 // sent to the main app (which offers to add it).
 function mmEdit(change, typeId) {
-  const before = MM.library;
+  const before = { library: MM.library, extra: [...(MM.config.extra || [])], edited: !!MM.edited };
   try { change(); } catch (e) { alert(e.message); return false; }
+  // the types added at the old type's walls belong to the old type
+  (MM.config.extra || []).forEach(id => { try { api("delete", id); } catch (e) { /* gone */ } });
+  MM.config.extra = [];
+  MM.edited = true;           // "Reset points" then looks for points through the new type
   MM.undo = MM.undo || [];
   MM.undo.push(before);
   if (MM.undo.length > 50) MM.undo.shift();
@@ -653,7 +693,7 @@ function mmLibraryChanged(typeId) {
   // the names are kept, so the group usually is too; if not, start afresh
   if (!MM.groups.some(g => g.key === MM.config.group)) {
     const g = MM.groups[0];
-    MM.config = mmDefaults(g) || { group: g.key, evaluated: [], legs: [], points: {} };
+    MM.config = mmDefaults(g) || { group: g.key, evaluated: [], legs: [], points: {}, base: g.types[0].id, extra: [] };
     mmGuard(() => mmConfigChanged(true));
   } else {
     try { mmConfigChanged(false); } catch (e) { mmGuard(() => mmConfigChanged(true)); }
@@ -662,9 +702,10 @@ function mmLibraryChanged(typeId) {
 }
 function mmUndo() {
   if (!MM.undo || !MM.undo.length) return;
-  const text = MM.undo.pop();
-  api("load", text);
-  mmLibraryChanged();
+  const st = MM.undo.pop();
+  api("load", typeof st === "string" ? st : st.library);
+  if (typeof st !== "string") { MM.config.extra = st.extra; MM.edited = st.edited; }
+  mmLibraryChanged(MM.config.base);
 }
 function mmEditBar() {
   const bar = document.createElement("div");
@@ -700,17 +741,39 @@ function mmStartPoints() {
 }
 function mmPointsMoved() {
   const st = MM.pointsStart, cfg = MM.config;
-  if (!st) return true;           // not known yet: let the button find out
+  if (!st || MM.edited) return true;      // unknown, or the type changed since
   return cfg.evaluated.some(m => !st[m] || st[m][0] !== cfg.points[m][0] || st[m][1] !== cfg.points[m][1]);
 }
 function mmResetPoints() {
+  if (MM.edited) { mmPointsThroughType(); return; }
   const start = mmStartPoints();
   if (!start) return;
+  MM.lastPre = null;          // a jump, not a move through walls
   MM.config.evaluated.forEach(m => { MM.config.points[m] = [...start[m]]; });
   MM.onWall = null; MM.onImage = null;      // the walls move with the points
   MM.frame = null;
   mmRenderSetup();
   mmSchedule({ regions: true });
+}
+
+// After the type was edited, the old starting points may have no curve of it
+// through them: choose points that do -- over the current point of M_0,5 when
+// the type has curves there, else a whole new starting point.
+function mmPointsThroughType() {
+  const cfg = MM.config;
+  const r = MM.m ? api("moduli_points_through", cfg, cfg.base, MM.m) : { points: null };
+  MM.lastPre = null;
+  MM.onWall = null; MM.onImage = null; MM.frame = null;
+  if (r.points) {
+    cfg.points = r.points;
+    MM.pointsStart = JSON.parse(JSON.stringify(r.points));
+    MM.edited = false;
+    mmRenderSetup();
+    mmSchedule({ regions: true });
+  } else {
+    mmConfigChanged(true);     // new points and a new point of M_0,5
+  }
+  mmAutosave();
 }
 
 // The same for the point of M_0,5: where the last starting point put it.
@@ -727,6 +790,7 @@ function mmResetM() {
   if (!start) return;
   mmPathPause();
   MM.m = JSON.parse(JSON.stringify(start));
+  MM.lastPre = null;          // a jump, not a move through walls
   MM.onWall = null; MM.onImage = null;
   if (MM.m.splits.length === 2) MM.lastCone = coneKey(MM.m.splits[0], MM.m.splits[1]);
   const before = (MM.cycle || []).join();
@@ -760,9 +824,47 @@ function mmDec(x, step) {
 function mmPreimage() {
   MM.pre = api("moduli_preimage", MM.config, MM.m);
   MM.m = MM.pre.m;
+  if (mmCrossWalls()) MM.pre = api("moduli_preimage", MM.config, MM.m);
+  MM.lastPre = { points: JSON.parse(JSON.stringify(MM.config.points)), m: MM.m,
+                 ids: MM.pre.preimages.filter(p => p.full).map(p => p.type) };
   const ids = MM.pre.preimages.map(p => p.type);
   if (!ids.includes(MM.selected)) MM.selected = ids[0] || null;
   if (MM.m.splits.length === 2) MM.lastCone = coneKey(MM.m.splits[0], MM.m.splits[1]);
+}
+
+// A curve that was over the last point and is not over this one left through
+// a wall: add the types on the wall and beyond it (the core builds them by
+// contracting the edge that shrank and resolving the vertex it leaves), and
+// work with them from now on. Returns whether any were added to the set.
+function mmCrossWalls() {
+  const last = MM.lastPre;
+  if (!last || !last.ids.length) return false;
+  const now = new Set(MM.pre.preimages.map(p => p.type));
+  const gone = last.ids.filter(id => !now.has(id));
+  if (!gone.length) return false;
+  const cfg = MM.config, before = cfg.types.length, notes = [];
+  gone.forEach(id => {
+    const r = api("moduli_cross", cfg, id, last.points, last.m, MM.m);
+    if (!r.edge) return;
+    r.types.forEach(t => { if (t !== cfg.base && !cfg.extra.includes(t)) cfg.extra.push(t); });
+    if (r.added.length) {
+      const nm = (MM.check.types.find(t => t.id === id) || {}).name || id;
+      notes.push(`crossed the wall where ${r.edge} of ${nm} shrinks to 0: added ${r.added.length} type${r.added.length === 1 ? "" : "s"}`);
+    }
+  });
+  if (notes.length) MM.crossNote = { text: notes.join("; "), at: Date.now() };
+  if (cfg.extra.length + 1 === before && !notes.length) return false;
+  // the library and the set grew: the rest follows
+  MM.library = api("save");
+  MM.groups = api("moduli_groups");
+  mmCandidates();
+  MM.check = api("moduli_check", { group: cfg.group, evaluated: cfg.evaluated, legs: cfg.legs, types: cfg.types });
+  mmRegions();
+  mmOverview(true);
+  // not while a finger is dragging: on a narrow screen the setup sits above
+  // the chart, and a taller setup would slide the chart under it
+  if (MM.dragging) MM.setupStale = true; else mmRenderSetup();
+  return true;
 }
 
 function mmRecomputeAll() {
@@ -925,9 +1027,12 @@ function mmDrawChart() {
       g.appendChild(tx);
       const tt = svgEl("title", {}); tt.textContent = "Turn the page: the other cone at " + mmRayName(rayOf(r));
       g.appendChild(tt);
-      const flip = ev => { ev.stopPropagation(); ev.preventDefault(); mmGuard(() => mmFlip(r)); };
-      g.addEventListener("pointerdown", flip);
-      g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") flip(ev); });
+      // a tap turns the page (the chart's own handlers tell a tap from a drag:
+      // a finger landing near the button would otherwise always hit it)
+      g.__flip = () => mmGuard(() => mmFlip(r));
+      g.addEventListener("keydown", ev => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); g.__flip(); }
+      });
       svg.appendChild(g);
     }
   });
@@ -1078,16 +1183,36 @@ function mmWireChart() {
     if (p.splits.length === 2) MM.lastCone = p.cone;
     mmSchedule({ pre: true, overview: true });
   };
+  // Down on a page-turner (⇄) is a tap until the pointer travels: lifted in
+  // place it turns the page, moved it drags the point like anywhere else.
+  let onFlip = null;
   svg.addEventListener("pointerdown", ev => {
     if (ev.button > 0) return;
     mmPathPause();
-    dragging = true;
+    dragging = MM.dragging = true;
     try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic */ }
     ev.preventDefault();
+    const flip = ev.target.closest && ev.target.closest(".mm-flip");
+    if (flip) { onFlip = { el: flip, x: ev.clientX, y: ev.clientY }; return; }
     mmGuard(() => moveTo(ev));
   });
-  svg.addEventListener("pointermove", ev => { if (dragging) mmGuard(() => moveTo(ev)); });
-  const end = () => { dragging = false; };
+  svg.addEventListener("pointermove", ev => {
+    if (!dragging) return;
+    if (onFlip) {
+      if (Math.hypot(ev.clientX - onFlip.x, ev.clientY - onFlip.y) < 8) return;
+      onFlip = null;
+    }
+    mmGuard(() => moveTo(ev));
+  });
+  const end = ev => {
+    if (onFlip && ev.type === "pointerup") onFlip.el.__flip();
+    onFlip = null;
+    dragging = MM.dragging = false;
+    MM.dragEndAt = Date.now();
+    // after the click a short touch drag still produces, so that click lands
+    // where the finger was, not on whatever a taller setup moved there
+    if (MM.setupStale) setTimeout(() => { MM.setupStale = false; mmGuard(mmRenderSetup); }, 350);
+  };
   svg.addEventListener("pointerup", end);
   svg.addEventListener("pointercancel", end);
 }
@@ -1231,6 +1356,7 @@ function mmDrawOverview() {
 }
 
 function mmJumpToCone(cone, a, b, ev) {
+  if (Date.now() - (MM.dragEndAt || 0) < 500) return;    // the tail of a drag, not a click
   const svg = document.getElementById("mm-overview");
   const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
   const q = pt.matrixTransform(svg.getScreenCTM().inverse());
@@ -1241,6 +1367,7 @@ function mmJumpToCone(cone, a, b, ev) {
   MM.onImage = null;
   MM.m = { splits: cone, lengths: [mmDec(s * (1 - t), MM.R / 2000), mmDec(s * t, MM.R / 2000)] };
   MM.lastCone = coneKey(cone[0], cone[1]);
+  MM.lastPre = null;          // a jump, not a move through walls
   if (!cycleCones(MM.cycle).includes(MM.lastCone)) {
     MM.cycle = null; mmEnsureCycle();
     mmSchedule({ regions: true });
@@ -1375,6 +1502,8 @@ function mmDrawGallery(now) {
         `dimension on the wall (${MM.onWall.name} with ${MM.onWall.edge} contracted) is not in the library, ` +
         "so it is not listed; the count is lower here than on either side.");
     }
+    if (MM.crossNote && Date.now() - MM.crossNote.at < 15000) notes.unshift("Just now: " + MM.crossNote.text + ".");
+    if ((MM.config.extra || []).length) notes.push(`${MM.config.extra.length} type${MM.config.extra.length === 1 ? "" : "s"} added at walls so far.`);
     document.getElementById("mm-notes").textContent = notes.join(" ");
     pre.preimages.forEach((p, i) => {
       const card = document.createElement("button");

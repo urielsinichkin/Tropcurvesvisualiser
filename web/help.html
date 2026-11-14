@@ -778,11 +778,22 @@ library that share a degree Δ and markings — points of one moduli space M<sub
 <span class="btn">Moduli map…</span> among the type's actions, opens it with <strong>that type alone</strong>;
 <span class="btn">Moduli map…</span> in the top bar opens it with the whole library. It can also be opened
 directly, and remembers its own session.</p>
+<p><strong>The opened type and the types it meets.</strong> The page works with <em>one</em> type, the
+<em>opened type</em> — the one in the setup picture, which edits change — and the types it meets at walls; other
+types of the library are left out of the curves. When the point (or a point you drag in the plane) takes a curve
+across a wall, the edge that shrank to 0 is contracted and the vertex of valence 4 it leaves is resolved the other
+ways, with the main app's own operations: the type on the wall (<em>T / e</em>) and the types beyond it
+(<em>T ⇄ e</em>) are added to the page's library and shown at once, so the curves carry on (with the same weighted
+count). A type already in the library is reused. A note under the curves says what was added. Editing the opened
+type removes the types added at its old walls (<span class="btn">↶ Undo</span> brings them back); <span
+class="btn">Send to main app</span> takes them all to the main app.</p>
 
 <h3 id="moduli-setup">18.1 Setup</h3>
 <ul>
   <li><strong>Types</strong> — the groups of the library: types with the same ends (names and directions)
       and the same marking names. Pick one. The line under it lists Δ, the markings and the dimension.</li>
+  <li><strong>Opened type</strong> (when the group has several) — the type to work with; types added at walls
+      are marked so.</li>
   <li><strong>The picture</strong> — a type of the group, on which you choose by clicking (or tapping):
     <ul>
       <li><span class="btn">Legs of M₀,₅</span>: click ends and markings to make them legs, or not —
@@ -816,7 +827,9 @@ directly, and remembers its own session.</p>
       <span class="btn">Reset M₀,₅ point</span> (also <span class="btn">Reset point</span> above the chart) does the
       same for the point of M<sub>0,5</sub>, leaving the points in the plane.
       <span class="btn">New starting point</span> picks points and a point of M<sub>0,5</sub> that have a curve
-      over them.</li>
+      over them. After an edit of the type the old points may have no curve of it through them, so then
+      <span class="btn">Reset points</span> chooses new points that do, over the current point of
+      M<sub>0,5</sub> (or, when the type has no curve over it, a whole new starting point).</li>
   <li><strong>… full-dimensional types, … others</strong> — every type of the group: its multiplicity and cone,
       or, for the others, <em>why</em> it is not full-dimensional, in words:
     <ul>
