@@ -267,9 +267,9 @@ const HELP = {
         <li><b>Markings</b> — click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.</li>
         <li><b>Legs of M₀,₅</b> — click five ends or markings (thick / ringed in green).</li>
         <li><b>Evaluated</b> — click the markings fixed at points of the plane (orange squares).</li>
-        <li><b>Same point</b> — click two markings to make them one point of the plane (green rings): they go to one vertex, which needs more other edges than markings. Click a linked marking to free it.</li>
+        <li><b>Same point</b> — click two markings to require them to be one point of the plane (green rings), e.g. on two edges that cross: the walk is then on the cycle where they agree. Click a linked marking to free it.</li>
         <li><b>Slopes</b> — click an end (violet), then a dependent end (dashed orange), type the new direction and <b>Apply</b>; the dependent end absorbs the change.</li>
-        <li>The line under the picture says what is still needed: |Δ| + n − 1 − Σ|g| = 2k + 2 for k distinct points (g: the groups of one point), and the map must be invertible on the type (else it says why). Then <b>Start →</b>.</li>
+        <li>The line under the picture says what is still needed: |Δ| + n − 1 = 2k + 2, and the map must be invertible on the type (else it says why). Then <b>Start →</b>.</li>
         <li>The picture zooms (wheel / pinch).</li>
       </ul>`,
   },

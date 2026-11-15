@@ -374,21 +374,26 @@ edge is short and every length positive. A wall type is drawn by solving its
 
 **One point for several markings.** Groups of evaluated markings may be
 required to be one point of the plane (`same`, a trailing argument of every
-`moduli_*` call). On the abstract curve markings can coincide only at a
-vertex, so a group must sit at one vertex, and every vertex must keep
-strictly more other edges than markings (`crowded_vertices`; the page's
-`moduli_add_marking` and `moduli_link` refuse to break it). Such a vertex is
-a point of the type's cell, not a degree of freedom: a group of `g` markings
-costs `g` dimensions, so the cell has dimension `|Delta| + n - 1 - sum g`,
-and the group is evaluated once (`TypeMap.ev_names`: the first of each
-group), giving `k` distinct points with `|Delta| + n - 1 - sum g = 2k + 2`.
-`explain` adds two reasons, checked first: *apart* (a group at different
-vertices -- the regenerations that separate a group) and *crowded*; both
-make a type not full-dimensional, so those regenerations cannot be entered.
-`moduli_start` gives every member of a group the same point. On the page,
-the **Same point** mode links two markings (the first clicked moves to the
-second's vertex, or the other way when there is no room there; a third can
-join), rings them green and keeps the groups in the saved state.
+`moduli_*` call). The domain is then the cycle where their evaluations agree
+(the pullback of the diagonal), taken as the closure of its part in the
+top-dimensional cells: on a type's cell the linear space `E z = 0` (`E`: the
+differences of the ev rows of each marking and the first of its group, two
+per marking), and the codomain the diagonal of the points. Both lose 2 per
+such marking, so the count stays `|Delta| + n - 1 = 2k + 2`, and the map on
+the cycle is invertible exactly when `A = [ev; ft]` is (`E` is a combination
+of ev rows); its multiplicity is `|det A|` (the pullback weight times the
+degree onto the diagonal). A type counts only if its open cell meets the
+space -- some positive lengths with `E l = 0` -- decided by
+`positive_kernel_point` (exact phase-one simplex on `l >= 1`, the set being a
+cone, then a small step along the kernel off the faces `l = 1`); that point
+is also where the walk starts, so the group's points are equal. Otherwise
+`explain` says the markings are never one point there (kind `apart`), and at
+a wall those regenerations cannot be entered. The walk itself is unchanged:
+with the group's points equal, `A^{-1}(p, a, b)` stays on the space. On the
+page, the **Same point** mode links two markings (only the choice; the type
+is not changed), rings them green and keeps the groups in the saved state.
+Markings on a vertex are still limited by `moduli_add_marking` to fewer than
+the vertex's other edges.
 
 **Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
 handing the cells to the page) or pasted cells; markings put on and taken off

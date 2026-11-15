@@ -274,86 +274,101 @@ def test_removing_a_marking_merges_its_point_back_into_the_edge():
 
 
 SQUARE = [[[0, 0], [1, 0], [0, 1]], [[1, 0], [1, 1], [0, 1]]]
-ONE = [["x1", "x2"]]
 
 
-def _linked():
-    """The square's curve with x1 and x2 together at a vertex (one point) and
-    x3 inside the end l1."""
+def test_a_vertex_carries_fewer_markings_than_other_edges():
     s = Session()
     nid = s.add_from_subdivision(SQUARE, "drawn")["id"]
     c = s.ws.nodes[nid].curve
     v = next(v for v in c.vertices if c.valence(v) >= 3)
     s.moduli_add_marking(nid, v)
     s.moduli_add_marking(nid, v)
-    s.add_marking_on_edge(nid, "l1" if "l1" in c.edges else next(e.id for e in c.ends if e.name == "l1"), "", "")
+    with pytest.raises(ValueError, match="at most 2"):
+        s.moduli_add_marking(nid, v)                 # 3 other edges: two markings at most
+
+
+def test_positive_kernel_point():
+    # l1 = l2 and l2 + l3 = 2 l4, all positive
+    E = [[1, -1, 0, 0], [0, 1, 1, -2]]
+    l = moduli.positive_kernel_point(E, 4)
+    assert all(x > 0 for x in l)
+    assert all(sum(Fraction(a) * x for a, x in zip(r, l)) == 0 for r in E)
+    # l1 = -l2 has no positive solution
+    assert moduli.positive_kernel_point([[1, 1, 0]], 3) is None
+    assert moduli.positive_kernel_point([[1, 0, -1], [0, 0, 1]], 3) is None
+
+
+# The 2x2 square cut by an inner parallelogram: a rational curve with 8 ends
+# whose image crosses itself where e1 meets the end l3.
+CROSS = [[[0, 0], [1, 0], [0, 1]], [[1, 0], [2, 0], [1, 1], [0, 1]], [[2, 0], [2, 1], [1, 1]],
+         [[1, 1], [2, 1], [1, 2]], [[2, 1], [2, 2], [1, 2]], [[0, 1], [1, 1], [0, 2]],
+         [[1, 1], [1, 2], [0, 2]]]
+MARKS5 = ["x1", "x2", "x3", "x4", "x5"]
+LEGS5 = ["l1", "l2", "l3", "l4", "l5"]
+ONE = [["x1", "x2"]]
+
+
+def _crossing(on=("e1", "l3", "e4", "e7", "l5")):
+    s = Session()
+    nid = s.add_from_subdivision(CROSS, "drawn")["id"]
+    for name in on:
+        c = s.ws.nodes[nid].curve
+        s.add_marking_on_edge(nid, next(e.id for e in c.edges.values() if e.name == name), "", "")
     return s, nid
 
 
-def test_a_vertex_carries_fewer_markings_than_other_edges():
-    s, nid = _linked()
-    c = s.ws.nodes[nid].curve
-    v = c.edges[next(e.id for e in c.markings if e.name == "x1")].tail
-    with pytest.raises(ValueError, match="at most 2"):
-        s.moduli_add_marking(nid, v)                 # 3 other edges: two markings at most
-    # x3 sits inside an end: 2 other edges, room for no second marking
-    with pytest.raises(ValueError, match="room for one marking only"):
-        s.moduli_link(nid, "x3", "x1")
-    with pytest.raises(ValueError, match="3 other edges and already 2 markings"):
-        s.moduli_link(nid, "x1", "x3")
-    assert moduli.crowded_vertices(c) == []
+def _at(view, name):
+    return next(m["at"] for m in view["picture"]["markings"] if m["name"] == name)
 
 
-def test_markings_that_are_one_point_are_evaluated_once():
-    s, nid = _linked()
-    legs = ["l1", "l2", "l3", "l4", "x3"]
-    out = s.moduli_check(nid, ["x1", "x2"], legs, ONE)
-    # |Delta| + n - 1 - |group| = 4 + 3 - 1 - 2 = 4 = 2 * 1 + 2: one point
-    assert out["ok"] and out["dim"] == 4 and out["target"] == 4 and out["full"]
-    # without the declaration the two rows coincide: the points are tied
-    tied = s.moduli_check(nid, ["x1", "x2"], legs)
-    assert not tied["full"] and tied["why"]["kind"] in ("points", "lower")
-    st = s.moduli_start(nid, ["x1", "x2"], legs, ONE)
+def test_points_required_to_be_one_cut_both_sides_by_two():
+    s, nid = _crossing()
+    out = s.moduli_check(nid, MARKS5, LEGS5, ONE)
+    # 8 ends, 5 markings: 12 = 2*5 + 2; on the cycle x1 = x2, 10 = 2*4 + 2
+    assert out["ok"] and out["dim"] == 12 and out["target"] == 12
+    assert out["cycle_dim"] == 10 and out["cycle_target"] == 10
+    assert out["full"] and out["multiplicity"] == 1
+    st = s.moduli_start(nid, MARKS5, LEGS5, ONE)
     assert st["points"]["x1"] == st["points"]["x2"]
-    v = s.moduli_view(nid, ["x1", "x2"], legs, st["points"], st["m"], 20, ONE)
-    at = {m["name"]: m["at"] for m in v["picture"]["markings"]}
-    assert at["x1"] == pytest.approx(at["x2"])
-    assert at["x1"] == pytest.approx([float(Fraction(x)) for x in st["points"]["x1"]])
+    v = s.moduli_view(nid, MARKS5, LEGS5, st["points"], st["m"], 30, ONE)
+    assert v["full"] and all(Fraction(x) > 0 for x in v["lengths"].values())
+    # x1 and x2 lie on different edges of the abstract curve, at one point of the plane
+    assert _at(v, "x1") == pytest.approx(_at(v, "x2"))
+    assert v["region"]["walls"]
 
 
-def test_one_point_must_be_one_vertex():
-    s, nid = _linked()
-    legs = ["l1", "l2", "l3", "l4", "x1"]
-    out = s.moduli_check(nid, ["x2", "x3"], legs, [["x2", "x3"]])
-    assert not out["full"] and out["why"]["kind"] == "apart"
-    # linking moves the second onto the first's vertex, when there is room
-    s2 = Session()
-    nid2 = s2.add_from_subdivision(SQUARE, "drawn")["id"]
-    c = s2.ws.nodes[nid2].curve
-    v = next(v for v in c.vertices if c.valence(v) >= 3)
-    s2.moduli_add_marking(nid2, v)                                  # x1 at a vertex
-    s2.add_marking_on_edge(nid2, next(e.id for e in c.ends if e.name == "l3"), "", "")   # x2 on l3
-    s2.moduli_link(nid2, "x1", "x2")
-    c = s2.ws.nodes[nid2].curve
-    by = {e.name: e for e in c.markings}
-    assert by["x1"].tail == by["x2"].tail == v
-    assert moduli.crowded_vertices(c) == []
-    c.validate()
+def test_markings_whose_images_never_meet():
+    # x1 inside l1 and x2 inside l2: two ends leaving one vertex never meet again
+    s, nid = _crossing(("l1", "l2", "e4", "e7", "l5"))
+    t = moduli.TypeMap(nid, "", s.ws.nodes[nid].curve, MARKS5, LEGS5, ONE)
+    assert not t.meets and not t.full
+    why = s.moduli_check(nid, MARKS5, LEGS5, ONE)["why"]
+    assert why["kind"] == "apart" and "never one point" in why["reason"]
+    # the same markings, not linked, are fine
+    assert moduli.TypeMap(nid, "", s.ws.nodes[nid].curve, MARKS5, LEGS5).meets
 
 
-def test_regenerations_keep_one_point_together():
-    s, nid = _linked()
-    legs = ["l1", "l2", "l3", "l4", "x3"]
-    c = s.ws.nodes[nid].curve
-    v = c.edges[next(e.id for e in c.markings if e.name == "x1")].tail
-    e = next(e.id for e in c.incident(v) if e.kind.value == "bounded")
-    wall = s.moduli_wall(nid, e, ["x1", "x2"], legs, ONE)
-    regs = wall["regenerations"]
-    assert sum(r["back"] for r in regs) == 1
-    kinds = set()
-    for r in regs:
+def test_the_walk_stays_on_the_cycle():
+    s, nid = _crossing()
+    st = s.moduli_start(nid, MARKS5, LEGS5, ONE)
+    v = s.moduli_view(nid, MARKS5, LEGS5, st["points"], st["m"], 30, ONE)
+    w = v["region"]["walls"][0]
+    target = [str((Fraction(a) + Fraction(b)) / 2 * 2 - Fraction(c))
+              for a, b, c in zip(w["from"], w["to"], v["coords"])]       # across the wall's middle
+    out = s.moduli_move(nid, MARKS5, LEGS5, st["points"], v["coords"], target, ONE)
+    assert out["wall"]
+    wall = s.moduli_wall(nid, out["wall"]["edge"], MARKS5, LEGS5, ONE)
+    entered = 0
+    for r in wall["regenerations"]:
         if not r["full"]:
             assert r["why"]
-            kinds.add("apart" if "different vertices" in r["why"] else
-                      "crowded" if "as many markings" in r["why"] else "other")
-    assert "apart" in kinds          # the resolutions taking x1 and x2 apart cannot be entered
+            continue
+        res = s.moduli_regenerate(wall["wall_id"], wall["vertex"], r["index"], MARKS5, LEGS5,
+                                  st["points"], out["m"], 10, ONE)
+        if not res.get("m"):
+            continue
+        entered += 1
+        nv = s.moduli_view(res["id"], MARKS5, LEGS5, st["points"], res["m"], 30, ONE)
+        assert all(Fraction(x) > 0 for x in nv["lengths"].values())
+        assert _at(nv, "x1") == pytest.approx(_at(nv, "x2"))
+    assert entered >= 1

@@ -772,15 +772,17 @@ type. The page shows all this, exactly.</p>
       <li><span class="btn">Legs of M₀,₅</span>: click five ends or markings; they are drawn thick, or ringed, in
           the accent colour.</li>
       <li><span class="btn">Evaluated</span>: click the markings to fix at points of the plane (orange squares).</li>
-      <li><span class="btn">Same point</span>: make evaluated markings one point of the plane. Click a marking, then
-          the marking it is to be one point with (green rings; both become evaluated, and a third can join). On the
-          abstract curve they must sit at one vertex — one of them moves to the other's — and a vertex can carry
-          markings only while it has <em>more</em> other edges than markings (a trivalent vertex two, a point
-          inside an edge one), so put the first on a vertex of the curve. Click a linked marking to free it. A
-          group of g markings at a vertex takes g dimensions and gives one point, so the count becomes
-          |Δ| + n − 1 − Σ g = 2k + 2 with k the number of distinct points. On the walk, the regenerations that
-          would take the markings of a group to different vertices (or crowd a vertex) cannot be entered; their
-          icons say why.</li>
+      <li><span class="btn">Same point</span>: require evaluated markings to be one point of the plane. Click a
+          marking, then the marking it is to be one point with (green rings; both become evaluated, and a third can
+          join). Click a linked marking to free it. The markings stay where they are on the type: typically on two
+          edges whose images cross, the crossing being the common point. The walk is then on the
+          <em>cycle</em> where their evaluations agree — in each type, the curves with those markings at one point
+          — and the points are fixed on the diagonal (one point for the group). Both sides lose 2 dimensions for
+          each marking beyond the first of its group, so the count stays |Δ| + n − 1 = 2k + 2 with k the
+          evaluated markings, and the line under the picture also gives the cycle's dimension. Only types with
+          curves (every length positive) having those markings at one point count; for the others, and for the
+          regenerations into them at a wall, it says that the markings are never one point there.</li>
+
       <li><span class="btn">Slopes</span>: change an end's direction, as <a href="#slope">Edit end slope</a> in the
           main app. Click the end to change (violet), then another end to be the <em>dependent</em> one (dashed
           orange; it absorbs the change, so the curve stays balanced — the next end is taken if you do not choose),

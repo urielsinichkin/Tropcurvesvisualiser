@@ -180,8 +180,8 @@ function mwDrawType() {
     legs: "Click ends and markings: the five legs whose tree is the point of M₀,₅.",
     points: "Click markings to fix them at points of the plane.",
     same: MW.linkFrom
-      ? `Click the marking ${MW.linkFrom} is to be one point with (one of them moves to the other's vertex).`
-      : "Click two markings to make them one point of the plane: they go to one vertex, which must have more other edges than markings. Click a linked marking to free it.",
+      ? `Click the marking ${MW.linkFrom} is to be one point of the plane with.`
+      : "Click two markings to require them to be one point of the plane (e.g. on two edges that cross). Click a linked marking to free it.",
     slopes: MW.slope && MW.slope.edit
       ? "Click another end to be the dependent one (it absorbs the change), type the new direction, and Apply."
       : "Click the end whose direction to change. The bounded edges follow by balancing.",
@@ -266,8 +266,7 @@ function mwDrawType() {
         }
       } else if (mode === "same") {
         if (t.kind !== "mark") return;
-        try { mwLinkClick(t.marking.name); }
-        catch (e) { alert("Cannot: " + e.message); }
+        mwLinkClick(t.marking.name);
       } else {
         if (t.kind === "edge" && mode !== "legs") return;
         const name = t.kind === "edge" ? t.edge.name : t.marking.name;
@@ -284,9 +283,10 @@ function mwDrawType() {
   mwCheck(names);
 }
 
-// "Same point": groups of evaluated markings fixed at one point of the plane.
-// On the abstract curve they sit at one vertex, which must keep more other
-// edges than markings (moduli_link moves one onto the other's vertex).
+// "Same point": groups of evaluated markings required to be one point of the
+// plane. The walk is then on the cycle where their evaluations agree: in each
+// type, the curves with those markings at one point (on different edges whose
+// images cross, say), mapping to the points with those points equal.
 const SAME_COLOR = "#2ca02c";
 const mwGroupOf = name => MW.same.find(g => g.includes(name)) || null;
 const mwSameText = () => MW.same.map(g => g.join(" = ")).join(", ");
@@ -306,13 +306,6 @@ function mwLinkClick(name) {
   }
   MW.linkFrom = null;
   if (from === name) return;
-  // the first one moves to the second's vertex; if there is no room there,
-  // the other way round (unless the second is already one point with others)
-  try { api("moduli_link", MW.base, name, from); }
-  catch (e) {
-    if (mwGroupOf(name)) throw e;
-    try { api("moduli_link", MW.base, from, name); } catch (e2) { throw e; }
-  }
   [from, name].forEach(n => { if (!MW.evaluated.includes(n)) MW.evaluated.push(n); });
   const ga = mwGroupOf(from), gb = mwGroupOf(name);
   const merged = [...new Set([...(gb || [name]), ...(ga || [from])])];
@@ -377,23 +370,20 @@ function mwCheck(names) {
   const el = document.getElementById("mw-check"), go = document.getElementById("mw-start");
   el.className = "status warn";
   go.disabled = true;
-  // |Δ| + n − 1 − Σ|g| = 2k + 2 for k distinct points (a group of g markings
-  // at one vertex costs g dimensions and gives one point)
-  const tied = MW.same.reduce((s, g) => s + g.length, 0);
+  // |Δ| + n − 1 = 2k + 2. Markings required to be one point cut both sides
+  // by 2 for each beyond the first of its group: the cycle where they agree
+  // and the diagonal of the points.
   const extra = MW.same.reduce((s, g) => s + g.length - 1, 0);
-  const need = (names.ends.length + names.marks.length - 3 - tied) / 2;   // distinct points needed
-  const have = MW.evaluated.length - extra;
+  const need = (names.ends.length + names.marks.length - 3) / 2;    // evaluated markings needed
+  const have = MW.evaluated.length;
   if (MW.legs.length !== 5) { el.textContent = `Choose ${5 - MW.legs.length} more leg${5 - MW.legs.length === 1 ? "" : "s"}.`; return; }
   if (!Number.isInteger(need)) {
     el.textContent = `With ${names.ends.length} ends and ${names.marks.length} markings the dimensions cannot match: add or take off one marking.`;
     return;
   }
   if (have !== need) {
-    const law = tied ? "|Δ| + n − 1 − Σ|g| = 2k + 2" : "|Δ| + n − 1 = 2k + 2";
-    const free = names.marks.length - extra;
-    el.textContent = `Fix ${need} point${need === 1 ? "" : "s"} (${law}), now ${have}` +
-      (extra ? ` (${MW.evaluated.length} evaluated markings, ${mwSameText()})` : "") +
-      (free < need ? `: add ${need - free} more marking${need - free === 1 ? "" : "s"} first.` : ".");
+    el.textContent = `Evaluate ${need} marking${need === 1 ? "" : "s"} (|Δ| + n − 1 = 2k + 2), now ${have}` +
+      (names.marks.length < need ? `: add ${need - names.marks.length} more marking${need - names.marks.length === 1 ? "" : "s"} first.` : ".");
     return;
   }
   let out;
@@ -405,8 +395,9 @@ function mwCheck(names) {
     return;
   }
   el.className = "status";
-  el.textContent = `dim ${out.dim} = 2·${have} + 2 ✓ — multiplicity ${out.multiplicity}` +
-    (MW.same.length ? ` (one point: ${mwSameText()})` : "");
+  el.textContent = (extra
+    ? `on the cycle where ${mwSameText()}: dim ${out.dim} − ${2 * extra} = ${out.cycle_dim} = 2·${have - extra} + 2 ✓`
+    : `dim ${out.dim} = 2·${have} + 2 ✓`) + ` — multiplicity ${out.multiplicity}`;
   go.disabled = false;
 }
 

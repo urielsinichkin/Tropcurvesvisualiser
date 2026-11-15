@@ -165,23 +165,28 @@ class TypeMap:
         self.index = {e.id: i + 2 for i, e in enumerate(self.bounded)}
         self.n = len(self.bounded) + 2
         by_name = {e.name: e for e in curve.edges.values() if e.kind is not EdgeKind.BOUNDED}
-        # markings declared to be one point: on the abstract curve they meet at
-        # a vertex, so they map to one point and it is evaluated once (by the
-        # first of the group); a group whose markings are apart is noted
-        self.groups = [list(g) for g in same if len(g) >= 2]
-        first = {m: g[0] for g in self.groups for m in g}
-        self.apart = [g for g in self.groups
-                      if len({by_name[m].tail for m in g if m in by_name}) > 1]
-        self.crowded = crowded_vertices(curve)
-        self.ev_names = [m for m in evaluated if first.get(m, m) == m]
+        self.ev_names = list(evaluated)
         rows: List[List[int]] = []
+        ev_row = {}
         for m in self.ev_names:
             e = by_name.get(m)
             if e is None or e.kind is not EdgeKind.MARKING:
                 raise ValueError(f"{name}: no marking named {m!r}")
-            for kind in ("x", "y"):
-                rows.append(row_of(curve, self.root, self.index, {"kind": kind, "marking": e.id}))
+            ev_row[m] = [row_of(curve, self.root, self.index, {"kind": kind, "marking": e.id})
+                         for kind in ("x", "y")]
+            rows += ev_row[m]
         self.ev_rows = rows
+        # groups of evaluated markings required to be one point of the plane:
+        # the domain is the cycle where their evaluations agree, on this cell
+        # the linear space E z = 0 (two rows per marking after the first of
+        # its group), and the codomain the matching diagonal. Only the part of
+        # the cell's interior on that space counts (the closure of the top
+        # cells' loci), so the type counts if some positive lengths put the
+        # markings of every group at one point (``meets``).
+        self.groups = [[m for m in g if m in ev_row] for g in same]
+        self.groups = [g for g in self.groups if len(g) >= 2]
+        self.equal_rows = [[a - b for a, b in zip(ev_row[m][i], ev_row[g[0]][i])]
+                           for g in self.groups for m in g[1:] for i in (0, 1)]
         leg_edges = []
         for l in legs:
             if l not in by_name:
@@ -201,8 +206,10 @@ class TypeMap:
         self.matrix = self.ev_rows + [self.splits[s] for s in self.cone]
         square = len(self.matrix) == self.n
         self.det = abs(determinant(self.matrix)) if square else None
-        self.full = bool(square and self.det and len(self.cone) == 2
-                         and not self.apart and not self.crowded)
+        self.lengths_on = positive_kernel_point([r[2:] for r in self.equal_rows], self.n - 2) \
+            if self.equal_rows else None
+        self.meets = not self.equal_rows or self.lengths_on is not None
+        self.full = bool(square and self.det and len(self.cone) == 2 and self.meets)
         self.inv = inverse(self.matrix) if self.full else None
 
     def _tail_side(self, e) -> set:
@@ -264,22 +271,17 @@ def explain(t: TypeMap, evaluated: Sequence[str], legs: Sequence[str]) -> Option
     k2 = len(t.ev_rows)
     target = k2 + 2
     pnames = [f"{c}({m})" for m in t.ev_names for c in "xy"]
-    if t.apart:
-        g = t.apart[0]
-        return {"kind": "apart",
-                "reason": f"{' and '.join(g)} are to be one point, but they sit at different vertices "
-                          f"(on the abstract curve, markings meet only at a vertex)"}
-    if t.crowded:
-        marks = sorted(e.name for e in t.curve.incident(t.crowded[0]) if e.kind is EdgeKind.MARKING)
-        return {"kind": "crowded",
-                "reason": f"the vertex of {', '.join(marks)} carries as many markings as other edges "
-                          f"(a vertex needs more edges than markings)"}
     ray = lambda sp: "{" + legs[sp[0]] + "," + legs[sp[1]] + "}"
     if t.n < target:
         return {"kind": "lower",
                 "reason": f"its cell has dimension {t.n}, less than {target}: it is a type of lower "
                           f"dimension, which only appears on walls (where an edge of a full-dimensional "
                           f"type shrinks to 0)"}
+    if not t.meets:
+        which = " and ".join(" = ".join(g) for g in t.groups)
+        return {"kind": "apart",
+                "reason": f"on curves of this type {which} are never one point of the plane (with every "
+                          f"length positive), so the type is not in the cycle where they are"}
     # the points tied together: lambda . ev = 0
     if k2:
         lk = _nullspace(_transpose(t.ev_rows, k2, t.n), k2)
@@ -349,36 +351,79 @@ def _cone_coords(cone: Cone, m_cone: Cone, m_lengths: List[Fraction]) -> Optiona
     return out
 
 
-# --- markings at a vertex ----------------------------------------------------
-def crowded_vertices(curve: Curve) -> List[str]:
-    """Vertices carrying at least as many markings as other edges: on the
-    abstract curve markings meet only at a vertex, which needs strictly more
-    other edges than markings."""
-    out = []
-    for v in curve.vertices:
-        inc = curve.incident(v)
-        marks = sum(1 for e in inc if e.kind is EdgeKind.MARKING)
-        if marks and marks >= len(inc) - marks:
-            out.append(v)
-    return out
+# --- a point of the cell on the equal-points space -----------------------------
+def positive_kernel_point(E: List[List[Any]], m: int) -> Optional[List[Fraction]]:
+    """Lengths l > 0 with E l = 0, or None if there are none -- a generic
+    such point (exact). The set is a cone, so l > 0 can be taken as l >= 1:
+    phase one of the simplex method (Bland's rule) on E s = -E 1, s >= 0,
+    then a small step along the kernel of E, off the faces where l = 1."""
+    rows = [[Fraction(x) for x in r] for r in E if any(r)]
+    if m == 0:
+        return [] if not rows else None
+    b = [-sum(r, Fraction(0)) for r in rows]
+    for i in range(len(rows)):
+        if b[i] < 0:
+            rows[i] = [-x for x in rows[i]]; b[i] = -b[i]
+    k = len(rows)
+    # tableau: s (m columns), artificials (k columns), right-hand side
+    T = [rows[i] + [Fraction(int(i == j)) for j in range(k)] + [b[i]] for i in range(k)]
+    basis = [m + i for i in range(k)]
+    cost = [Fraction(0)] * m + [Fraction(1)] * k + [Fraction(0)]
+    def reduced():
+        red = cost[:]
+        for i, bi in enumerate(basis):
+            if cost[bi]:
+                red = [x - cost[bi] * y for x, y in zip(red, T[i])]
+        return red
+    while True:
+        red = reduced()
+        enter = next((j for j in range(m + k) if red[j] < 0), None)
+        if enter is None:
+            break
+        ratios = [(T[i][-1] / T[i][enter], basis[i], i) for i in range(k) if T[i][enter] > 0]
+        if not ratios:
+            break
+        _, _, r = min(ratios)
+        piv = T[r][enter]
+        T[r] = [x / piv for x in T[r]]
+        for i in range(k):
+            if i != r and T[i][enter]:
+                f = T[i][enter]
+                T[i] = [x - f * y for x, y in zip(T[i], T[r])]
+        basis[r] = enter
+    if any(T[i][-1] != 0 for i, bi in enumerate(basis) if bi >= m):
+        return None
+    l = [Fraction(1)] * m
+    for i, bi in enumerate(basis):
+        if bi < m:
+            l[bi] += T[i][-1]
+    # off the special faces: along the kernel of E, keeping every length >= 1/2
+    d = [Fraction(0)] * m
+    for i, v in enumerate(_nullspace(rows, m) if rows else
+                          [[Fraction(int(a == c)) for a in range(m)] for c in range(m)]):
+        c = Fraction(1, 3 + 2 * i)
+        d = [x + c * y for x, y in zip(d, v)]
+    lim = min([(l[e] - Fraction(1, 2)) / -d[e] for e in range(m) if d[e] < 0] + [Fraction(1)])
+    return [l[e] + lim / 2 * d[e] for e in range(m)]
 
 
 # --- the setup ----------------------------------------------------------------
 def check(t: TypeMap) -> Dict[str, Any]:
     """Do the dimensions match, and is the map invertible on the cell?"""
     c = t.curve
-    # |Delta| + n - 3 + 2; a group of markings that are one point sits at a
-    # vertex of the curve (it needs more edges than markings), which costs one
-    # dimension for its first marking and one for each other (determined)
-    dim = len(c.ends) + len(c.markings) - 1 - sum(len(g) for g in t.groups)
+    # |Delta| + n - 3 + 2 = 2k + 2. Points required to be one cut both sides
+    # by 2 each: the cycle where they agree, and the diagonal it maps to.
+    dim = len(c.ends) + len(c.markings) - 1
     target = len(t.ev_rows) + 2
     k = len(t.ev_rows) // 2
+    cut = len(t.equal_rows)
     msg = ""
     if dim != target:
         msg = (f"The moduli space has dimension {dim} but (R²)^{k} × M₀,₅ has {target}: "
                + ("evaluate more markings, or add markings and evaluate them."
                   if dim > target else "evaluate fewer markings, or add markings."))
     return {"ok": dim == target, "dim": dim, "target": target, "message": msg,
+            "cycle_dim": dim - cut, "cycle_target": target - cut,
             "full": t.full, "multiplicity": int(t.det) if t.det is not None else None}
 
 
@@ -397,7 +442,12 @@ def skeleton(t: TypeMap) -> Dict[str, int]:
 def start(t: TypeMap) -> Tuple[List[Fraction], List[Fraction]]:
     """Points and lengths in M_0,5 of the type's curve at generic lengths
     (root at the origin)."""
-    z = [Fraction(0), Fraction(0)] + [Fraction(1) + Fraction(i + 1, 7 + i) for i in range(t.n - 2)]
+    if t.equal_rows:            # a point of the cell where the groups are one point each
+        if t.lengths_on is None:
+            raise ValueError("this type has no curve with those markings at one point")
+        z = [Fraction(0), Fraction(0)] + list(t.lengths_on)
+    else:
+        z = [Fraction(0), Fraction(0)] + [Fraction(1) + Fraction(i + 1, 7 + i) for i in range(t.n - 2)]
     img = [sum((Fraction(r[j]) * z[j] for j in range(t.n)), Fraction(0)) for r in t.matrix]
     k2 = len(t.ev_rows)
     return img[:k2], img[k2:]
