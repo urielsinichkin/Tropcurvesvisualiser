@@ -468,7 +468,8 @@ class Session:
     # Every call names the type, the evaluated markings and the five legs;
     # points are {marking: [x, y]} and a point of M_0,5 is {splits, lengths}
     # (rationals as strings, see ``moduli.point_json``).
-    # ``same`` lists groups of evaluated markings that are one point.
+    # ``same`` lists groups of evaluated markings required to be one point of
+    # the plane: the walk is then on the cycle where their evaluations agree.
     def _walk_map(self, node_id: str, evaluated: List[str], legs: List[str],
                   same: Optional[List[List[str]]] = None) -> "moduli.TypeMap":
         n = self.ws.nodes[node_id]
@@ -479,8 +480,9 @@ class Session:
     @staticmethod
     def _walk_points(t: "moduli.TypeMap", evaluated: List[str], points: Dict[str, Any]) -> List[Fraction]:
         out: List[Fraction] = []
+        first = {m: g[0] for g in t.groups for m in g}
         for m in t.ev_names:
-            xy = points.get(m)
+            xy = points.get(first.get(m, m))
             if xy is None:
                 raise ValueError(f"no point given for {m!r}")
             out += [Fraction(str(xy[0])), Fraction(str(xy[1]))]
@@ -496,30 +498,6 @@ class Session:
             raise ValueError(f"this vertex has {len(inc) - marks} other edges, so it can carry at most "
                              f"{len(inc) - marks - 1} marking{'s' if len(inc) - marks - 1 != 1 else ''}")
         return self.add_marking(node_id, vertex)
-
-    def moduli_link(self, node_id: str, keep: str, move: str) -> Dict[str, Any]:
-        """Make two markings (by name) one point: ``move`` goes to the vertex
-        of ``keep`` (if not there already), when that vertex can carry it."""
-        c = self.ws.nodes[node_id].curve
-        by = {e.name: e for e in c.markings}
-        if keep not in by or move not in by:
-            raise ValueError("both must be markings")
-        a, b = by[keep], by[move]
-        if a.tail == b.tail:
-            return self.node_summary(node_id)
-        inc = c.incident(a.tail)
-        marks = sum(1 for e in inc if e.kind is EdgeKind.MARKING)
-        other = len(inc) - marks
-        if marks + 1 >= other:
-            if other <= 2:
-                raise ValueError(f"{keep} sits inside an edge, where there is room for one marking only "
-                                 f"(a vertex needs more other edges than markings): put {keep} on a vertex "
-                                 f"of the curve first")
-            raise ValueError(f"the vertex of {keep} has {other} other edges and already {marks} "
-                             f"marking{'s' if marks != 1 else ''}: it can carry no more "
-                             f"(a vertex needs more other edges than markings)")
-        self.ws.move_marking(node_id, b.id, vertex=a.tail)
-        return self.node_summary(node_id)
 
     def moduli_remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
         """Take a marking off the type, merging the point it leaves inside an
