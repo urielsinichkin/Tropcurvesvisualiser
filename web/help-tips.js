@@ -265,6 +265,7 @@ const HELP = {
       <ul>
         <li><b>Draw a subdivision…</b> — the main app's editor; the curve is its dual (or paste the cells as text).</li>
         <li><b>Markings</b> — click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.</li>
+        <li><b>Move</b> — click a marking, then another marking or a vertex to put it on that vertex (two markings on one vertex), or an edge to put it inside it.</li>
         <li><b>Legs of M₀,₅</b> — click five ends or markings (thick / ringed in green).</li>
         <li><b>Evaluated</b> — click the markings fixed at points of the plane (orange squares).</li>
         <li><b>Same point</b> — click two markings to require them to be one point of the plane (green rings), e.g. on two edges that cross: the walk is then on the cycle where they agree. Click a linked marking to free it.</li>

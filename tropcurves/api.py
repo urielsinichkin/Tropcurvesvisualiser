@@ -480,9 +480,8 @@ class Session:
     @staticmethod
     def _walk_points(t: "moduli.TypeMap", evaluated: List[str], points: Dict[str, Any]) -> List[Fraction]:
         out: List[Fraction] = []
-        first = {m: g[0] for g in t.groups for m in g}
-        for m in t.ev_names:
-            xy = points.get(first.get(m, m))
+        for m in t.rep_names:                 # one point for each group
+            xy = points.get(m)
             if xy is None:
                 raise ValueError(f"no point given for {m!r}")
             out += [Fraction(str(xy[0])), Fraction(str(xy[1]))]
@@ -498,6 +497,28 @@ class Session:
             raise ValueError(f"this vertex has {len(inc) - marks} other edges, so it can carry at most "
                              f"{len(inc) - marks - 1} marking{'s' if len(inc) - marks - 1 != 1 else ''}")
         return self.add_marking(node_id, vertex)
+
+    def moduli_move_marking(self, node_id: str, marking: str, vertex: Optional[str] = None,
+                            edge: Optional[str] = None) -> Dict[str, Any]:
+        """Move a marking (by name) onto a vertex -- e.g. another marking's,
+        so that the two sit on one vertex -- or into an edge. A vertex keeps
+        more other edges than markings."""
+        c = self.ws.nodes[node_id].curve
+        m = next((e for e in c.markings if e.name == marking), None)
+        if m is None:
+            raise ValueError(f"no marking named {marking!r}")
+        if vertex is not None and vertex != m.tail:
+            inc = [e for e in c.incident(vertex) if e.id != m.id]
+            marks = sum(1 for e in inc if e.kind is EdgeKind.MARKING)
+            other = len(inc) - marks
+            if marks + 1 >= other:
+                raise ValueError("that point is inside an edge, with room for one marking only"
+                                 if other <= 2 else
+                                 f"that vertex has {other} other edges and already {marks} "
+                                 f"marking{'s' if marks != 1 else ''}: it can carry no more "
+                                 f"(a vertex needs more other edges than markings)")
+        self.ws.move_marking(node_id, m.id, vertex=vertex, edge=edge)
+        return self.node_summary(node_id)
 
     def moduli_remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
         """Take a marking off the type, merging the point it leaves inside an
@@ -528,7 +549,7 @@ class Session:
         """Points and a point of M_0,5 with a curve of the type over them."""
         t = self._walk_map(node_id, evaluated, legs, same)
         p, ls = moduli.start(t)
-        at = {m: [str(p[2 * i]), str(p[2 * i + 1])] for i, m in enumerate(t.ev_names)}
+        at = {m: [str(p[2 * i]), str(p[2 * i + 1])] for i, m in enumerate(t.rep_names)}
         for g in t.groups:                      # the others of a group: the same point
             for m in g[1:]:
                 at[m] = at[g[0]]

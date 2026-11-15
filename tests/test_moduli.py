@@ -372,3 +372,47 @@ def test_the_walk_stays_on_the_cycle():
         assert all(Fraction(x) > 0 for x in nv["lengths"].values())
         assert _at(nv, "x1") == pytest.approx(_at(nv, "x2"))
     assert entered >= 1
+
+
+def _one_vertex():
+    """The square's curve with x1 and x2 on one vertex, x3 inside the end l1."""
+    s = Session()
+    nid = s.add_from_subdivision(SQUARE, "drawn")["id"]
+    c = s.ws.nodes[nid].curve
+    v = next(v for v in c.vertices if c.valence(v) >= 3)
+    s.moduli_add_marking(nid, v)                                              # x1 on a vertex
+    for name in ("l3", "l1"):                                                 # x2, x3 inside ends
+        c = s.ws.nodes[nid].curve
+        s.add_marking_on_edge(nid, next(e.id for e in c.ends if e.name == name), "", "")
+    by = lambda: {e.name: e for e in s.ws.nodes[nid].curve.markings}
+    s.moduli_move_marking(nid, "x2", vertex=by()["x1"].tail)
+    assert by()["x1"].tail == by()["x2"].tail
+    s.ws.nodes[nid].curve.validate()
+    return s, nid
+
+
+def test_moving_a_marking_onto_another_markings_vertex():
+    s, nid = _one_vertex()
+    by = lambda: {e.name: e for e in s.ws.nodes[nid].curve.markings}
+    assert by()["x1"].tail == by()["x2"].tail
+    # a third does not fit (3 other edges), nor a second on a point inside an edge
+    with pytest.raises(ValueError, match="can carry no more"):
+        s.moduli_move_marking(nid, "x3", vertex=by()["x1"].tail)
+    with pytest.raises(ValueError, match="room for one marking only"):
+        s.moduli_move_marking(nid, "x1", vertex=by()["x3"].tail)
+
+
+def test_markings_on_one_vertex_required_to_be_one_point():
+    s, nid = _one_vertex()
+    legs = ["l1", "l2", "l3", "l4", "x3"]
+    out = s.moduli_check(nid, ["x1", "x2"], legs, ONE)
+    # 4 ends, 3 markings: 6 = 2*2 + 2; the cycle x1 = x2: 4 = 2*1 + 2, and this
+    # cell (two markings on one vertex) lies in it whole
+    assert out["ok"] and out["cycle_dim"] == 4 and out["full"] and out["multiplicity"] == 1
+    st = s.moduli_start(nid, ["x1", "x2"], legs, ONE)
+    assert st["points"]["x1"] == st["points"]["x2"]
+    v = s.moduli_view(nid, ["x1", "x2"], legs, st["points"], st["m"], 20, ONE)
+    assert v["full"] and _at(v, "x1") == pytest.approx(_at(v, "x2"))
+    # not required to be one point, the two evaluations are tied, and it says so
+    why = s.moduli_check(nid, ["x1", "x2"], legs)["why"]
+    assert why["kind"] == "lower" and "x1 and x2 sit on one vertex" in why["reason"]

@@ -388,12 +388,20 @@ space -- some positive lengths with `E l = 0` -- decided by
 cone, then a small step along the kernel off the faces `l = 1`); that point
 is also where the walk starts, so the group's points are equal. Otherwise
 `explain` says the markings are never one point there (kind `apart`), and at
-a wall those regenerations cannot be entered. The walk itself is unchanged:
+a wall those regenerations cannot be entered. Markings of a group on one
+vertex give zero rows of `E`: the whole cell is in the cycle. In general the
+map on the cell's part of the cycle is `[ev of one marking per group; ft;
+the independent rows of E]` (square when the part has the codomain's
+dimension), whose determinant is `+-det A` when `E` has full rank and the
+deduplicated map's when it is zero. The walk itself is unchanged:
 with the group's points equal, `A^{-1}(p, a, b)` stays on the space. On the
 page, the **Same point** mode links two markings (only the choice; the type
 is not changed), rings them green and keeps the groups in the saved state.
-Markings on a vertex are still limited by `moduli_add_marking` to fewer than
-the vertex's other edges.
+Markings on a vertex are limited to fewer than the vertex's other edges, by
+`moduli_add_marking` and by `moduli_move_marking` (the **Move** mode: a
+marking onto another marking's vertex, a vertex or into an edge, through the
+workspace's `move_marking`). An unlinked pair of evaluated markings sharing a
+vertex makes a lower-dimensional cell, and `explain` suggests linking them.
 
 **Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
 handing the cells to the page) or pasted cells; markings put on and taken off
