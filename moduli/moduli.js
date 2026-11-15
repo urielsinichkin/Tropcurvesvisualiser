@@ -24,6 +24,7 @@ const MW = {
   evaluated: [],       // markings fixed at points of the plane
   same: [],            // groups of evaluated markings that are one point (by name)
   linkFrom: null,      // "Same point": the marking clicked first
+  moveFrom: null,      // "Move": the marking to move
   mode: "markings",    // the setup picture's mode
   step: "setup",       // "setup" | "walk"
   cur: null,           // the type the curve is of now (a wall type on a wall)
@@ -73,7 +74,7 @@ function mwWire() {
   on("mw-start", "click", () => mwGuard(mwStart));
   on("mw-back", "click", () => { MW.step = "setup"; mwShow(); mwSave(); });
   document.querySelectorAll(".mw-tabs button").forEach(b => {
-    b.onclick = () => { MW.mode = b.dataset.mode; MW.slope = null; mwDrawType(); mwSave(); };
+    b.onclick = () => { MW.mode = b.dataset.mode; MW.slope = null; MW.moveFrom = null; mwDrawType(); mwSave(); };
   });
   const bg = () => resolvedVar("--panel", "#ffffff");
   on("mw-copy-curve", "click", ev => copyPanelPng("mw-curve", null, ev.target, "curve.png"));
@@ -166,6 +167,7 @@ function mwDrawType() {
   MW.evaluated = MW.evaluated.filter(n => names.marks.includes(n));
   mwTidySame();
   if (!names.marks.includes(MW.linkFrom)) MW.linkFrom = null;
+  if (!names.marks.includes(MW.moveFrom)) MW.moveFrom = null;
   const mode = MW.mode;
   document.querySelectorAll(".mw-tabs button").forEach(b => {
     const on = b.dataset.mode === mode;
@@ -178,6 +180,9 @@ function mwDrawType() {
   document.getElementById("mw-hint").textContent = {
     markings: "Click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.",
     legs: "Click ends and markings: the five legs whose tree is the point of M₀,₅.",
+    move: MW.moveFrom
+      ? `Click another marking or a vertex to put ${MW.moveFrom} on that vertex (two markings on one vertex), or an edge to put it inside it; ${MW.moveFrom} again to cancel.`
+      : "Click the marking to move.",
     points: "Click markings to fix them at points of the plane.",
     same: MW.linkFrom
       ? `Click the marking ${MW.linkFrom} is to be one point of the plane with.`
@@ -188,8 +193,9 @@ function mwDrawType() {
   }[mode];
   const drawn = drawCurve(data, {
     svgId: "mw-type-svg",
-    pickEdge: e => (mode === "markings" && e.kind !== "marking") || ((mode === "legs" || mode === "slopes") && e.kind === "end"),
-    pickVertex: mode === "markings" ? (() => true) : null,
+    pickEdge: e => ((mode === "markings" || (mode === "move" && MW.moveFrom)) && e.kind !== "marking")
+      || ((mode === "legs" || mode === "slopes") && e.kind === "end"),
+    pickVertex: mode === "markings" || (mode === "move" && MW.moveFrom) ? (() => true) : null,
     pickMarking: () => mode !== "slopes",
   });
   mwSlopeForm(data, drawn);
@@ -202,6 +208,10 @@ function mwDrawType() {
   });
   data.curve.markings.forEach(m => {
     const p = drawn.markAt[m.id] || T(m.at), first = svg.querySelector(".pick-hit");
+    if (MW.moveFrom === m.name) {
+      svg.insertBefore(svgEl("circle", { cx: p[0], cy: p[1], r: 17, fill: "none", stroke: SLOPE_COLOR, "stroke-width": 3,
+        "stroke-dasharray": "5 4", "pointer-events": "none" }), first);
+    }
     if (mwGroupOf(m.name) || MW.linkFrom === m.name) {
       const ring = { cx: p[0], cy: p[1], r: 17, fill: "none", stroke: SAME_COLOR, "stroke-width": 3,
                      "pointer-events": "none" };
@@ -220,6 +230,7 @@ function mwDrawType() {
   const status = document.getElementById("mw-pick-status");
   const idle = mode === "legs" ? `Legs: ${MW.legs.join(", ") || "none"}`
     : mode === "points" ? `Evaluated: ${MW.evaluated.join(", ") || "none"}`
+    : mode === "move" ? (mwSharing(data.curve) || "No two markings share a vertex")
     : mode === "same" ? (MW.same.length ? `One point: ${mwSameText()}` : "No markings are one point yet")
     : mode === "slopes" ? `Ends: ${data.curve.edges.filter(e => e.kind === "end").map(e => `${e.name} (${e.vec.join(", ")})`).join(", ")}`
     : `${names.ends.length} ends, ${names.marks.length} markings`;
@@ -230,6 +241,13 @@ function mwDrawType() {
       if (t.edge.id === sl.edit) return `end ${t.edge.name} ${v}: the one being changed — click to choose again`;
       if (t.edge.id === sl.dep) return `end ${t.edge.name} ${v}: the dependent end`;
       return `end ${t.edge.name} ${v}: click to ` + (sl.edit ? "make it the dependent end" : "change its direction");
+    }
+    if (mode === "move") {
+      const f = MW.moveFrom;
+      if (t.kind === "mark") return t.marking.name === f ? `${f}: click to cancel`
+        : f ? `marking ${t.marking.name}: click to put ${f} on its vertex` : `marking ${t.marking.name}: click to move it`;
+      if (t.kind === "edge") return `${t.edge.kind === "end" ? "end" : "edge"} ${t.edge.name}: click to put ${f} inside it`;
+      return `this vertex: click to put ${f} on it`;
     }
     if (mode === "markings") {
       if (t.kind === "mark") return `marking ${t.marking.name}: click to take it off`;
@@ -257,7 +275,17 @@ function mwDrawType() {
         mwDrawType();
         return;
       }
-      if (mode === "markings") {
+      if (mode === "move") {
+        const f = MW.moveFrom;
+        if (!f) { if (t.kind === "mark") MW.moveFrom = t.marking.name; mwDrawType(); return; }
+        MW.moveFrom = null;
+        if (!(t.kind === "mark" && t.marking.name === f)) {
+          try {
+            if (t.kind === "edge") api("moduli_move_marking", MW.base, f, null, t.edge.id);
+            else api("moduli_move_marking", MW.base, f, t.kind === "mark" ? t.marking.tail : t.vertex.id, null);
+          } catch (e) { alert("Cannot: " + e.message); }
+        }
+      } else if (mode === "markings") {
         if (t.kind === "mark") api("moduli_remove_marking", MW.base, t.marking.id);
         else if (t.kind === "edge") api("add_marking_on_edge", MW.base, t.edge.id, "", "");
         else {
@@ -281,6 +309,13 @@ function mwDrawType() {
     }));
   });
   mwCheck(names);
+}
+
+// markings that share a vertex, as text
+function mwSharing(curve) {
+  const at = {};
+  curve.markings.forEach(m => { (at[m.tail] = at[m.tail] || []).push(m.name); });
+  return Object.values(at).filter(l => l.length > 1).map(l => l.join(", ") + " on one vertex").join("; ");
 }
 
 // "Same point": groups of evaluated markings required to be one point of the

@@ -166,7 +166,6 @@ class TypeMap:
         self.n = len(self.bounded) + 2
         by_name = {e.name: e for e in curve.edges.values() if e.kind is not EdgeKind.BOUNDED}
         self.ev_names = list(evaluated)
-        rows: List[List[int]] = []
         ev_row = {}
         for m in self.ev_names:
             e = by_name.get(m)
@@ -174,19 +173,29 @@ class TypeMap:
                 raise ValueError(f"{name}: no marking named {m!r}")
             ev_row[m] = [row_of(curve, self.root, self.index, {"kind": kind, "marking": e.id})
                          for kind in ("x", "y")]
-            rows += ev_row[m]
-        self.ev_rows = rows
         # groups of evaluated markings required to be one point of the plane:
         # the domain is the cycle where their evaluations agree, on this cell
-        # the linear space E z = 0 (two rows per marking after the first of
-        # its group), and the codomain the matching diagonal. Only the part of
-        # the cell's interior on that space counts (the closure of the top
-        # cells' loci), so the type counts if some positive lengths put the
-        # markings of every group at one point (``meets``).
+        # the linear space E z = 0 (E: each marking's ev rows less those of
+        # the first of its group), and the codomain the diagonal, where a
+        # group is one point (``rep_names``: the first of each group and the
+        # others evaluated). Markings of a group on one vertex make their rows
+        # of E zero: the whole cell is then in the cycle. Only the part of the
+        # cell's interior on the space counts (the closure of the top cells'
+        # loci), so the type counts if some positive lengths put every group
+        # at one point (``meets``).
         self.groups = [[m for m in g if m in ev_row] for g in same]
         self.groups = [g for g in self.groups if len(g) >= 2]
+        first = {m: g[0] for g in self.groups for m in g}
+        self.rep_names = [m for m in self.ev_names if first.get(m, m) == m]
+        self.ev_rows = [r for m in self.rep_names for r in ev_row[m]]
         self.equal_rows = [[a - b for a, b in zip(ev_row[m][i], ev_row[g[0]][i])]
                            for g in self.groups for m in g[1:] for i in (0, 1)]
+        # the independent ones (in order), which cut the cell down to the cycle
+        self.eq_rows: List[List[int]] = []
+        for r in self.equal_rows:
+            if len(_nullspace(_transpose(self.eq_rows + [r], len(self.eq_rows) + 1, len(r)),
+                              len(self.eq_rows) + 1)) == 0:
+                self.eq_rows.append(r)
         leg_edges = []
         for l in legs:
             if l not in by_name:
@@ -203,7 +212,8 @@ class TypeMap:
             row = self.splits.setdefault(inside, [0] * self.n)
             row[self.index[e.id]] += 1
         self.cone: Cone = tuple(sorted(self.splits))
-        self.matrix = self.ev_rows + [self.splits[s] for s in self.cone]
+        # (ev of the points; ft; E): z -> (p, the point of M_0,5, 0)
+        self.matrix = self.ev_rows + [self.splits[s] for s in self.cone] + self.eq_rows
         square = len(self.matrix) == self.n
         self.det = abs(determinant(self.matrix)) if square else None
         self.lengths_on = positive_kernel_point([r[2:] for r in self.equal_rows], self.n - 2) \
@@ -241,8 +251,13 @@ class TypeMap:
             out[e.id] = (c, row[k2], row[k2 + 1])
         return out
 
+    @property
+    def cycle_dim(self) -> int:
+        """The dimension of the cell's part of the cycle."""
+        return self.n - len(self.eq_rows)
+
     def solve_at(self, p: List[Fraction], lengths: List[Fraction]):
-        status, z = solve(self.matrix, list(p) + list(lengths))
+        status, z = solve(self.matrix, list(p) + list(lengths) + [Fraction(0)] * len(self.eq_rows))
         return status, z
 
 
@@ -263,6 +278,19 @@ def _linear_text(terms: List[Tuple[Fraction, str]]) -> str:
     return out or "0"
 
 
+def _shared_hint(t: TypeMap) -> str:
+    """Evaluated markings sharing a vertex but not required to be one point."""
+    group = {m: i for i, g in enumerate(t.groups) for m in g}
+    by = {e.name: e for e in t.curve.markings}
+    at: Dict[str, List[str]] = {}
+    for m in t.ev_names:
+        at.setdefault(by[m].tail, []).append(m)
+    for ms in at.values():
+        if len(ms) >= 2 and len({group.get(m, m) for m in ms}) > 1:
+            return f"; {' and '.join(ms)} sit on one vertex: require them to be one point"
+    return ""
+
+
 def explain(t: TypeMap, evaluated: Sequence[str], legs: Sequence[str]) -> Optional[Dict[str, Any]]:
     """Why a type is not full-dimensional, in words, with the relation that
     holds on its cell when there is one."""
@@ -270,36 +298,42 @@ def explain(t: TypeMap, evaluated: Sequence[str], legs: Sequence[str]) -> Option
         return None
     k2 = len(t.ev_rows)
     target = k2 + 2
-    pnames = [f"{c}({m})" for m in t.ev_names for c in "xy"]
+    pnames = [f"{c}({m})" for m in t.rep_names for c in "xy"]
+    ne = len(t.eq_rows)
     ray = lambda sp: "{" + legs[sp[0]] + "," + legs[sp[1]] + "}"
-    if t.n < target:
+    if t.cycle_dim < target:
+        on = f" (on the cycle where {', '.join(' = '.join(g) for g in t.groups)})" if t.groups else ""
         return {"kind": "lower",
-                "reason": f"its cell has dimension {t.n}, less than {target}: it is a type of lower "
-                          f"dimension, which only appears on walls (where an edge of a full-dimensional "
-                          f"type shrinks to 0)"}
+                "reason": f"its cell has dimension {t.cycle_dim}{on}, less than {target}: it is a type of "
+                          f"lower dimension, which only appears on walls (where an edge of a "
+                          f"full-dimensional type shrinks to 0)" + _shared_hint(t)}
     if not t.meets:
         which = " and ".join(" = ".join(g) for g in t.groups)
         return {"kind": "apart",
                 "reason": f"on curves of this type {which} are never one point of the plane (with every "
                           f"length positive), so the type is not in the cycle where they are"}
-    # the points tied together: lambda . ev = 0
+    # the points tied together: lambda . ev = 0 (on the cycle: up to E)
     if k2:
-        lk = _nullspace(_transpose(t.ev_rows, k2, t.n), k2)
-        if lk:
-            lam = lk[0]
+        S = t.ev_rows + t.eq_rows
+        for lk in _nullspace(_transpose(S, len(S), t.n), len(S)):
+            lam = lk[:k2]
+            if not any(lam):
+                continue
             rel = _linear_text([(lam[j], pnames[j]) for j in range(k2)])
+            hint = _shared_hint(t)
             return {"kind": "points", "relation": rel + " = 0",
                     "reason": f"on this type the points are tied: {rel} = 0, so points in general "
-                              f"position have no curve of this type"}
+                              f"position have no curve of this type{hint}"}
     if len(t.cone) < 2:
         return {"kind": "ray",
                 "reason": "the five legs span a tree with " + ("one inner edge" if t.cone else "no inner edge")
                           + " on this type, so it maps to " + ("the ray " + ray(t.cone[0]) if t.cone else "the apex")
                           + " of M₀,₅, not to an open cone"}
     # the lengths in M_0,5 tied to the points: mu . ft = -lambda . ev
-    S = t.ev_rows + [t.splits[sp] for sp in t.cone]
+    S = t.ev_rows + [t.splits[sp] for sp in t.cone] + t.eq_rows
+    nc = len(t.cone)
     for v in _nullspace(_transpose(S, len(S), t.n), len(S)):
-        mu = v[k2:]
+        mu = v[k2:k2 + nc]
         if any(mu):
             lam = v[:k2]
             lead = next(x for x in mu if x)
@@ -414,8 +448,8 @@ def check(t: TypeMap) -> Dict[str, Any]:
     # |Delta| + n - 3 + 2 = 2k + 2. Points required to be one cut both sides
     # by 2 each: the cycle where they agree, and the diagonal it maps to.
     dim = len(c.ends) + len(c.markings) - 1
-    target = len(t.ev_rows) + 2
-    k = len(t.ev_rows) // 2
+    k = len(t.ev_names)
+    target = 2 * k + 2
     cut = len(t.equal_rows)
     msg = ""
     if dim != target:
@@ -450,7 +484,7 @@ def start(t: TypeMap) -> Tuple[List[Fraction], List[Fraction]]:
         z = [Fraction(0), Fraction(0)] + [Fraction(1) + Fraction(i + 1, 7 + i) for i in range(t.n - 2)]
     img = [sum((Fraction(r[j]) * z[j] for j in range(t.n)), Fraction(0)) for r in t.matrix]
     k2 = len(t.ev_rows)
-    return img[:k2], img[k2:]
+    return img[:k2], img[k2:k2 + len(t.cone)]
 
 
 # --- the curve over a point ----------------------------------------------------

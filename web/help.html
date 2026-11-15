@@ -764,11 +764,16 @@ type. The page shows all this, exactly.</p>
   <li><span class="btn">Draw a subdivision…</span> opens the main app's <a href="#editor">subdivision editor</a>;
       <span class="btn">Create curve</span> there makes the type, the curve dual to the subdivision. Or paste the
       cells as text.</li>
-  <li>The picture then has five modes:
+  <li>The picture then has six modes:
     <ul>
       <li><span class="btn">Markings</span>: click an edge or end to put a marking inside it, a ringed vertex to put
           one on it, a marking to take it off (the point it leaves inside an edge is merged back). A vertex takes
           markings only while it keeps more other edges than markings.</li>
+      <li><span class="btn">Move</span>: click a marking (violet dashed ring), then another marking or a vertex to
+          put it on that vertex — this is how two markings come to sit on one vertex — or an edge to put it inside
+          it. A vertex takes markings only while it keeps more other edges than markings, so a marking inside an
+          edge (a point with two edges) cannot take a second: put the first on a vertex. The line under the picture
+          says which markings share a vertex.</li>
       <li><span class="btn">Legs of M₀,₅</span>: click five ends or markings; they are drawn thick, or ringed, in
           the accent colour.</li>
       <li><span class="btn">Evaluated</span>: click the markings to fix at points of the plane (orange squares).</li>
@@ -779,7 +784,11 @@ type. The page shows all this, exactly.</p>
           <em>cycle</em> where their evaluations agree — in each type, the curves with those markings at one point
           — and the points are fixed on the diagonal (one point for the group). Both sides lose 2 dimensions for
           each marking beyond the first of its group, so the count stays |Δ| + n − 1 = 2k + 2 with k the
-          evaluated markings, and the line under the picture also gives the cycle's dimension. Only types with
+          evaluated markings, and the line under the picture also gives the cycle's dimension. Markings of a group
+          may also sit on one vertex (put there with <span class="btn">Move</span>): their evaluations then agree on
+          the whole cell, which lies in the cycle with its own dimension, and the group is one point for the map.
+          Two evaluated markings on one vertex that are not linked make a cell of lower dimension; the check line
+          suggests linking them. Only types with
           curves (every length positive) having those markings at one point count; for the others, and for the
           regenerations into them at a wall, it says that the markings are never one point there.</li>
 
