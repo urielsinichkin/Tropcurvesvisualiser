@@ -158,15 +158,24 @@ class TypeMap:
     """The map ev x ft on one type's cell."""
 
     def __init__(self, node_id: str, name: str, curve: Curve,
-                 evaluated: Sequence[str], legs: Sequence[str]):
+                 evaluated: Sequence[str], legs: Sequence[str], same: Sequence[Sequence[str]] = ()):
         self.id, self.name, self.curve = node_id, name, curve
         self.root = curve.vertices[0]
         self.bounded = _bounded_by_name(curve)
         self.index = {e.id: i + 2 for i, e in enumerate(self.bounded)}
         self.n = len(self.bounded) + 2
         by_name = {e.name: e for e in curve.edges.values() if e.kind is not EdgeKind.BOUNDED}
+        # markings declared to be one point: on the abstract curve they meet at
+        # a vertex, so they map to one point and it is evaluated once (by the
+        # first of the group); a group whose markings are apart is noted
+        self.groups = [list(g) for g in same if len(g) >= 2]
+        first = {m: g[0] for g in self.groups for m in g}
+        self.apart = [g for g in self.groups
+                      if len({by_name[m].tail for m in g if m in by_name}) > 1]
+        self.crowded = crowded_vertices(curve)
+        self.ev_names = [m for m in evaluated if first.get(m, m) == m]
         rows: List[List[int]] = []
-        for m in evaluated:
+        for m in self.ev_names:
             e = by_name.get(m)
             if e is None or e.kind is not EdgeKind.MARKING:
                 raise ValueError(f"{name}: no marking named {m!r}")
@@ -192,7 +201,8 @@ class TypeMap:
         self.matrix = self.ev_rows + [self.splits[s] for s in self.cone]
         square = len(self.matrix) == self.n
         self.det = abs(determinant(self.matrix)) if square else None
-        self.full = bool(square and self.det and len(self.cone) == 2)
+        self.full = bool(square and self.det and len(self.cone) == 2
+                         and not self.apart and not self.crowded)
         self.inv = inverse(self.matrix) if self.full else None
 
     def _tail_side(self, e) -> set:
@@ -253,7 +263,17 @@ def explain(t: TypeMap, evaluated: Sequence[str], legs: Sequence[str]) -> Option
         return None
     k2 = len(t.ev_rows)
     target = k2 + 2
-    pnames = [f"{c}({m})" for m in evaluated for c in "xy"]
+    pnames = [f"{c}({m})" for m in t.ev_names for c in "xy"]
+    if t.apart:
+        g = t.apart[0]
+        return {"kind": "apart",
+                "reason": f"{' and '.join(g)} are to be one point, but they sit at different vertices "
+                          f"(on the abstract curve, markings meet only at a vertex)"}
+    if t.crowded:
+        marks = sorted(e.name for e in t.curve.incident(t.crowded[0]) if e.kind is EdgeKind.MARKING)
+        return {"kind": "crowded",
+                "reason": f"the vertex of {', '.join(marks)} carries as many markings as other edges "
+                          f"(a vertex needs more edges than markings)"}
     ray = lambda sp: "{" + legs[sp[0]] + "," + legs[sp[1]] + "}"
     if t.n < target:
         return {"kind": "lower",
@@ -329,11 +349,28 @@ def _cone_coords(cone: Cone, m_cone: Cone, m_lengths: List[Fraction]) -> Optiona
     return out
 
 
+# --- markings at a vertex ----------------------------------------------------
+def crowded_vertices(curve: Curve) -> List[str]:
+    """Vertices carrying at least as many markings as other edges: on the
+    abstract curve markings meet only at a vertex, which needs strictly more
+    other edges than markings."""
+    out = []
+    for v in curve.vertices:
+        inc = curve.incident(v)
+        marks = sum(1 for e in inc if e.kind is EdgeKind.MARKING)
+        if marks and marks >= len(inc) - marks:
+            out.append(v)
+    return out
+
+
 # --- the setup ----------------------------------------------------------------
 def check(t: TypeMap) -> Dict[str, Any]:
     """Do the dimensions match, and is the map invertible on the cell?"""
     c = t.curve
-    dim = len(c.ends) + len(c.markings) - 1         # |Delta| + n - 3 + 2
+    # |Delta| + n - 3 + 2; a group of markings that are one point sits at a
+    # vertex of the curve (it needs more edges than markings), which costs one
+    # dimension for its first marking and one for each other (determined)
+    dim = len(c.ends) + len(c.markings) - 1 - sum(len(g) for g in t.groups)
     target = len(t.ev_rows) + 2
     k = len(t.ev_rows) // 2
     msg = ""

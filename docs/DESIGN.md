@@ -157,7 +157,9 @@ parent, or from scratch for a root).
 Markings are drawn as discs exactly at their image, with radius proportional to
 `valence - 2` of the vertex they hang from -- one unit for a marking in the
 interior of an edge (internally a trivalent vertex), two for a marked trivalent
-vertex, and so on.
+vertex, and so on. Several markings at one point (on one vertex) would hide one
+another, so they are fanned out a little around it, each tied to it by a thin
+line (`drawCurve` returns the drawn positions as `markAt`).
 
 **Labels.** Names are drawn last, against everything already in the picture. A
 label that lands on an edge, a marking or another label reads as part of the
@@ -369,6 +371,24 @@ forms in the new type's cone coordinates, continued across a ray when the
 wall was one), at most half way to the next length reaching 0 -- so the new
 edge is short and every length positive. A wall type is drawn by solving its
 (overdetermined, consistent) system at the wall point.
+
+**One point for several markings.** Groups of evaluated markings may be
+required to be one point of the plane (`same`, a trailing argument of every
+`moduli_*` call). On the abstract curve markings can coincide only at a
+vertex, so a group must sit at one vertex, and every vertex must keep
+strictly more other edges than markings (`crowded_vertices`; the page's
+`moduli_add_marking` and `moduli_link` refuse to break it). Such a vertex is
+a point of the type's cell, not a degree of freedom: a group of `g` markings
+costs `g` dimensions, so the cell has dimension `|Delta| + n - 1 - sum g`,
+and the group is evaluated once (`TypeMap.ev_names`: the first of each
+group), giving `k` distinct points with `|Delta| + n - 1 - sum g = 2k + 2`.
+`explain` adds two reasons, checked first: *apart* (a group at different
+vertices -- the regenerations that separate a group) and *crowded*; both
+make a type not full-dimensional, so those regenerations cannot be entered.
+`moduli_start` gives every member of a group the same point. On the page,
+the **Same point** mode links two markings (the first clicked moves to the
+second's vertex, or the other way when there is no room there; a third can
+join), rings them green and keeps the groups in the saved state.
 
 **Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
 handing the cells to the page) or pasted cells; markings put on and taken off

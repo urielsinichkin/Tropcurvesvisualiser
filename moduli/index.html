@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Moduli map — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=54" />
+<link rel="stylesheet" href="../web/styles.css?v=55" />
 </head>
 <body class="moduli-page">
 <header id="topbar">
@@ -45,6 +45,7 @@
         <button data-mode="markings" class="small">Markings</button>
         <button data-mode="legs" class="small">Legs of M₀,₅</button>
         <button data-mode="points" class="small">Evaluated</button>
+        <button data-mode="same" class="small">Same point</button>
         <button data-mode="slopes" class="small">Slopes</button>
       </div>
       <p id="mw-hint" class="muted mw-small"></p>
@@ -54,6 +55,7 @@
       <div class="sub-legend">
         <span><span class="mm-key mm-key-leg"></span>leg of M₀,₅</span>
         <span><span class="mm-key mm-key-ev"></span>evaluated (a fixed point in ℝ²)</span>
+        <span><span class="mm-key mm-key-same"></span>one point with another marking</span>
       </div>
       <div id="mw-check" class="status"></div>
       <div class="mw-bar"><button id="mw-start" class="primary" disabled>Start →</button></div>

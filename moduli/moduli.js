@@ -4,7 +4,7 @@
 //
 // Step 1: draw a subdivision (the main app's editor), put markings on the
 // curve, choose the five legs of M_0,5 and the evaluated markings (on the
-// picture). Step 2: the curve over the current point, its two skeleton paths
+// picture), and which evaluated markings are one point. Step 2: the curve over the current point, its two skeleton paths
 // in two colours, and beside it the cell of M_0,5 it maps to -- a quadrant,
 // a line or a point -- with the region where the type has a curve through the
 // fixed points and all the region's walls. Drag the point; at a wall it stops,
@@ -22,6 +22,8 @@ const MW = {
   base: null,          // the drawn type's id
   legs: [],            // five ends or markings, by name
   evaluated: [],       // markings fixed at points of the plane
+  same: [],            // groups of evaluated markings that are one point (by name)
+  linkFrom: null,      // "Same point": the marking clicked first
   mode: "markings",    // the setup picture's mode
   step: "setup",       // "setup" | "walk"
   cur: null,           // the type the curve is of now (a wall type on a wall)
@@ -64,7 +66,7 @@ function mwWire() {
   on("mw-restart", "click", () => {
     if (MW.base && !confirm("Forget this type and start with a new one?")) return;
     api("load", JSON.stringify({ schema: 1, kind: "workspace", nodes: [] }));
-    Object.assign(MW, { base: null, legs: [], evaluated: [], step: "setup", cur: null, points: null,
+    Object.assign(MW, { base: null, legs: [], evaluated: [], same: [], linkFrom: null, step: "setup", cur: null, points: null,
                         m: null, coords: null, wall: null, view: null });
     mwShow(); mwSave();
   });
@@ -103,7 +105,7 @@ function mwSave() {
     try {
       const wall = MW.wall && { from: MW.wall.from, edge: MW.wall.edge };
       localStorage.setItem(MW_KEY, JSON.stringify({
-        library: api("save"), base: MW.base, legs: MW.legs, evaluated: MW.evaluated, mode: MW.mode,
+        library: api("save"), base: MW.base, legs: MW.legs, evaluated: MW.evaluated, same: MW.same, mode: MW.mode,
         step: MW.step, cur: MW.cur, points: MW.points, m: MW.m, R: MW.R, wall }));
       el.textContent = "saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     } catch (e) { el.textContent = "not saved"; }
@@ -112,7 +114,8 @@ function mwSave() {
 function mwRestore(st) {
   if (!st || !st.library) return false;
   api("load", st.library);
-  Object.assign(MW, { base: st.base, legs: st.legs || [], evaluated: st.evaluated || [], mode: st.mode || "markings",
+  Object.assign(MW, { base: st.base, legs: st.legs || [], evaluated: st.evaluated || [], same: st.same || [],
+                      linkFrom: null, mode: st.mode || "markings",
                       step: st.step || "setup", cur: st.cur, points: st.points, m: st.m, R: st.R || 4, wall: null });
   if (!MW.base || !api("list_nodes").some(n => n.id === MW.base)) { MW.base = null; MW.step = "setup"; }
   if (MW.step === "walk" && st.wall) {
@@ -130,6 +133,8 @@ function mwNewType(cells) {
   const ends = api("render", MW.base).curve.edges.filter(e => e.kind === "end").map(e => e.name);
   MW.legs = ends.slice(0, 5);                // a start; change on the picture
   MW.evaluated = [];
+  MW.same = [];
+  MW.linkFrom = null;
   MW.mode = "markings";
   MW.step = "setup";
   MW.wall = null;
@@ -159,6 +164,8 @@ function mwDrawType() {
   // forget choices of markings that are gone
   MW.legs = MW.legs.filter(n => names.all.includes(n));
   MW.evaluated = MW.evaluated.filter(n => names.marks.includes(n));
+  mwTidySame();
+  if (!names.marks.includes(MW.linkFrom)) MW.linkFrom = null;
   const mode = MW.mode;
   document.querySelectorAll(".mw-tabs button").forEach(b => {
     const on = b.dataset.mode === mode;
@@ -166,11 +173,15 @@ function mwDrawType() {
     b.setAttribute("aria-selected", on ? "true" : "false");
     if (b.dataset.mode === "legs") b.textContent = `Legs of M₀,₅ (${MW.legs.length} of 5)`;
     if (b.dataset.mode === "points") b.textContent = `Evaluated (${MW.evaluated.length})`;
+    if (b.dataset.mode === "same") b.textContent = `Same point (${MW.same.length})`;
   });
   document.getElementById("mw-hint").textContent = {
     markings: "Click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.",
     legs: "Click ends and markings: the five legs whose tree is the point of M₀,₅.",
     points: "Click markings to fix them at points of the plane.",
+    same: MW.linkFrom
+      ? `Click the marking ${MW.linkFrom} is to be one point with (one of them moves to the other's vertex).`
+      : "Click two markings to make them one point of the plane: they go to one vertex, which must have more other edges than markings. Click a linked marking to free it.",
     slopes: MW.slope && MW.slope.edit
       ? "Click another end to be the dependent one (it absorbs the change), type the new direction, and Apply."
       : "Click the end whose direction to change. The bounded edges follow by balancing.",
@@ -190,7 +201,13 @@ function mwDrawType() {
     }
   });
   data.curve.markings.forEach(m => {
-    const p = T(m.at), first = svg.querySelector(".pick-hit");
+    const p = drawn.markAt[m.id] || T(m.at), first = svg.querySelector(".pick-hit");
+    if (mwGroupOf(m.name) || MW.linkFrom === m.name) {
+      const ring = { cx: p[0], cy: p[1], r: 17, fill: "none", stroke: SAME_COLOR, "stroke-width": 3,
+                     "pointer-events": "none" };
+      if (MW.linkFrom === m.name) ring["stroke-dasharray"] = "5 4";
+      svg.insertBefore(svgEl("circle", ring), first);
+    }
     if (MW.evaluated.includes(m.name)) {
       svg.insertBefore(svgEl("rect", { x: p[0] - 13, y: p[1] - 13, width: 26, height: 26, rx: 4, fill: "none",
         stroke: "var(--warn)", "stroke-width": 3, "pointer-events": "none" }), first);
@@ -203,6 +220,7 @@ function mwDrawType() {
   const status = document.getElementById("mw-pick-status");
   const idle = mode === "legs" ? `Legs: ${MW.legs.join(", ") || "none"}`
     : mode === "points" ? `Evaluated: ${MW.evaluated.join(", ") || "none"}`
+    : mode === "same" ? (MW.same.length ? `One point: ${mwSameText()}` : "No markings are one point yet")
     : mode === "slopes" ? `Ends: ${data.curve.edges.filter(e => e.kind === "end").map(e => `${e.name} (${e.vec.join(", ")})`).join(", ")}`
     : `${names.ends.length} ends, ${names.marks.length} markings`;
   status.textContent = idle;
@@ -219,6 +237,12 @@ function mwDrawType() {
       return "this vertex: click to put a marking on it";
     }
     const name = t.kind === "edge" ? t.edge.name : t.marking.name;
+    if (mode === "same") {
+      const g = mwGroupOf(name);
+      if (name === MW.linkFrom) return `${name}: chosen — click it again to cancel`;
+      if (MW.linkFrom) return `${name}: click to make it one point with ${MW.linkFrom}`;
+      return `${name}: ` + (g ? `one point with ${g.filter(x => x !== name).join(", ")} — click to free it` : "click, then click the marking to join");
+    }
     if (mode === "legs") return `${name}: ` + (MW.legs.includes(name) ? "a leg — click to drop it" : "click to make it a leg");
     return `${name}: ` + (MW.evaluated.includes(name) ? "evaluated — click to free it" : "click to fix it at a point");
   };
@@ -236,13 +260,20 @@ function mwDrawType() {
       if (mode === "markings") {
         if (t.kind === "mark") api("moduli_remove_marking", MW.base, t.marking.id);
         else if (t.kind === "edge") api("add_marking_on_edge", MW.base, t.edge.id, "", "");
-        else api("add_marking", MW.base, t.vertex.id, "", "");
+        else {
+          try { api("moduli_add_marking", MW.base, t.vertex.id); }
+          catch (e) { alert("Cannot: " + e.message); return; }
+        }
+      } else if (mode === "same") {
+        if (t.kind !== "mark") return;
+        try { mwLinkClick(t.marking.name); }
+        catch (e) { alert("Cannot: " + e.message); }
       } else {
         if (t.kind === "edge" && mode !== "legs") return;
         const name = t.kind === "edge" ? t.edge.name : t.marking.name;
         const list = mode === "legs" ? MW.legs : MW.evaluated;
         const i = list.indexOf(name);
-        if (i >= 0) list.splice(i, 1);
+        if (i >= 0) { list.splice(i, 1); if (mode === "points") mwUnlink(name); }
         else if (mode !== "legs" || list.length < 5) list.push(name);
         else { alert("Five legs already: click one of them to drop it first."); return; }
       }
@@ -251,6 +282,42 @@ function mwDrawType() {
     }));
   });
   mwCheck(names);
+}
+
+// "Same point": groups of evaluated markings fixed at one point of the plane.
+// On the abstract curve they sit at one vertex, which must keep more other
+// edges than markings (moduli_link moves one onto the other's vertex).
+const SAME_COLOR = "#2ca02c";
+const mwGroupOf = name => MW.same.find(g => g.includes(name)) || null;
+const mwSameText = () => MW.same.map(g => g.join(" = ")).join(", ");
+function mwTidySame() {
+  MW.same = MW.same.map(g => g.filter(n => MW.evaluated.includes(n))).filter(g => g.length >= 2);
+}
+function mwUnlink(name) {
+  MW.same = MW.same.map(g => g.filter(n => n !== name));
+  mwTidySame();
+}
+function mwLinkClick(name) {
+  const from = MW.linkFrom;
+  if (!from) {
+    if (mwGroupOf(name)) { mwUnlink(name); return; }
+    MW.linkFrom = name;
+    return;
+  }
+  MW.linkFrom = null;
+  if (from === name) return;
+  // the first one moves to the second's vertex; if there is no room there,
+  // the other way round (unless the second is already one point with others)
+  try { api("moduli_link", MW.base, name, from); }
+  catch (e) {
+    if (mwGroupOf(name)) throw e;
+    try { api("moduli_link", MW.base, from, name); } catch (e2) { throw e; }
+  }
+  [from, name].forEach(n => { if (!MW.evaluated.includes(n)) MW.evaluated.push(n); });
+  const ga = mwGroupOf(from), gb = mwGroupOf(name);
+  const merged = [...new Set([...(gb || [name]), ...(ga || [from])])];
+  MW.same = MW.same.filter(g => g !== ga && g !== gb);
+  MW.same.push(merged);
 }
 
 // Slopes: the end being changed in violet, the dependent end dashed orange;
@@ -310,19 +377,27 @@ function mwCheck(names) {
   const el = document.getElementById("mw-check"), go = document.getElementById("mw-start");
   el.className = "status warn";
   go.disabled = true;
-  const need = (names.ends.length + names.marks.length - 3) / 2;    // evaluated markings needed
+  // |Δ| + n − 1 − Σ|g| = 2k + 2 for k distinct points (a group of g markings
+  // at one vertex costs g dimensions and gives one point)
+  const tied = MW.same.reduce((s, g) => s + g.length, 0);
+  const extra = MW.same.reduce((s, g) => s + g.length - 1, 0);
+  const need = (names.ends.length + names.marks.length - 3 - tied) / 2;   // distinct points needed
+  const have = MW.evaluated.length - extra;
   if (MW.legs.length !== 5) { el.textContent = `Choose ${5 - MW.legs.length} more leg${5 - MW.legs.length === 1 ? "" : "s"}.`; return; }
   if (!Number.isInteger(need)) {
     el.textContent = `With ${names.ends.length} ends and ${names.marks.length} markings the dimensions cannot match: add or take off one marking.`;
     return;
   }
-  if (MW.evaluated.length !== need) {
-    el.textContent = `Evaluate ${need} marking${need === 1 ? "" : "s"} (|Δ| + n − 1 = 2k + 2), now ${MW.evaluated.length}` +
-      (names.marks.length < need ? `: add ${need - names.marks.length} more marking${need - names.marks.length === 1 ? "" : "s"} first.` : ".");
+  if (have !== need) {
+    const law = tied ? "|Δ| + n − 1 − Σ|g| = 2k + 2" : "|Δ| + n − 1 = 2k + 2";
+    const free = names.marks.length - extra;
+    el.textContent = `Fix ${need} point${need === 1 ? "" : "s"} (${law}), now ${have}` +
+      (extra ? ` (${MW.evaluated.length} evaluated markings, ${mwSameText()})` : "") +
+      (free < need ? `: add ${need - free} more marking${need - free === 1 ? "" : "s"} first.` : ".");
     return;
   }
   let out;
-  try { out = api("moduli_check", MW.base, MW.evaluated, mwLegOrder(names)); }
+  try { out = api("moduli_check", MW.base, MW.evaluated, mwLegOrder(names), MW.same); }
   catch (e) { el.textContent = e.message; return; }
   if (!out.ok) { el.textContent = out.message; return; }
   if (!out.full) {
@@ -330,16 +405,17 @@ function mwCheck(names) {
     return;
   }
   el.className = "status";
-  el.textContent = `dim ${out.dim} = 2·${MW.evaluated.length} + 2 ✓ — multiplicity ${out.multiplicity}`;
+  el.textContent = `dim ${out.dim} = 2·${have} + 2 ✓ — multiplicity ${out.multiplicity}` +
+    (MW.same.length ? ` (one point: ${mwSameText()})` : "");
   go.disabled = false;
 }
 
 function mwStart() {
   const names = mwNames(api("render", MW.base));
   MW.legs = mwLegOrder(names);
-  const st = api("moduli_start", MW.base, MW.evaluated, MW.legs);
+  const st = api("moduli_start", MW.base, MW.evaluated, MW.legs, MW.same);
   MW.points = st.points; MW.m = st.m; MW.cur = MW.base; MW.wall = null;
-  const v = api("moduli_view", MW.cur, MW.evaluated, MW.legs, MW.points, MW.m, "1");
+  const v = api("moduli_view", MW.cur, MW.evaluated, MW.legs, MW.points, MW.m, "1", MW.same);
   MW.R = mwNice(2.2 * Math.max(...(v.coords || ["1"]).map(mwNum), 0.5));
   MW.step = "walk";
   mwShow();
@@ -355,7 +431,7 @@ const mwShort = s => { const x = mwNum(s); return Number.isInteger(x) ? String(x
 
 // --- step 2: the walk ---------------------------------------------------------------
 function mwRender() {
-  const v = api("moduli_view", MW.cur, MW.evaluated, MW.legs, MW.points, MW.m, String(MW.R));
+  const v = api("moduli_view", MW.cur, MW.evaluated, MW.legs, MW.points, MW.m, String(MW.R), MW.same);
   MW.view = v;
   MW.coords = v.coords;
   if (v.full && v.region) MW.lastFull = { cone: JSON.stringify(v.cone), region: v.region };
@@ -386,7 +462,7 @@ function mwDrawCurve(v) {
   // the evaluated markings sit at their fixed points
   v.picture.markings.forEach(m => {
     if (!MW.evaluated.includes(m.name)) return;
-    const p = T(m.at);
+    const p = T(m.at);              // the fixed point itself (linked markings fan out around it)
     svg.appendChild(svgEl("rect", { x: p[0] - 11, y: p[1] - 11, width: 22, height: 22, rx: 4, fill: "none",
       stroke: "var(--warn)", "stroke-width": 2.5, "pointer-events": "none" }));
   });
@@ -400,6 +476,12 @@ function mwDrawCurve(v) {
     paths.appendChild(item);
   });
   if (!v.cone.length) paths.textContent = "The five legs meet at one point here (the apex of M₀,₅).";
+  if (MW.same.length) {
+    const item = document.createElement("span");
+    item.className = "muted";
+    item.textContent = "one point: " + mwSameText();
+    paths.appendChild(item);
+  }
 }
 
 // the cell picture: the type's cone as a quadrant (two rays), a line (one) or
@@ -528,7 +610,7 @@ function mwWireCell() {
 function mwMove(ab) {
   const v = MW.view;
   const to = (v.cone.length === 2 ? ab : [ab[0]]).map(x => (Math.round(x * 1e4) / 1e4).toString());
-  const r = api("moduli_move", MW.cur, MW.evaluated, MW.legs, MW.points, MW.coords, to);
+  const r = api("moduli_move", MW.cur, MW.evaluated, MW.legs, MW.points, MW.coords, to, MW.same);
   MW.m = r.m;
   if (r.wall) mwEnterWall(MW.cur, r.wall.edge);
   mwRender();
@@ -536,7 +618,7 @@ function mwMove(ab) {
 
 // --- at a wall ----------------------------------------------------------------------
 function mwEnterWall(fromId, edgeId) {
-  const w = api("moduli_wall", fromId, edgeId, MW.evaluated, MW.legs);
+  const w = api("moduli_wall", fromId, edgeId, MW.evaluated, MW.legs, MW.same);
   MW.wall = { from: fromId, edge: edgeId, edgeName: w.edge, wallId: w.wall_id, vertex: w.vertex,
               regenerations: w.regenerations };
   MW.cur = w.wall_id;
@@ -572,7 +654,7 @@ function mwDrawWall() {
 function mwRegenerate(index) {
   const w = MW.wall;
   const r = api("moduli_regenerate", w.wallId, w.vertex, index, MW.evaluated, MW.legs, MW.points, MW.m,
-                String(MW.R));
+                String(MW.R), MW.same);
   if (!r.m) { alert("Cannot go on into it: " + r.why); return; }
   MW.cur = r.id; MW.m = r.m; MW.wall = null;
   mwRender();

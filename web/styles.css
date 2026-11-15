@@ -475,6 +475,7 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .mm-key { display: inline-block; width: 14px; height: 14px; box-sizing: border-box; }
 .mm-key-leg { border: 3px solid var(--accent); border-radius: 50%; }
 .mm-key-ev { border: 3px solid var(--warn); border-radius: 3px; }
+.mm-key-same { border: 3px solid #2ca02c; border-radius: 50%; }
 /* one line, so the cell does not move under a finger when it changes */
 #mw-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mw-dot { cursor: grab; }
