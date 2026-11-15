@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "67";
+const APP_VERSION = "68";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "54";
+const STYLES_VERSION = "55";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -2529,8 +2529,27 @@ function drawCurve(data, opts = {}) {
   // valence of the vertex it hangs from, less the two directions any point on
   // an edge already has -- so a marking in the interior of an edge (internally
   // a trivalent vertex) is one unit, one at a trivalent vertex is two, and so on.
+  // Markings at one point (several on one vertex) would hide one another:
+  // they are fanned out a little around it, each tied to it by a thin line.
+  const markAt = {}, atPoint = {};
   c.markings.forEach(m => {
-    const p = T(m.at);
+    const p = T(m.at), k = Math.round(p[0]) + "," + Math.round(p[1]);
+    (atPoint[k] = atPoint[k] || []).push([m, p]);
+  });
+  Object.values(atPoint).forEach(list => {
+    list.forEach(([m, p], i) => {
+      if (list.length === 1) { markAt[m.id] = p; return; }
+      const ang = -Math.PI / 2 + 2 * Math.PI * i / list.length;
+      // apart by their radius (with a gap): the discs touch neither each other nor the point
+      const r = Math.max(...list.map(([x]) => MARK_UNIT_R * Math.max(1, (x.valence || 3) - 2)));
+      const d = (r + 4) / Math.min(1, Math.sin(Math.PI / list.length)) + 3;
+      markAt[m.id] = [p[0] + d * Math.cos(ang), p[1] + d * Math.sin(ang)];
+      svg.appendChild(svgEl("line", { x1: p[0], y1: p[1], x2: markAt[m.id][0], y2: markAt[m.id][1],
+                                      stroke: "var(--muted)", "stroke-width": 1.5, "pointer-events": "none" }));
+    });
+  });
+  c.markings.forEach(m => {
+    const p = markAt[m.id];
     const col = renderColor(m.color);
     const r = MARK_UNIT_R * Math.max(1, (m.valence || 3) - 2);
     const picked = pickMarking && pickMarking(m);
@@ -2597,7 +2616,7 @@ function drawCurve(data, opts = {}) {
   routePicks(svg, [...edgePicks, ...vertexPicks, ...markPicks]);
   placeLabels(svg, wanted, segments, discs);
   return { svg: svg, edgePicks: edgePicks, vertexPicks: vertexPicks, markPicks: markPicks,
-           lines: lines, T: T };
+           lines: lines, T: T, markAt: markAt };
 }
 
 // Pick targets overlap -- a short edge lies inside its neighbours' wide hit

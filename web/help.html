@@ -290,7 +290,8 @@ a warning line with <span class="btn">Try again</span> appears above the picture
   <li><strong>Edges</strong> are drawn in their directions, bounded edges a little thicker than ends.
       Ends are rays of a fixed length. Weights above 1 are in the label, e.g. <code>e1 (w4)</code>.</li>
   <li><strong>Vertices are not drawn.</strong> <strong>Markings</strong> are drawn as dots exactly at
-      their points, larger at vertices where more edges meet (size grows with valence − 2).</li>
+      their points, larger at vertices where more edges meet (size grows with valence − 2). Several
+      markings on one vertex are spread a little around it, each tied to it by a thin line.</li>
   <li><strong>Lengths</strong> are chosen for readability: edges of comparable drawn length, and
       anything not incident kept visibly apart. No vertex lands on an edge it does not belong to, and
       unrelated parts do not touch.</li>
@@ -763,13 +764,23 @@ type. The page shows all this, exactly.</p>
   <li><span class="btn">Draw a subdivision…</span> opens the main app's <a href="#editor">subdivision editor</a>;
       <span class="btn">Create curve</span> there makes the type, the curve dual to the subdivision. Or paste the
       cells as text.</li>
-  <li>The picture then has three modes:
+  <li>The picture then has five modes:
     <ul>
       <li><span class="btn">Markings</span>: click an edge or end to put a marking inside it, a ringed vertex to put
-          one on it, a marking to take it off (the point it leaves inside an edge is merged back).</li>
+          one on it, a marking to take it off (the point it leaves inside an edge is merged back). A vertex takes
+          markings only while it keeps more other edges than markings.</li>
       <li><span class="btn">Legs of M₀,₅</span>: click five ends or markings; they are drawn thick, or ringed, in
           the accent colour.</li>
       <li><span class="btn">Evaluated</span>: click the markings to fix at points of the plane (orange squares).</li>
+      <li><span class="btn">Same point</span>: make evaluated markings one point of the plane. Click a marking, then
+          the marking it is to be one point with (green rings; both become evaluated, and a third can join). On the
+          abstract curve they must sit at one vertex — one of them moves to the other's — and a vertex can carry
+          markings only while it has <em>more</em> other edges than markings (a trivalent vertex two, a point
+          inside an edge one), so put the first on a vertex of the curve. Click a linked marking to free it. A
+          group of g markings at a vertex takes g dimensions and gives one point, so the count becomes
+          |Δ| + n − 1 − Σ g = 2k + 2 with k the number of distinct points. On the walk, the regenerations that
+          would take the markings of a group to different vertices (or crowd a vertex) cannot be entered; their
+          icons say why.</li>
       <li><span class="btn">Slopes</span>: change an end's direction, as <a href="#slope">Edit end slope</a> in the
           main app. Click the end to change (violet), then another end to be the <em>dependent</em> one (dashed
           orange; it absorbs the change, so the curve stays balanced — the next end is taken if you do not choose),
