@@ -210,8 +210,8 @@ const HELP = {
     anchor: "slope",
     html: `<p>Change the direction of one end. Another end has to absorb the change to keep the curve balanced.</p>
       <ul>
-        <li><b>end to edit</b> and its <b>new x</b>, <b>new y</b>.</li>
-        <li><b>dependent end</b> — the one that changes to compensate (must be different).</li>
+        <li>Click the <b>end to edit</b> on the picture (violet), then type its <b>new x</b>, <b>new y</b>.</li>
+        <li>The <b>dependent end</b> (dashed orange) changes to compensate: the next end, or click another. Click the violet end again to start over; or choose both from a list.</li>
         <li><b>Apply</b> — the bounded edges are solved again; other ends stay; derived types follow.</li>
       </ul>`,
   },
