@@ -52,6 +52,27 @@ async function mwBoot() {
     if (saved) restored = mwRestore(JSON.parse(saved));
   } catch (e) { reportError(e); }
   if (!restored) mwShow();
+  mwGuard(mwTakeHandoff);
+}
+
+// A type sent from the main app (its ↗ button): the address carries a token,
+// and localStorage the type under it. It replaces the page's type -- after
+// asking, when there is one.
+function mwTakeHandoff() {
+  const m = /[#&]type=([\w-]+)/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  let h = null;
+  try { h = JSON.parse(localStorage.getItem(MODULI_HANDOFF_KEY) || "null"); } catch (e) { h = null; }
+  if (!h || h.token !== m[1]) {
+    alert("The type sent from the main app is no longer here: send it again with its ↗ button.");
+    return;
+  }
+  try { localStorage.removeItem(MODULI_HANDOFF_KEY); } catch (e) { /* private mode */ }
+  const name = (JSON.parse(h.library).nodes[0] || {}).name || "the type";
+  if (MW.base && !confirm(`Replace the type here with ${name} from the main app?`)) return;
+  api("load", h.library);
+  mwSetType(api("list_nodes")[0].id);
 }
 
 function mwWire() {
@@ -129,13 +150,19 @@ function mwRestore(st) {
 // --- step 1: the type -------------------------------------------------------------
 function mwNewType(cells) {
   api("load", JSON.stringify({ schema: 1, kind: "workspace", nodes: [] }));
-  const summ = api("add_from_subdivision", cells, "drawn");
-  MW.base = summ.id;
+  mwSetType(api("add_from_subdivision", cells, "drawn").id);
+}
+
+// start step 1 on the type in the (one-type) library
+function mwSetType(id) {
+  MW.base = id;
   const ends = api("render", MW.base).curve.edges.filter(e => e.kind === "end").map(e => e.name);
   MW.legs = ends.slice(0, 5);                // a start; change on the picture
   MW.evaluated = [];
   MW.same = [];
   MW.linkFrom = null;
+  MW.moveFrom = null;
+  MW.slope = null;
   MW.mode = "markings";
   MW.step = "setup";
   MW.wall = null;
