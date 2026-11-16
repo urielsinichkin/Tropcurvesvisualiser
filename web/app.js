@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "70";
+const APP_VERSION = "71";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "55";
+const STYLES_VERSION = "56";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -2712,8 +2712,9 @@ function mountPicker(data, svgId, o) {
         t.ring.setAttribute("stroke", on ? "var(--accent)" : "var(--muted)");
       }
     });
+    if (o.decorate) o.decorate(drawn);           // the dialog's own marks, over the default look
     const shown = selected || hovered;
-    if (o.status) o.status.textContent = shown ? o.describe(shown) : (o.idle || "");
+    if (o.status) o.status.textContent = shown ? o.describe(shown) : (typeof o.idle === "function" ? o.idle() : (o.idle || ""));
     if (o.button) {
       o.button.disabled = !selected;
       o.button.textContent = selected ? o.buttonText(selected) : o.buttonIdle;
@@ -4335,6 +4336,10 @@ function openDeleteDialog(id = selectedId) {
   openModal();
 }
 
+// The end being changed and the dependent end that absorbs the change are
+// picked on the picture (the end in violet, the dependent end dashed orange),
+// as on the moduli page; the list view has the same two choices as menus.
+const SLOPE_COLOR = "#8e5bd8";
 function openSlopeDialog() {
   const data = api("render", selectedId);
   const ends = data.curve.edges.filter(e => e.kind === "end");
@@ -4346,41 +4351,92 @@ function openSlopeDialog() {
     body.insertAdjacentHTML("beforeend", `<p class="muted">This type needs at least two ends.</p>`);
     openModal(); return;
   }
-  const opts = ends.map(e => [e.id, `${e.name}  ${fmtVec(e.vec)}`]);
-  const editSel = selectOf(opts);
-  const depSel = selectOf(opts);
-  depSel.selectedIndex = 1;
+  const st = { edit: null, dep: null };
+  const byId = id => ends.find(e => e.id === id) || null;
+  const desc = e => `${e.name} ${fmtVec(e.vec)}`;
+  const frame = pickFrame(body, "Click the end to change, then (if not the next one) the dependent end.", false);
+
+  // the list view: the same two choices as menus
+  const choose = "— choose —";
+  const editSel = selectOf([["", choose], ...ends.map(e => [e.id, `${e.name}  ${fmtVec(e.vec)}`])]);
+  const depSel = selectOf([["", choose], ...ends.map(e => [e.id, `${e.name}  ${fmtVec(e.vec)}`])]);
+  frame.listView.appendChild(row([labeled("end to edit", editSel), labeled("dependent end", depSel)]));
+
+  // the new direction and Apply, under either view
   const xin = numInput(), yin = numInput();
-  const syncFromEdit = () => {
-    const e = ends.find(x => x.id === editSel.value);
-    if (e && e.vec) { xin.value = e.vec[0]; yin.value = e.vec[1]; }
-    if (depSel.value === editSel.value) {
-      depSel.selectedIndex = (editSel.selectedIndex + 1) % ends.length;
-    }
-  };
-  editSel.onchange = syncFromEdit;
-  depSel.onchange = () => {
-    if (depSel.value === editSel.value) {
-      depSel.selectedIndex = (editSel.selectedIndex + 1) % ends.length;
-      showModalError("the edited end and the dependent end must be different");
-    } else showModalError("");
-  };
-  syncFromEdit();
+  const what = document.createElement("div");
+  what.className = "slope-what";
   const apply = document.createElement("button");
   apply.className = "primary"; apply.textContent = "Apply";
+  body.appendChild(what);
+  body.appendChild(row([labeled("new x", xin), labeled("new y", yin), apply]));
+  body.appendChild(errBox());
+
+  let picker = null;
+  const setEdit = id => {
+    st.edit = id || null;
+    st.dep = st.edit ? (ends.find(e => e.id !== st.edit) || {}).id : null;
+    const e = byId(st.edit);
+    if (e && e.vec) { xin.value = e.vec[0]; yin.value = e.vec[1]; }
+    show();
+  };
+  const setDep = id => { st.dep = id && id !== st.edit ? id : st.dep; show(); };
+  const show = () => {
+    const e = byId(st.edit), d = byId(st.dep);
+    editSel.value = st.edit || ""; depSel.value = st.dep || "";
+    what.innerHTML = e
+      ? `<b style="color:${SLOPE_COLOR}">${escapeHtml(e.name)}</b> ${escapeHtml(fmtVec(e.vec))} → the new direction below; ` +
+        `dependent end <b class="slope-dep">${escapeHtml(d ? desc(d) : "—")}</b>`
+      : `<span class="muted">Choose the end to change.</span>`;
+    apply.disabled = !e || !d;
+    xin.disabled = yin.disabled = !e;
+    showModalError("");
+    if (picker) picker.select(null);              // repaint, the roles drawn
+  };
+  editSel.onchange = () => setEdit(editSel.value);
+  depSel.onchange = () => {
+    if (depSel.value && depSel.value === st.edit) { showModalError("the edited end and the dependent end must be different"); show(); return; }
+    setDep(depSel.value);
+  };
   apply.onclick = () => {
     showModalError("");
     try {
-      api("edit_slopes", selectedId, editSel.value,
-          [parseInt(xin.value || "0", 10), parseInt(yin.value || "0", 10)], depSel.value);
+      api("edit_slopes", selectedId, st.edit,
+          [parseInt(xin.value || "0", 10), parseInt(yin.value || "0", 10)], st.dep);
       closeModal(); refreshAll(); autosave();
     } catch (e) { showModalError(e.message); }
   };
-  body.appendChild(row([labeled("end to edit", editSel), labeled("dependent end", depSel)]));
-  body.appendChild(row([labeled("new x", xin), labeled("new y", yin)]));
-  body.appendChild(errBox());
-  body.appendChild(row([apply]));
   openModal();
+  picker = mountPicker(data, "pick-svg", {
+    pickEdge: e => e.kind === "end",
+    clickCommits: false,
+    status: frame.status,
+    idle: () => byId(st.edit) ? `Changing ${desc(byId(st.edit))}; dependent ${byId(st.dep) ? desc(byId(st.dep)) : "—"}`
+                              : "Click the end whose direction to change.",
+    describe: t => {
+      const e = t.edge;
+      if (e.id === st.edit) return `end ${desc(e)}: the one being changed — click to start again`;
+      if (e.id === st.dep) return `end ${desc(e)}: the dependent end`;
+      return `end ${desc(e)}: click to ` + (st.edit ? "make it the dependent end" : "change its direction");
+    },
+    onSelect: t => {
+      if (!t) return;
+      if (!st.edit) setEdit(t.id);
+      else if (t.id === st.edit) setEdit(null);
+      else setDep(t.id);
+    },
+    decorate: drawn => {
+      ends.forEach(e => {
+        const ln = drawn.lines[e.id];
+        if (!ln) return;
+        if (e.id === st.edit) { ln.setAttribute("stroke", SLOPE_COLOR); ln.setAttribute("stroke-width", 6); }
+        if (e.id === st.dep) { ln.setAttribute("stroke", "var(--warn)"); ln.setAttribute("stroke-width", 6); }
+        if (e.id === st.dep) ln.setAttribute("stroke-dasharray", "10 6");
+        else ln.removeAttribute("stroke-dasharray");
+      });
+    },
+  });
+  show();
 }
 
 // A marking goes at a vertex or part-way along an edge; both are picked on the

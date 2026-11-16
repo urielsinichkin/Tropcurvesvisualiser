@@ -224,7 +224,10 @@ built, so the refined multiplicity is only computed while its part is open.
   from. Beyond that the count grows fast -- 10 splits at `d = 5`, 25 at `d = 6`
   -- so the UI has you tick one side instead, showing the forced edge as you go;
   the pieces may need resolving in turn.
-- **Edit slopes**: the two-ends mechanism (2.2).
+- **Edit slopes**: the two-ends mechanism (2.2). Both ends are picked on the
+  picture (`pickFrame` + `mountPicker` with `clickCommits: false` and a
+  `decorate` hook that draws the two roles: the end violet, the dependent end
+  dashed orange), as on the moduli page; the list view has them as menus.
 - **Add / remove markings**: contracted ends at a chosen vertex, or on a
   chosen edge/end (subdividing it as in 2.1). Subdividing an end keeps the
   original id and name on the unbounded piece, so slope editing and the Newton

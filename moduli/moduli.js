@@ -238,7 +238,7 @@ function mwDrawType() {
   const describe = t => {
     if (mode === "slopes") {
       const sl = MW.slope || {}, v = `(${t.edge.vec.join(", ")})`;
-      if (t.edge.id === sl.edit) return `end ${t.edge.name} ${v}: the one being changed — click to choose again`;
+      if (t.edge.id === sl.edit) return `end ${t.edge.name} ${v}: the one being changed — click to start again`;
       if (t.edge.id === sl.dep) return `end ${t.edge.name} ${v}: the dependent end`;
       return `end ${t.edge.name} ${v}: click to ` + (sl.edit ? "make it the dependent end" : "change its direction");
     }
@@ -270,7 +270,8 @@ function mwDrawType() {
     t.hit.addEventListener("pick-click", () => mwGuard(() => {
       if (mode === "slopes") {
         const sl = MW.slope || (MW.slope = {});
-        if (!sl.edit || t.edge.id === sl.edit) { sl.edit = t.edge.id; sl.dep = null; sl.vec = null; }
+        if (t.edge.id === sl.edit) MW.slope = null;          // start again
+        else if (!sl.edit) { sl.edit = t.edge.id; sl.dep = null; sl.vec = null; }
         else sl.dep = t.edge.id === sl.dep ? null : t.edge.id;
         mwDrawType();
         return;
@@ -351,7 +352,7 @@ function mwLinkClick(name) {
 // Slopes: the end being changed in violet, the dependent end dashed orange;
 // under the picture the new direction and Apply (the main app's edit_slopes:
 // the dependent end absorbs the change, the bounded edges are re-derived).
-const SLOPE_COLOR = "#8e5bd8";
+// SLOPE_COLOR is app.js's, shared with its slope dialog.
 function mwSlopeForm(data, drawn) {
   const form = document.getElementById("mw-slope");
   form.innerHTML = "";

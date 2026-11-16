@@ -441,8 +441,16 @@ needs a bounded edge, and resolving needs a vertex of valence ≥ 4.</p>
 <h3 id="slope">9.2 Edit an end's slope</h3>
 <p>Changing one end alone would break balancing, so you choose the <strong>end to edit</strong>, its
 <strong>new x</strong> and <strong>new y</strong>, and a different <strong>dependent end</strong> that absorbs
-the change. The bounded edges are then solved again, and all other ends stay fixed.
-<span class="btn">Apply</span> changes this type, and the change is passed on to its derived types.</p>
+the change. The bounded edges are then solved again, and all other ends stay fixed.</p>
+<ul>
+  <li>Pick the ends on the picture: click the end to change (it turns violet, and its direction fills
+      <strong>new x</strong>, <strong>new y</strong>). The next end is taken as the dependent end (dashed
+      orange); click another end to make it the dependent one instead. Click the violet end again to start
+      over. <span class="btn">Choose from a list instead</span> gives the same two choices as menus.</li>
+  <li>Type the new direction (integers; a multiple of a primitive vector gives a weight) and press
+      <span class="btn">Apply</span>. It changes this type, and the change is passed on to its derived
+      types.</li>
+</ul>
 
 <h3 id="marking">9.3 Add a marking</h3>
 <ul>

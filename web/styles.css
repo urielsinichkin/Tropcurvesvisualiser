@@ -483,3 +483,6 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .mw-regen { display: grid; gap: 4px; padding: 6px; font-size: 13px; }
 .mw-regen svg { height: 80px; pointer-events: none; }
 .mw-regen.back { border-style: dashed; }
+/* the slope dialog: what is being changed */
+.slope-what { margin: 8px 0 2px; font-size: 13px; }
+.slope-dep { color: var(--warn); text-decoration: underline dashed; text-underline-offset: 3px; }
