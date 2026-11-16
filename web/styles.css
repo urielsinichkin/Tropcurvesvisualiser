@@ -168,6 +168,7 @@ section {
 }
 .type-item:hover :is(.row-del, .row-btn), .type-item.selected :is(.row-del, .row-btn), :is(.row-del, .row-btn):focus-visible { opacity: 1; }
 .row-del:hover { background: color-mix(in srgb, var(--danger) 15%, transparent); }
+.row-btn:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
 @media (hover: none) { .row-del, .row-btn { opacity: .8; } }
 .type-item.holds-selection { border-color: var(--accent); border-style: dashed; }
 .twisty:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }

@@ -406,6 +406,14 @@ marking onto another marking's vertex, a vertex or into an edge, through the
 workspace's `move_marking`). An unlinked pair of evaluated markings sharing a
 vertex makes a lower-dimensional cell, and `explain` suggests linking them.
 
+**From the main app.** Each type row has ↗ (`openInModuli`): the type
+alone (`export_subset`, so a derived type becomes a root with its steps
+folded in) is put in localStorage under `tropcurves.walk.handoff` with a
+token, and the page is opened in a new tab at `moduli/#type=<token>`. The
+page (`mwTakeHandoff`, after restoring its own state) takes the type when the
+token matches, asking before it replaces a type it has, and clears the
+address and the stored copy.
+
 **Page.** Step 1: `openSubdivisionEditor(onCreate)` (the main app's editor,
 handing the cells to the page) or pasted cells; markings put on and taken off
 on the picture (`moduli_remove_marking` merges the point left inside an edge

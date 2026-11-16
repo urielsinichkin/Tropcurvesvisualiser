@@ -30,6 +30,7 @@ const HELP = {
         <li>Each row: name; counts of ends, bounded edges, markings; <i>follows</i> / <i>detached</i> for derived types; its description, if any, cut to one short line (hover for all of it, or see the Edit panel).</li>
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
+        <li><b>↗</b> — open that type in the moduli map (a new tab).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
         <li><b>⠿</b> — drag to reorder a type among its siblings (its derived types come along; it never changes parent). Saved with the library.</li>
       </ul>`,
@@ -263,7 +264,7 @@ const HELP = {
     anchor: "moduli-type",
     html: `<p>The combinatorial type to walk with, and the map.</p>
       <ul>
-        <li><b>Draw a subdivision…</b> — the main app's editor; the curve is its dual (or paste the cells as text).</li>
+        <li>Bring a type from the main app with <b>↗</b> on its row, or <b>Draw a subdivision…</b> — the main app's editor; the curve is its dual (or paste the cells as text).</li>
         <li><b>Markings</b> — click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off.</li>
         <li><b>Move</b> — click a marking, then another marking or a vertex to put it on that vertex (two markings on one vertex), or an edge to put it inside it.</li>
         <li><b>Legs of M₀,₅</b> — click five ends or markings (thick / ringed in green).</li>

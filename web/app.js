@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "71";
+const APP_VERSION = "72";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "56";
+const STYLES_VERSION = "57";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -1956,6 +1956,19 @@ function foldableTypeTree(tree, makeRow) {
   return { refold: refold, foldAll: foldAll };
 }
 
+// Hand one type to the moduli page: the type alone (export_subset makes it a
+// root, its derivation steps folded in) goes into localStorage under a token
+// -- the two pages share an origin -- and the page, opened in a new tab with
+// the token in its address, takes it from there.
+const MODULI_HANDOFF_KEY = "tropcurves.walk.handoff";
+function openInModuli(nodeId) {
+  const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  try {
+    localStorage.setItem(MODULI_HANDOFF_KEY, JSON.stringify({ token, library: api("export_subset", [nodeId]) }));
+  } catch (e) { reportError(e); return; }
+  window.open("../moduli/#type=" + token, "_blank");
+}
+
 function renderTypeList() {
   const nodes = api("list_nodes");
   const byId = {}; nodes.forEach(n => byId[n.id] = n);
@@ -2043,7 +2056,13 @@ function renderTypeList() {
     del.title = `Delete ${n.name}…`;
     del.setAttribute("aria-label", `Delete ${n.name}`);
     del.onclick = ev => { ev.stopPropagation(); openDeleteDialog(n.id); };
-    li.append(del);
+    const toModuli = document.createElement("button");
+    toModuli.className = "row-btn row-moduli";
+    toModuli.textContent = "↗";
+    toModuli.title = `Open ${n.name} in the moduli map (a new tab)`;
+    toModuli.setAttribute("aria-label", `Open ${n.name} in the moduli map`);
+    toModuli.onclick = ev => { ev.stopPropagation(); openInModuli(n.id); };
+    li.append(toModuli, del);
     // the grip, for a type that has siblings to move among
     if (siblings > 1) {
       const grip = sortGrip(n.name);
