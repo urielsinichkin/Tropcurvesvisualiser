@@ -150,3 +150,19 @@ def test_the_curve_exports_as_exact_data():
     assert out["markings"]["x1"] == out["constraints"]["points"]["x1"]       # through its point
     assert out["coordinates"] == z
     assert set(out["lengths"]) == {e.name for e in s.ws.nodes[nid].curve.bounded}
+
+
+def test_the_chart_box_stays_put_near_a_wall_at_length_zero():
+    """A point close to l = 0 on a length axis is near a wall, not outside
+    the box: the box must not grow without end (it once doubled to over a
+    million, sending the next drag far away, into the opposite wall)."""
+    s, nid, pts, lines, z = _two_dim()
+    v = s.poly_view(nid, pts, lines, z)
+    box = v["chart"]["box"]
+    cell = polyhedron.Cell(s.ws.nodes[nid].curve, pts, lines)
+    zf = [Fraction(x) for x in z]
+    for frac in (Fraction(1, 10), Fraction(1, 100), Fraction(0)):
+        w = [zf[c] for c in cell.free]
+        near = cell.at_chart(zf, [w[0], w[1] * frac])          # the second length nearly 0
+        b2 = s.poly_view(nid, pts, lines, [str(x) for x in near], box)["chart"]["box"]
+        assert b2 == box, (frac, b2)
