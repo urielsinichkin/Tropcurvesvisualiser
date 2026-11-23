@@ -426,7 +426,10 @@ quadrant with axes in the paths' colours, region shaded, walls labelled; a
 line; or a point. The point is dragged from itself (its pointer handlers are
 registered before `makeZoomable`'s and stop the event, so the drag is not a
 pan; elsewhere a pinch or wheel zooms and a tap walks the point there),
-coalesced to one `moduli_move` per frame. At a wall the current type becomes
+coalesced to one `moduli_move` per frame. The cell's point, lines and labels keep their size
+on screen as it zooms (`keepSize`: their sizes at zoom 1 and, for a label,
+its anchor and offset; `makeZoomable` divides them by the zoom on every
+change, and a copy draws them at zoom 1). At a wall the current type becomes
 the wall type and its regenerations show as small pictures; choosing one
 calls `moduli_regenerate`. The view grows (`R`) when the point nears its
 edge. State (library text, choices, current type, points, point, wall) is

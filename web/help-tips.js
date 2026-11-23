@@ -293,7 +293,7 @@ const HELP = {
         <li>Shaded: where the type has a curve through the points. Lines: its <b>walls</b>, each where an edge shrinks to 0.</li>
         <li><b>Drag the point</b> (or tap where it should go): it moves until it meets a wall, and stops there.</li>
         <li>On a wall the curve has a vertex of valence 4; the small pictures are its <b>regenerations</b> — <i>back</i>, or <i>go on</i> into a new type, a little way in.</li>
-        <li>Zoom: wheel / pinch (away from the point). <b>Copy</b> — the picture as a PNG.</li>
+        <li>Zoom: wheel / pinch (away from the point); the point and the labels keep their size. <b>Copy</b> — the picture as a PNG.</li>
       </ul>`,
   },
 };
