@@ -587,7 +587,8 @@ class Session:
     def _poly_box(cell, w: List[Fraction], box) -> List[Tuple[Fraction, Fraction]]:
         """The chart's box: [0, R] along a length, an interval of width R
         around the point otherwise; grown (R doubled) while the point is not
-        well inside."""
+        well inside -- along a length only towards the far end, since near 0
+        the point is near a wall (where the length is 0), not outside."""
         def nice(x: Fraction) -> Fraction:
             r = Fraction(1, 4)
             while r < x:
@@ -602,7 +603,11 @@ class Session:
             else:
                 R = nice(abs(w[i]) + 1)
                 lo, hi = w[i] - R, w[i] + R
-            while not (lo + (hi - lo) / 20 <= w[i] <= hi - (hi - lo) * 3 / 20) and hi - lo < 10 ** 6:
+            def inside(lo, hi):
+                if c >= 2:                  # a length: only the far end matters
+                    return w[i] <= hi - (hi - lo) * 3 / 20
+                return lo + (hi - lo) / 20 <= w[i] <= hi - (hi - lo) * 3 / 20
+            while not inside(lo, hi) and hi - lo < 10 ** 6:
                 if c >= 2:
                     hi = lo + 2 * (hi - lo)
                 else:

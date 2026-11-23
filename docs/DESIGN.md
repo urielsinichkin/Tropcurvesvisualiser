@@ -454,7 +454,8 @@ length at least half that margin, so the curve follows a dragged constraint
 smoothly. Up to dimension 2 the chart uses the free columns of `rref(C)`
 (columns `x_0, y_0, l_e` in order, so the free ones are lengths when they can
 be), each length an affine form in them; the region is the box (`[0, R]` along
-a length, around the point otherwise) clipped by `l_e >= 0` as in the moduli
+a length, grown only towards its far end since near 0 the point is near a
+wall; around the point otherwise) clipped by `l_e >= 0` as in the moduli
 page, a side where a charted length is 0 a wall of that edge. `move` and `go`
 stop at the first length reaching 0. Above dimension 2, `project` projects a
 direction of lengths orthogonally onto `ker C` (`N (N^T N)^{-1} N^T d`, `N` a
