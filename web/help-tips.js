@@ -330,7 +330,7 @@ const HELP = {
     title: "The polyhedron",
     anchor: "poly-cell",
     html: `<ul>
-        <li>Dimension 1 or 2: the polyhedron in its free coordinates (edge lengths), with its walls. Drag the point or tap where it should go; it stops at a wall.</li>
+        <li>Dimension 1 or 2: the polyhedron in its free coordinates (edge lengths), with its walls. Drag the point or tap where it should go; it stops at a wall, and a new press moves on from there.</li>
         <li>Higher: the slider moves along the chosen direction, projected to the polyhedron, up to the first edge reaching 0.</li>
         <li>At a degeneration: pick a regeneration — <i>back</i>, <i>go on</i> — or keep moving in the degenerate type.</li>
       </ul>`,

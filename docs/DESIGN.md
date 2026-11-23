@@ -471,7 +471,9 @@ when its curve is identical (ids included), since `z` is indexed by ids.
 **Page.** Step 1 draws the curve in the plane with a fixed transform while
 a handle is dragged (`drawCurve(..., {transform})`, inverted through
 `T.params`); a tap on a handle frees it. Step 2: the curve (direction edges
-recoloured), and the chart (keepSize marks, as in the moduli cell) or the
+recoloured), and the chart (keepSize marks, as in the moduli cell; a drag
+of its point ends when the type changes -- the held press is spent, its
+moves and its click ignored -- so only a new press goes on) or the
 direction panel with a slider (`poly_at` per frame, the curve's transform
 kept; letting go commits). After any move, a type with a vertex of valence
 >= 4 offers that vertex's regenerations (`poly_regenerations`, the type
