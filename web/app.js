@@ -14,7 +14,7 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "72";
+const APP_VERSION = "73";
 // Must match the styles.css?v= in index.html (a test checks).
 const STYLES_VERSION = "57";
 
@@ -575,6 +575,7 @@ function standaloneSvg(svgId, background) {
   }
 
   clone.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);   // the whole figure, not the zoomed part
+  applyKeptSizes(clone, 1);
   const vb = [0, 0, VBW, VBH];
   const [vx, vy, w, h] = vb;
   clone.setAttribute("width", w);
@@ -2125,6 +2126,29 @@ function selectNode(id) {
 // ---------------------------------------------------------------------------
 const ZOOM_MIN = 1, ZOOM_MAX = 16;
 
+// Marks that keep their size on screen while the picture zooms (a point, a
+// label): `spec` gives the sizes at zoom 1 -- r, fs (font size), sw (stroke
+// width) -- and for a label its anchor `at` and offset `d` from it, the offset
+// shrinking with the zoom so the label stays beside what it names. Every
+// zoom (and a copy, at zoom 1) sets them from the spec.
+function keepSize(el, spec) {
+  el.setAttribute("data-fix", JSON.stringify(spec));
+  return el;
+}
+function applyKeptSizes(root, k) {
+  root.querySelectorAll("[data-fix]").forEach(el => {
+    const f = JSON.parse(el.getAttribute("data-fix"));
+    if (f.r != null) el.setAttribute("r", f.r / k);
+    if (f.fs != null) el.setAttribute("font-size", f.fs / k);
+    if (f.sw != null) el.setAttribute("stroke-width", f.sw / k);
+    if (f.at) {
+      const d = f.d || [0, 0];
+      el.setAttribute("x", f.at[0] + d[0] / k);
+      el.setAttribute("y", f.at[1] + d[1] / k);
+    }
+  });
+}
+
 // Make `svg` zoomable; `ui` holds the optional level/fit/out/in controls.
 // The controller is kept on the element (svg._zoom), where clearSvg finds it.
 function makeZoomable(svg, ui = {}) {
@@ -2132,6 +2156,7 @@ function makeZoomable(svg, ui = {}) {
   const viewBox = () => `${z.x} ${z.y} ${VBW / z.k} ${VBH / z.k}`;
   const apply = () => {
     svg.setAttribute("viewBox", viewBox());
+    applyKeptSizes(svg, z.k);
     const zoomed = z.k > 1.001;
     svg.classList.toggle("zoomable", zoomed);
     if (ui.level) ui.level.textContent = zoomed ? Math.round(z.k * 100) + "%" : "";

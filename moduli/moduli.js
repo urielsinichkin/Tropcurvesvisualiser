@@ -552,7 +552,8 @@ function mwDrawCell(v) {
   const where = document.getElementById("mw-where");
   const c = v.coords ? v.coords.map(mwNum) : null;
   if (v.cone.length === 0) {
-    svg.appendChild(svgEl("circle", { cx: 300, cy: 200, r: 8, fill: "var(--warn)" }));
+    svg.appendChild(keepSize(svgEl("circle", { cx: 300, cy: 200, r: 6, fill: "var(--warn)" }), { r: 6 }));
+    applyKeptSizes(svg, mwZoom());
     where.textContent = "The tree of the five legs has no inner edge: the apex of M₀,₅.";
     return;
   }
@@ -560,20 +561,19 @@ function mwDrawCell(v) {
   const end = MW.R * 1.02;
   v.cone.forEach((sp, i) => {
     const a = cellXY([0, 0]), b = cellXY(i === 0 ? [end, 0] : [0, end]);
-    svg.appendChild(svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: PATH_COLORS[i], "stroke-width": 3 }));
-    const lbl = text(i === 0 ? b[0] : a[0] - 8, i === 0 ? a[1] + 24 : b[1] - 8, rayName(sp), PATH_COLORS[i]);
+    svg.appendChild(keepSize(svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: PATH_COLORS[i] }), { sw: 2.5 }));
+    const lbl = text(0, 0, rayName(sp), PATH_COLORS[i]);
     lbl.setAttribute("text-anchor", i === 0 ? "end" : "start");
-    svg.appendChild(lbl);
+    svg.appendChild(keepSize(lbl, { fs: 12, at: i === 0 ? [b[0], a[1]] : [a[0], b[1]], d: i === 0 ? [0, 22] : [-8, -8] }));
   });
   [0.5, 1].forEach(f => {
     const x = cellXY([MW.R * f, 0]);
-    const tx = text(x[0], x[1] + 40, mwShort(String(MW.R * f)), "var(--muted)"); tx.setAttribute("font-size", "11");
-    svg.appendChild(tx);
+    svg.appendChild(keepSize(text(0, 0, mwShort(String(MW.R * f)), "var(--muted)"), { fs: 10, at: x, d: [0, 36] }));
     if (v.cone.length === 2) {
       const y = cellXY([0, MW.R * f]);
-      const ty = text(y[0] - 8, y[1] + 4, mwShort(String(MW.R * f)), "var(--muted)");
-      ty.setAttribute("font-size", "11"); ty.setAttribute("text-anchor", "end");
-      svg.appendChild(ty);
+      const ty = text(0, 0, mwShort(String(MW.R * f)), "var(--muted)");
+      ty.setAttribute("text-anchor", "end");
+      svg.appendChild(keepSize(ty, { fs: 10, at: y, d: [-8, 4] }));
     }
   });
   // on a wall the wall type has no region of its own: show the one we came
@@ -585,28 +585,28 @@ function mwDrawCell(v) {
     svg.insertBefore(svgEl("polygon", { points: poly, fill: "var(--accent)", "fill-opacity": ghost ? 0.06 : 0.13, stroke: "none" }), svg.firstChild);
     region.walls.forEach(w => {
       const a = cellXY(w.from), b = cellXY(w.to);
-      svg.appendChild(svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "var(--ink)", "stroke-width": 2.2,
-        "stroke-linecap": "round" }));
+      svg.appendChild(keepSize(svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "var(--ink)",
+        "stroke-linecap": "round" }), { sw: 2 }));
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
       // the label on the region's side of its wall, clear of the axes
       const cen = cellXY([0, 1].map(k => region.polygon.reduce((t, q) => t + q[k], 0) / region.polygon.length));
       let nx = -dy / L, ny = dx / L;
       if ((cen[0] - mid[0]) * nx + (cen[1] - mid[1]) * ny < 0) { nx = -nx; ny = -ny; }
-      const lbl = text(mid[0] + nx * 26, mid[1] + ny * 26 + 4, w.name + " → 0", "var(--ink)");
-      lbl.setAttribute("font-size", "12");
-      svg.appendChild(lbl);
+      svg.appendChild(keepSize(text(0, 0, w.name + " → 0", "var(--ink)"), { fs: 11, at: mid, d: [nx * 22, ny * 22 + 4] }));
     });
   }
   if (c) {
     const q = cellXY(v.cone.length === 2 ? c : [c[0], 0]);
     const onWall = !!MW.wall;
-    svg.appendChild(svgEl("circle", { cx: q[0], cy: q[1], r: onWall ? 11 : 9, fill: onWall ? "var(--warn)" : "var(--accent)",
-      stroke: "var(--panel)", "stroke-width": 2.5, class: "mw-dot" }));
+    svg.appendChild(keepSize(svgEl("circle", { cx: q[0], cy: q[1], fill: onWall ? "var(--warn)" : "var(--accent)",
+      stroke: "var(--panel)", class: "mw-dot" }), { r: onWall ? 8.5 : 7, sw: 2 }));
     where.textContent = v.cone.map((sp, i) => `${rayName(sp)} = ${mwShort(v.coords[i])}`).join(", ") +
       (MW.wall ? ` — on the wall where ${MW.wall.edgeName} shrank to 0` : v.full ? " — drag the point; it stops at a wall" : "");
   } else where.textContent = "";
+  applyKeptSizes(svg, mwZoom());       // the point and the labels: one size on screen at any zoom
 }
+const mwZoom = () => { const z = document.getElementById("mw-cell")._zoom; return z ? z.k : 1; };
 
 // drag the point (from the point itself); a tap elsewhere walks it there
 let mwRaf = 0;
@@ -633,7 +633,7 @@ function mwWireCell() {
     if (!canMove() || (ev.pointerType === "mouse" && ev.button !== 0)) return;
     const c = MW.coords.map(mwNum), dot = cellXY(MW.view.cone.length === 2 ? c : [c[0], 0]);
     const q = toSvg(ev);
-    if (Math.hypot(q[0] - dot[0], q[1] - dot[1]) > 28) return;      // not on the point: pan / pinch
+    if (Math.hypot(q[0] - dot[0], q[1] - dot[1]) > 24 / mwZoom()) return;   // not on the point: pan / pinch
     ev.stopImmediatePropagation();
     ev.preventDefault();
     drag = true;
