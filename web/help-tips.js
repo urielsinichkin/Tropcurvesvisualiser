@@ -304,6 +304,7 @@ const HELP = {
       <ul>
         <li>1 — fix points and lines, and drag them; the curve follows.</li>
         <li>2 — the curve and the polyhedron: drag the point (dimension ≤ 2) or choose a direction (higher); where an edge reaches 0, choose how it regenerates.</li>
+        <li><b>Export…</b> — the session, the types reached, the curve as data, the pictures. <b>Open…</b> — a saved session.</li>
         <li><b>Main app</b> — back to the editor; <b>⬠</b> on a type's row there opens it here.</li>
       </ul>
       <p>The page keeps its state in this browser. Every panel has its own <b>?</b>.</p>`,
@@ -334,7 +335,26 @@ const HELP = {
     html: `<ul>
         <li>Dimension 1 or 2: the polyhedron in its free coordinates (edge lengths), with its walls. Drag the point or tap where it should go; it stops at a wall, and a new press moves on from there.</li>
         <li>Higher: the slider moves along the chosen direction, projected to the polyhedron, up to the first edge reaching 0.</li>
-        <li>At a degeneration: pick a regeneration — <i>back</i>, <i>go on</i> — or keep moving in the degenerate type.</li>
+        <li>At a degeneration (or any vertex of valence ≥ 4): <b>Regenerate…</b> — pick the vertex, then a regeneration — or keep moving in the degenerate type.</li>
+      </ul>`,
+  },
+  polyRegen: {
+    title: "Regenerate a vertex",
+    anchor: "poly-regen",
+    html: `<ul>
+        <li>Pick a ringed vertex (valence 4 or more) on the picture, or from the list.</li>
+        <li>Its regenerations show below, the new edge highlighted; hovering one highlights the edges going to the new vertex.</li>
+        <li>Click one the curve can enter (<i>back</i>: the type you came from). The others are folded away, each saying why not.</li>
+      </ul>`,
+  },
+  polyExport: {
+    title: "Export",
+    anchor: "poly-export",
+    html: `<ul>
+        <li><b>Session</b> — everything here, to open again with <b>Open…</b>.</li>
+        <li><b>Types reached</b> — a library to import in the main app.</li>
+        <li><b>This curve</b> — type, constraints and exact position, as JSON.</li>
+        <li><b>Pictures</b> — the curve and the polyhedron, as SVG or PNG.</li>
       </ul>`,
   },
 };

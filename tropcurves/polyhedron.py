@@ -407,7 +407,7 @@ def regenerate(wall: Curve, vertex: str, z_wall: Sequence[F], points, lines,
         z0 = coords_from(cell, pos, ls, merged=vertex)
         entry = _entry(cell, z0, res.new_edge, scale) if cell.consistent else None
         out.append({"curve": res.curve, "new_edge": res.new_edge, "z": entry,
-                    "why": "" if entry else _why_not(cell)})
+                    "side": list(r.side_b), "why": "" if entry else _why_not(cell)})
     return out
 
 

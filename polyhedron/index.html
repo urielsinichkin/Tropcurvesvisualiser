@@ -5,13 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Polyhedron of curves — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=60" />
+<link rel="stylesheet" href="../web/styles.css?v=61" />
 </head>
 <body class="moduli-page poly-page">
 <header id="topbar">
   <h1>Polyhedron of curves</h1>
   <button id="btn-menu" aria-label="Menu" aria-controls="menu" aria-expanded="false">☰</button>
   <div class="actions" id="menu">
+    <button id="pc-open" title="Open a session saved from this page">Open…</button>
+    <button id="pc-export" title="Save the session, the types reached, the curve or the pictures">Export…</button>
+    <input id="pc-open-file" type="file" accept=".json,application/json" hidden />
     <a class="btn-link" href="../web/index.html" title="The main app">Main app</a>
     <button id="btn-help" title="What this page does, and the full guide">? Help</button>
     <span class="status-line">
@@ -89,7 +92,7 @@
     </div>
     <div id="pc-wall" hidden>
       <p id="pc-wall-text" class="mw-small"></p>
-      <div id="pc-regens" class="mw-regens"></div>
+      <div class="mw-bar"><button id="pc-regen" class="primary">Regenerate…</button></div>
     </div>
   </section>
 </main>

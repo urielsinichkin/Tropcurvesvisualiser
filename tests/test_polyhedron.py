@@ -120,3 +120,33 @@ def test_values_give_the_constraints_the_curve_satisfies():
     s, nid, z, vals = _conic()
     cell = polyhedron.Cell(s.ws.nodes[nid].curve, vals["points"], vals["lines"])
     assert cell.satisfies([Fraction(x) for x in z])
+
+
+def test_regenerations_name_the_new_edge_and_the_split():
+    s, nid, pts, lines, z = _two_dim()
+    ch = s.poly_view(nid, pts, lines, z)["chart"]
+    w = next(w for w in ch["region"]["walls"] if w["from"] != w["to"])
+    c = [Fraction(x) for x in ch["coords"]]
+    mid = [Fraction((w["from"][i] + w["to"][i]) / 2).limit_denominator(1000) for i in range(2)]
+    mv = s.poly_move(nid, pts, lines, z, [str(mid[i] + (mid[i] - c[i]) / 2) for i in range(2)])
+    wall = s.poly_wall(nid, mv["wall"]["edge"], pts, lines, mv["z"], 1, False)
+    assert wall["regenerations"] == []
+    v = s.poly_view(wall["wall_id"], pts, lines, wall["z"])
+    assert wall["vertex"] in v["high"]
+    regs = s.poly_regenerations(wall["wall_id"], wall["vertex"], pts, lines, wall["z"], 1, nid)["regenerations"]
+    assert sum(r["back"] for r in regs) == 1
+    flags = {e.id for e in s.ws.nodes[wall["wall_id"]].curve.incident(wall["vertex"])}
+    for r in regs:
+        assert r["new_edge"] in {e["id"] for e in r["picture"]["edges"]}
+        assert 2 <= len(r["side"]) and set(r["side"]) <= flags
+
+
+def test_the_curve_exports_as_exact_data():
+    import json
+    s, nid, pts, lines, z = _two_dim()
+    out = json.loads(json.dumps(s.poly_export(nid, pts, lines, z)))
+    assert out["kind"] == "tropcurves.polyhedron.curve" and out["polyhedron_dimension"] == 2
+    assert out["constraints"]["points"]["x1"] == [str(Fraction(x)) for x in pts["x1"]]
+    assert out["markings"]["x1"] == out["constraints"]["points"]["x1"]       # through its point
+    assert out["coordinates"] == z
+    assert set(out["lengths"]) == {e.name for e in s.ws.nodes[nid].curve.bounded}

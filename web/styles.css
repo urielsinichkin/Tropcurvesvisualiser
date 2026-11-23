@@ -495,6 +495,13 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 #pc-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-handle { cursor: grab; touch-action: none; }
 .pc-key-line { border-top: 3px dashed #8e5bd8; height: 0; width: 18px; vertical-align: middle; }
+.pc-export-item { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.pc-export-item .muted { font-size: 13px; }
+.pc-export-item > div:first-child { flex: 1 1 260px; }
+.res-thumb.back { border-style: dashed; }
+.pc-cannot { margin-top: 10px; }
+.pc-cannot summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .pc-plus { color: #2ca02c; }
 .pc-minus { color: #d62728; }
 .pc-slider { position: relative; height: 32px; margin: 6px 0; touch-action: none; cursor: pointer; }
