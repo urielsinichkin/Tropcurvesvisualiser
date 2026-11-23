@@ -6,7 +6,7 @@
 const PKG_FILES = [
   "geometry.py", "curve.py", "balancing.py", "newton.py", "layout.py",
   "subdivision.py", "subdivision_import.py", "operations.py", "workspace.py",
-  "refined.py", "evaluation.py", "moduli.py", "schema.py", "builders.py", "api.py", "__init__.py",
+  "refined.py", "evaluation.py", "moduli.py", "polyhedron.py", "schema.py", "builders.py", "api.py", "__init__.py",
 ];
 // The moduli page (moduli/) loads this file too, for its drawing, export and
 // help code: there it only defines things and does not start the main app.
@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "73";
+const APP_VERSION = "74";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "57";
+const STYLES_VERSION = "59";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -1961,14 +1961,18 @@ function foldableTypeTree(tree, makeRow) {
 // root, its derivation steps folded in) goes into localStorage under a token
 // -- the two pages share an origin -- and the page, opened in a new tab with
 // the token in its address, takes it from there.
+// The polyhedron page (⬠) takes a type the same way.
 const MODULI_HANDOFF_KEY = "tropcurves.walk.handoff";
-function openInModuli(nodeId) {
+const POLY_HANDOFF_KEY = "tropcurves.poly.handoff";
+function openInTool(nodeId, key, page) {
   const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   try {
-    localStorage.setItem(MODULI_HANDOFF_KEY, JSON.stringify({ token, library: api("export_subset", [nodeId]) }));
+    localStorage.setItem(key, JSON.stringify({ token, library: api("export_subset", [nodeId]) }));
   } catch (e) { reportError(e); return; }
-  window.open("../moduli/#type=" + token, "_blank");
+  window.open(`../${page}/#type=` + token, "_blank");
 }
+const openInModuli = nodeId => openInTool(nodeId, MODULI_HANDOFF_KEY, "moduli");
+const openInPolyhedron = nodeId => openInTool(nodeId, POLY_HANDOFF_KEY, "polyhedron");
 
 function renderTypeList() {
   const nodes = api("list_nodes");
@@ -2063,7 +2067,13 @@ function renderTypeList() {
     toModuli.title = `Open ${n.name} in the moduli map (a new tab)`;
     toModuli.setAttribute("aria-label", `Open ${n.name} in the moduli map`);
     toModuli.onclick = ev => { ev.stopPropagation(); openInModuli(n.id); };
-    li.append(toModuli, del);
+    const toPoly = document.createElement("button");
+    toPoly.className = "row-btn row-poly";
+    toPoly.textContent = "⬠";
+    toPoly.title = `Open ${n.name} in the polyhedron of curves (a new tab)`;
+    toPoly.setAttribute("aria-label", `Open ${n.name} in the polyhedron of curves`);
+    toPoly.onclick = ev => { ev.stopPropagation(); openInPolyhedron(n.id); };
+    li.append(toModuli, toPoly, del);
     // the grip, for a type that has siblings to move among
     if (siblings > 1) {
       const grip = sortGrip(n.name);

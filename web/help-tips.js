@@ -31,6 +31,7 @@ const HELP = {
         <li><b>▾ / ▸</b> folds a type's derived types; a folded row shows <b>+N</b>. <b>Collapse all / Expand all</b> folds everything. A dashed border means the selected type is folded inside.</li>
         <li><b>needs attention</b> — the type could not be rebuilt after its parent changed (open it and press <i>Try again</i>).</li>
         <li><b>↗</b> — open that type in the moduli map (a new tab).</li>
+        <li><b>⬠</b> — open that type in the polyhedron of curves (a new tab).</li>
         <li><b>🗑</b> — delete that type (asks first; its derived types move up unless you choose to delete them too).</li>
         <li><b>⠿</b> — drag to reorder a type among its siblings (its derived types come along; it never changes parent). Saved with the library.</li>
       </ul>`,
@@ -294,6 +295,44 @@ const HELP = {
         <li><b>Drag the point</b> (or tap where it should go): it moves until it meets a wall, and stops there.</li>
         <li>On a wall the curve has a vertex of valence 4; the small pictures are its <b>regenerations</b> — <i>back</i>, or <i>go on</i> into a new type, a little way in.</li>
         <li>Zoom: wheel / pinch (away from the point); the point and the labels keep their size. <b>Copy</b> — the picture as a PNG.</li>
+      </ul>`,
+  },
+  polyTop: {
+    title: "The polyhedron of curves",
+    anchor: "poly",
+    html: `<p>The curves of one type through constraints: points for markings, lines for ends. They form a polyhedron; walk in it, across degenerations.</p>
+      <ul>
+        <li>1 — fix points and lines, and drag them; the curve follows.</li>
+        <li>2 — the curve and the polyhedron: drag the point (dimension ≤ 2) or choose a direction (higher); where an edge reaches 0, choose how it regenerates.</li>
+        <li><b>Main app</b> — back to the editor; <b>⬠</b> on a type's row there opens it here.</li>
+      </ul>
+      <p>The page keeps its state in this browser. Every panel has its own <b>?</b>.</p>`,
+  },
+  polyConstraints: {
+    title: "Constraints",
+    anchor: "poly-constraints",
+    html: `<ul>
+        <li><b>Points</b> — click a marking to fix its image (orange square); drag the square; tap it to free it.</li>
+        <li><b>Lines</b> — click an end to fix the line it lies on (dashed violet); drag the diamond; tap it to free it.</li>
+        <li>The curve follows while there is one of this type; the line under the picture gives the polyhedron's dimension (each point −2, each line −1). Then <b>Start →</b>.</li>
+      </ul>`,
+  },
+  polyCurve: {
+    title: "The curve",
+    anchor: "poly-curve",
+    html: `<ul>
+        <li>The current curve with its points and lines, and its lengths underneath.</li>
+        <li>Dimension above 2: click edges to choose a direction — once to lengthen (green), again to shorten (red), again to leave alone.</li>
+        <li><b>← Constraints</b> — back to step 1 on the current type. <b>Copy</b> — the picture as a PNG.</li>
+      </ul>`,
+  },
+  polyCell: {
+    title: "The polyhedron",
+    anchor: "poly-cell",
+    html: `<ul>
+        <li>Dimension 1 or 2: the polyhedron in its free coordinates (edge lengths), with its walls. Drag the point or tap where it should go; it stops at a wall.</li>
+        <li>Higher: the slider moves along the chosen direction, projected to the polyhedron, up to the first edge reaching 0.</li>
+        <li>At a degeneration: pick a regeneration — <i>back</i>, <i>go on</i> — or keep moving in the degenerate type.</li>
       </ul>`,
   },
 };

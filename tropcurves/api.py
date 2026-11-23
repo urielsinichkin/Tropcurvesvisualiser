@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 from math import hypot
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .curve import Curve, EdgeKind
 from .geometry import Vec2, primitive
@@ -25,7 +25,7 @@ from .refined import (
     maximal_balanced_subsets, MultiplicityError, MAX_SPLIT_ITEMS, MAX_MAXIMAL_ITEMS,
 )
 from .workspace import Workspace
-from . import schema, builders, evaluation, moduli
+from . import schema, builders, evaluation, moduli, polyhedron
 
 
 class Session:
@@ -519,6 +519,175 @@ class Session:
                                  f"(a vertex needs more other edges than markings)")
         self.ws.move_marking(node_id, m.id, vertex=vertex, edge=edge)
         return self.node_summary(node_id)
+
+    # --- the polyhedron of curves through constraints (polyhedron/) --------
+    # A type, points for some markings {name: [x, y]} and line values for some
+    # ends {name: c}; z is a point of the type's cell (strings, exact).
+    def _poly(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any]) -> "polyhedron.Cell":
+        return polyhedron.Cell(self.ws.nodes[node_id].curve, points or {}, lines or {})
+
+    @staticmethod
+    def _zs(z) -> List[str]:
+        return [str(x) for x in z]
+
+    @staticmethod
+    def _zf(z) -> List[Fraction]:
+        return [Fraction(str(x)) for x in z]
+
+    def poly_start(self, node_id: str) -> Dict[str, Any]:
+        """The type's curve as the main app draws it (root at the origin)."""
+        cell = self._poly(node_id, {}, {})
+        lengths, _ = self._node_layout(node_id)
+        z = [Fraction(0), Fraction(0)] + [
+            Fraction(float(lengths.get(e.id, 1))).limit_denominator(64) / e.weight for e in cell.bounded]
+        return {"z": self._zs(z)}
+
+    def poly_values(self, node_id: str, z: List[Any]) -> Dict[str, Any]:
+        """Where each marking is and each end's line value, at z."""
+        vals = self._poly(node_id, {}, {}).values(self._zf(z))
+        return {"points": {k: [str(a), str(b)] for k, (a, b) in vals["points"].items()},
+                "lines": {k: str(c) for k, c in vals["lines"].items()}}
+
+    def poly_fit(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                 z: List[Any]) -> Dict[str, Any]:
+        """A curve of the type through the constraints, near z: whether there
+        is one (and of the precise type), the polyhedron's dimension."""
+        cell = self._poly(node_id, points, lines)
+        t, z2 = cell.fit(self._zf(z))
+        out = {"feasible": t is not None, "precise": bool(t), "dim": cell.dim, "z": None, "picture": None}
+        if t is not None:
+            out["z"] = self._zs(z2)
+            out["picture"] = moduli.picture(cell, z2, self._render_curve)
+        return out
+
+    def poly_view(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                  z: List[Any], box: Optional[List[List[Any]]] = None) -> Dict[str, Any]:
+        """The curve at z, its lengths, the polyhedron's dimension and, up to
+        dimension 2, the chart: its axes (free coordinates), the point, the
+        box shown (grown to keep the point well inside) and the region."""
+        cell = self._poly(node_id, points, lines)
+        zf = self._zf(z)
+        out: Dict[str, Any] = {
+            "id": node_id, "name": self.ws.nodes[node_id].name, "dim": cell.dim,
+            "satisfied": cell.satisfies(zf),
+            "picture": moduli.picture(cell, zf, self._render_curve),
+            "lengths": {e.name: str(zf[cell.index[e.id]]) for e in cell.bounded},
+            "high": [v for v in cell.curve.vertices if cell.curve.valence(v) >= 4],
+            "chart": None,
+        }
+        if cell.dim is not None and 1 <= cell.dim <= 2:
+            w = [zf[c] for c in cell.free]
+            bx = self._poly_box(cell, w, box)
+            out["chart"] = {"axes": [{"name": cell.axis_name(c), "length": c >= 2} for c in cell.free],
+                            "coords": [str(x) for x in w], "box": [[str(a), str(b)] for a, b in bx],
+                            "region": cell.region(zf, bx)}
+        return out
+
+    @staticmethod
+    def _poly_box(cell, w: List[Fraction], box) -> List[Tuple[Fraction, Fraction]]:
+        """The chart's box: [0, R] along a length, an interval of width R
+        around the point otherwise; grown (R doubled) while the point is not
+        well inside."""
+        def nice(x: Fraction) -> Fraction:
+            r = Fraction(1, 4)
+            while r < x:
+                r *= 2
+            return r
+        out = []
+        for i, c in enumerate(cell.free):
+            if box and i < len(box):
+                lo, hi = Fraction(str(box[i][0])), Fraction(str(box[i][1]))
+            elif c >= 2:
+                lo, hi = Fraction(0), nice(2 * w[i] + Fraction(1, 4))
+            else:
+                R = nice(abs(w[i]) + 1)
+                lo, hi = w[i] - R, w[i] + R
+            while not (lo + (hi - lo) / 20 <= w[i] <= hi - (hi - lo) * 3 / 20) and hi - lo < 10 ** 6:
+                if c >= 2:
+                    hi = lo + 2 * (hi - lo)
+                else:
+                    mid, R = (lo + hi) / 2, hi - lo
+                    lo, hi = mid - R, mid + R
+            out.append((lo, hi))
+        return out
+
+    def poly_move(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                  z: List[Any], to: List[Any]) -> Dict[str, Any]:
+        """Towards the point of the chart with free coordinates ``to``,
+        stopping at the first degeneration (an edge reaching length 0)."""
+        cell = self._poly(node_id, points, lines)
+        z2, edge = cell.move(self._zf(z), [Fraction(str(x)) for x in to])
+        return {"z": self._zs(z2), "wall": edge and {"edge": edge, "name": cell.curve.edges[edge].name}}
+
+    def poly_direction(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                       z: List[Any], delta: Dict[str, Any]) -> Dict[str, Any]:
+        """A direction of edge lengths (edge id -> amount) projected to the
+        polyhedron, and how far it goes before an edge reaches 0."""
+        cell = self._poly(node_id, points, lines)
+        p = cell.project(self._zf(z), delta or {})
+        e = p["edge"]
+        return {"v": self._zs(p["v"]), "moves": any(p["v"]),
+                "t_max": str(p["t_max"]) if p["t_max"] is not None else None,
+                "wall": e and {"edge": e, "name": cell.curve.edges[e].name},
+                "change": {cell.curve.edges[eid].name: str(p["v"][j]) for eid, j in cell.index.items() if p["v"][j]}}
+
+    def poly_at(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                z: List[Any], v: List[Any], t: Any) -> Dict[str, Any]:
+        """z + t v (stopping at a degeneration), and the curve there."""
+        cell = self._poly(node_id, points, lines)
+        z2, edge = cell.go(self._zf(z), self._zf(v), Fraction(str(t)))
+        return {"z": self._zs(z2), "wall": edge and {"edge": edge, "name": cell.curve.edges[edge].name},
+                "picture": moduli.picture(cell, z2, self._render_curve)}
+
+    def _poly_root(self, curve: Curve) -> str:
+        """The library's type with exactly this curve (same ids), or a new root."""
+        key = self._geometry_key(curve)
+        for nid, n in self.ws.nodes.items():
+            if self._geometry_key(n.curve) == key:
+                return nid
+        return self.ws.add_root(curve).id
+
+    def poly_wall(self, node_id: str, edge_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                  z: List[Any], scale: Any = 1, with_regenerations: bool = True) -> Dict[str, Any]:
+        """The degeneration where ``edge_id`` has length 0: the type with it
+        contracted (kept in the library), the point there, and the
+        regenerations of the vertex it leaves -- each drawn small, whether it
+        is the type we came from and whether the curve can go on into it."""
+        cell = self._poly(node_id, points, lines)
+        wall, vertex, zw = polyhedron.contract(cell, self._zf(z), edge_id)
+        wid = self._poly_root(wall)
+        back = moduli.type_key(cell.curve)
+        regs = []
+        for i, r in enumerate(polyhedron.regenerate(wall, vertex, zw, points, lines, Fraction(str(scale)))
+                              if with_regenerations else []):
+            regs.append({"index": i, "back": moduli.type_key(r["curve"]) == back,
+                         "enter": r["z"] is not None, "why": r["why"],
+                         "picture": self._render_curve(r["curve"])})
+        return {"wall_id": wid, "vertex": vertex, "z": self._zs(zw), "edge": cell.curve.edges[edge_id].name,
+                "regenerations": regs}
+
+    def poly_regenerations(self, node_id: str, vertex: str, points: Dict[str, Any], lines: Dict[str, Any],
+                           z: List[Any], scale: Any = 1, came_from: Optional[str] = None) -> Dict[str, Any]:
+        """The regenerations of a vertex of valence >= 4 of the current type
+        (``came_from``: the type the walk came from, to mark the way back)."""
+        back = moduli.type_key(self.ws.nodes[came_from].curve) if came_from in self.ws.nodes else None
+        regs = []
+        for i, r in enumerate(polyhedron.regenerate(self.ws.nodes[node_id].curve, vertex, self._zf(z),
+                                                    points, lines, Fraction(str(scale)))):
+            regs.append({"index": i, "back": moduli.type_key(r["curve"]) == back,
+                         "enter": r["z"] is not None, "why": r["why"],
+                         "picture": self._render_curve(r["curve"])})
+        return {"wall_id": node_id, "vertex": vertex, "z": [str(x) for x in z], "regenerations": regs}
+
+    def poly_regenerate(self, wall_id: str, vertex: str, index: int, points: Dict[str, Any],
+                        lines: Dict[str, Any], z: List[Any], scale: Any = 1) -> Dict[str, Any]:
+        """Go on into a regeneration: its type (in the library) and the point
+        a short way in."""
+        r = polyhedron.regenerate(self.ws.nodes[wall_id].curve, vertex, self._zf(z), points, lines,
+                                  Fraction(str(scale)))[int(index)]
+        if r["z"] is None:
+            return {"id": None, "why": r["why"]}
+        return {"id": self._poly_root(r["curve"]), "z": self._zs(r["z"])}
 
     def moduli_remove_marking(self, node_id: str, marking_id: str) -> Dict[str, Any]:
         """Take a marking off the type, merging the point it leaves inside an
