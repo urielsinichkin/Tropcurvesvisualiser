@@ -496,11 +496,14 @@ function pcDrawChart(v) {
   applyKeptSizes(svg, pcZoom());
 }
 
-// drag the chart's point (from the point itself); a tap elsewhere walks it there
+// drag the chart's point (from the point itself); a tap elsewhere walks it there.
+// A drag ends where the type changes (an edge reached length 0): the press
+// still held is spent -- its moves and the click on letting go do nothing --
+// and only a new press moves the point on, in the new type.
 let pcChartRaf = 0;
 function pcWireChart() {
   const svg = document.getElementById("pc-chart");
-  let drag = false, pending = null;
+  let drag = null, pending = null;          // null | "active" | "spent"
   const toSvg = ev => {
     const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
     const q = pt.matrixTransform(svg.getScreenCTM().inverse());
@@ -513,8 +516,10 @@ function pcWireChart() {
     pcChartRaf = requestAnimationFrame(() => {
       pcChartRaf = 0;
       const target = pending; pending = null;
-      if (!target || !can()) return;
+      if (!target || !can() || drag === "spent") return;
+      const before = PC.cur;
       pcGuard(() => pcMove(chAB(target, PC.view.chart.box)));
+      if (PC.cur !== before && drag === "active") drag = "spent";
     });
   };
   svg.addEventListener("pointerdown", ev => {
@@ -524,17 +529,17 @@ function pcWireChart() {
     if (Math.hypot(q[0] - dot[0], q[1] - dot[1]) > 24 / pcZoom()) return;   // not the point: pan / pinch
     ev.stopImmediatePropagation();
     ev.preventDefault();
-    drag = true;
+    drag = "active";
     try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic */ }
   });
   svg.addEventListener("pointermove", ev => {
     if (!drag) return;
-    ev.stopImmediatePropagation();
-    walkTo(toSvg(ev));
+    ev.stopImmediatePropagation();               // a spent press does not pan either
+    if (drag === "active") walkTo(toSvg(ev));
   });
   const end = ev => {
     if (!drag) return;
-    drag = false;
+    drag = null;
     ev.stopImmediatePropagation();
     PC.chartDragEndAt = Date.now();
     pcSave();
