@@ -314,6 +314,7 @@ const HELP = {
     html: `<ul>
         <li><b>Points</b> — click a marking to fix its image (orange square); drag the square; tap it to free it.</li>
         <li><b>Lines</b> — click an end to fix the line it lies on (dashed violet); drag the diamond; tap it to free it.</li>
+        <li><b>🖌 Paint</b> — color edges, ends and markings by clicking them; the colors stay as the walk changes type.</li>
         <li>The curve follows while there is one of this type; the line under the picture gives the polyhedron's dimension (each point −2, each line −1). Then <b>Start →</b>.</li>
       </ul>`,
   },
@@ -323,6 +324,7 @@ const HELP = {
     html: `<ul>
         <li>The current curve with its points and lines, and its lengths underneath.</li>
         <li>Dimension above 2: click edges to choose a direction — once to lengthen (green), again to shorten (red), again to leave alone.</li>
+        <li><b>🖌 Paint</b> — color edges, ends and markings by clicking them.</li>
         <li><b>← Constraints</b> — back to step 1 on the current type. <b>Copy</b> — the picture as a PNG.</li>
       </ul>`,
   },
