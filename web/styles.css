@@ -484,9 +484,11 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 /* one line, so the cell does not move under a finger when it changes */
 #mw-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mw-dot { cursor: grab; }
-.mw-regens { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+/* the regenerations (moduli and polyhedron pages): big enough to read, about
+   three to a row on a computer and two on a phone */
+.mw-regens { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(150px, 30%), 1fr)); gap: 10px; }
 .mw-regen { display: grid; gap: 4px; padding: 6px; font-size: 13px; }
-.mw-regen svg { height: 80px; pointer-events: none; }
+.mw-regen svg { width: 100%; height: auto; aspect-ratio: 3 / 2; pointer-events: none; }
 .mw-regen.back { border-style: dashed; }
 /* the polyhedron page */
 #pc-type .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
