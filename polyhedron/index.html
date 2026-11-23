@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Polyhedron of curves — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=59" />
+<link rel="stylesheet" href="../web/styles.css?v=60" />
 </head>
 <body class="moduli-page poly-page">
 <header id="topbar">
@@ -38,8 +38,10 @@
       <div class="mw-tabs" role="tablist">
         <button data-mode="points" class="small">Points</button>
         <button data-mode="lines" class="small">Lines</button>
+        <button class="small pc-paint-btn" title="Color edges, ends and markings by clicking them">🖌 Paint</button>
       </div>
       <p id="pc-hint" class="muted mw-small"></p>
+      <div class="pc-paint-slot"></div>
       <svg id="pc-plane" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
       <div id="pc-pick-status" class="pick-status"></div>
       <div class="sub-legend">
@@ -57,9 +59,11 @@
       <h2>Curve <span id="pc-curve-name" class="muted"></span></h2>
       <span class="row" style="gap:6px">
         <button id="pc-back" class="small" title="Back to the constraints">← Constraints</button>
+        <button class="small pc-paint-btn" title="Color edges, ends and markings by clicking them">🖌 Paint</button>
         <button id="pc-copy-curve" class="small" title="Copy as a PNG">Copy</button>
       </span>
     </div>
+    <div class="pc-paint-slot"></div>
     <svg id="pc-curve" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="pc-lengths" class="muted mw-small"></div>
   </section>

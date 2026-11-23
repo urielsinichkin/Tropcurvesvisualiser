@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "75";
+const APP_VERSION = "77";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "59";
+const STYLES_VERSION = "60";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -503,8 +503,8 @@ function wireGlobalButtons() {
   bind("btn-settings", "onclick", openSettingsDialog);
   bind("btn-mult", "onclick", openMultiplicityDialog);
   bind("btn-moduli", "onclick", () => window.open("../moduli/", "_blank"));
-  bind("paint-curve", "onclick", openPaintDialog);
-  bind("paint-change", "onclick", openPaintDialog);
+  bind("paint-curve", "onclick", () => openPaintDialog());
+  bind("paint-change", "onclick", () => openPaintDialog());
   bind("paint-cancel", "onclick", stopPainting);
   bind("btn-save", "onclick", openExportDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
@@ -2326,7 +2326,11 @@ function wireZoom() {
 // ---------------------------------------------------------------------------
 let painting = null;              // { color, sticky } while active
 
-function openPaintDialog() {
+// onStart(color, sticky), active: for another page's own painting (the
+// polyhedron page); by default the main app's.
+function openPaintDialog(onStart, active) {
+  if (typeof onStart !== "function") onStart = null;
+  const on = onStart ? !!active : !!painting;
   const s0 = loadSettings();
   let color = isHex6(s0.paintColor) ? s0.paintColor : "#e53935";
   const body = dialogHead("paint", "Paint edges and markings",
@@ -2339,7 +2343,7 @@ function openPaintDialog() {
   keep.innerHTML = `<input type="checkbox" id="paint-sticky"> Keep painting until I press Cancel`;
   body.appendChild(keep);
   const box = keep.querySelector("input");
-  box.checked = !!(painting ? painting.sticky : s0.paintSticky);
+  box.checked = !!(on && !onStart ? painting.sticky : s0.paintSticky);
   const note = document.createElement("p");
   note.className = "muted"; note.style.margin = "4px 0 10px";
   const sync = () => {
@@ -2352,11 +2356,11 @@ function openPaintDialog() {
   body.appendChild(note);
   const go = document.createElement("button");
   go.className = "primary";
-  go.textContent = painting ? "Use this color" : "Start painting";
+  go.textContent = on ? "Use this color" : "Start painting";
   go.onclick = () => {
     const s2 = loadSettings(); s2.paintColor = color; s2.paintSticky = box.checked; saveSettings(s2);
     closeModal();
-    startPainting(color, box.checked);
+    (onStart || startPainting)(color, box.checked);
   };
   body.appendChild(row([go]));
   openModal();
@@ -2387,16 +2391,18 @@ function showPaintBar() {
     : "Painting: click an edge or marking to color it.";
 }
 
-// hover previews the color; a click (or tap) applies it
-function wirePainting(drawn) {
+// hover previews the color; a click (or tap) applies it. o.state() and
+// o.apply(target): another page's painting (default: the main app's).
+function wirePainting(drawn, o = {}) {
+  const state = o.state || (() => painting);
   const targets = [...drawn.edgePicks, ...drawn.markPicks];
   targets.forEach(t => {
     const el = t.kind === "edge" ? t.line : t.disc;
     const attr = t.kind === "edge" ? "stroke" : "fill";
     const orig = { col: el.getAttribute(attr), w: el.getAttribute("stroke-width") };
     t.hit.addEventListener("pick-enter", ev => {
-      if (ev.detail.pointerType !== "mouse" || !painting) return;
-      el.setAttribute(attr, painting.color);
+      if (ev.detail.pointerType !== "mouse" || !state()) return;
+      el.setAttribute(attr, state().color);
       if (t.kind === "edge") el.setAttribute("stroke-width", +orig.w + 2);
     });
     t.hit.addEventListener("pick-leave", () => {
@@ -2404,7 +2410,8 @@ function wirePainting(drawn) {
       if (t.kind === "edge") el.setAttribute("stroke-width", orig.w);
     });
     t.hit.addEventListener("pick-click", () => {
-      if (!painting) return;
+      if (!state()) return;
+      if (o.apply) { o.apply(t); return; }
       try { api("set_color", selectedId, t.id, painting.color); }
       catch (e) { alert(e.message); return; }
       autosave();

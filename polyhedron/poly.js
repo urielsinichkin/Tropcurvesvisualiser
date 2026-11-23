@@ -34,6 +34,8 @@ const PC = {
   reg: null,          // regenerations on offer: { vertex, from, list }
   view: null,         // the last poly_view
   status: null,       // the last poly_fit in step 1
+  colors: {},         // edge / end / marking name -> color painted (kept across types)
+  paint: null,        // { color, sticky } while painting
 };
 
 // --- boot ----------------------------------------------------------------------
@@ -74,6 +76,12 @@ function pcWire() {
   });
   const bg = () => resolvedVar("--panel", "#ffffff");
   on("pc-copy-curve", "click", ev => copyPanelPng("pc-curve", null, ev.target, "curve.png"));
+  document.querySelectorAll(".pc-paint-btn").forEach(b => {
+    b.onclick = () => openPaintDialog(pcStartPaint, !!PC.paint);
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape" && PC.paint && document.getElementById("modal").hidden) pcStopPaint();
+  });
   on("pc-copy-chart", "click", ev => copyPanelPng("pc-chart", bg(), ev.target, "polyhedron.png"));
   // the handles' and the point's own dragging first, so it is not a pan
   pcWireHandles(document.getElementById("pc-plane"));
@@ -102,7 +110,7 @@ function pcSave() {
     try {
       localStorage.setItem(PC_KEY, JSON.stringify({
         library: api("save"), base: PC.base, cur: PC.cur, z: PC.z, points: PC.points, lines: PC.lines,
-        mode: PC.mode, step: PC.step, box: PC.box, delta: PC.delta,
+        mode: PC.mode, step: PC.step, box: PC.box, delta: PC.delta, colors: PC.colors,
         reg: PC.reg && { vertex: PC.reg.vertex, from: PC.reg.from } }));
       el.textContent = "saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     } catch (e) { el.textContent = "not saved"; }
@@ -114,7 +122,7 @@ function pcRestore(st) {
   const ids = api("list_nodes").map(n => n.id);
   Object.assign(PC, { base: st.base, cur: st.cur, z: st.z, points: st.points || {}, lines: st.lines || {},
                       mode: st.mode || "points", step: st.step || "setup", box: st.box || null,
-                      delta: st.delta || {}, dir: null, reg: null });
+                      delta: st.delta || {}, colors: st.colors || {}, dir: null, reg: null });
   if (!ids.includes(PC.base)) { PC.base = null; PC.step = "setup"; }
   if (!ids.includes(PC.cur)) { PC.cur = PC.base; PC.step = "setup"; }
   if (PC.step === "walk" && st.reg) PC.reg = { vertex: st.reg.vertex, from: st.reg.from };
@@ -143,7 +151,7 @@ function pcTakeHandoff() {
 }
 
 function pcSetType(id) {
-  Object.assign(PC, { base: id, cur: id, z: api("poly_start", id).z, points: {}, lines: {},
+  Object.assign(PC, { base: id, cur: id, z: api("poly_start", id).z, points: {}, lines: {}, colors: {},
                       mode: "points", step: "setup", box: null, delta: {}, dir: null, reg: null, status: null });
   pcShow();
   pcSave();
@@ -187,8 +195,11 @@ function pcDraw(svgId, picture, opts = {}) {
     Object.values(PC.points).forEach(p => pts.push(p.map(pcNum)));
     T = fitTransform(pts);
   }
-  const drawn = drawCurve({ curve: picture }, { svgId, transform: T, pickEdge: opts.pickEdge,
-                                               pickMarking: opts.pickMarking });
+  // while painting every edge and marking is a target, and nothing else is
+  const paint = !!PC.paint;
+  const drawn = drawCurve({ curve: pcColored(picture) }, { svgId, transform: T,
+    pickEdge: paint ? (() => true) : opts.pickEdge, pickMarking: paint ? (() => true) : opts.pickMarking });
+  if (paint) wirePainting(drawn, { state: () => PC.paint, apply: pcPaintOne });
   const svg = drawn.svg, first = svg.querySelector(".pick-hit");
   const put = el => (first && !opts.handles ? svg.insertBefore(el, first) : svg.appendChild(el));
   // the lines first (under the points)
@@ -216,6 +227,65 @@ function pcDraw(svgId, picture, opts = {}) {
     put(sq);
   });
   return { ...drawn, T };
+}
+
+// --- painting -------------------------------------------------------------------------
+// The main app's paint dialog and hover preview; the colors are kept here by
+// name (edges, ends and markings keep their names through degenerations and
+// regenerations) and laid over every picture.
+function pcColored(picture) {
+  const col = x => (PC.colors[x.name] ? Object.assign({}, x, { color: PC.colors[x.name] }) : x);
+  return Object.assign({}, picture, { edges: picture.edges.map(col), markings: (picture.markings || []).map(col) });
+}
+function pcStartPaint(color, sticky) {
+  PC.paint = { color, sticky };
+  pcRedraw();
+}
+function pcStopPaint() {
+  PC.paint = null;
+  pcRedraw();
+}
+function pcPaintOne(t) {
+  const name = t.kind === "edge" ? t.edge.name : t.marking.name;
+  PC.colors[name] = PC.paint.color;
+  if (!PC.paint.sticky) PC.paint = null;
+  pcRedraw();
+  pcSave();
+}
+function pcRedraw() {
+  pcPaintBars();
+  if (PC.step === "walk" && PC.cur && PC.z) pcGuard(() => pcRender(pcCurveT));
+  else if (PC.base) pcGuard(() => pcDrawPlane(pcPlaneT));
+}
+// the bar over the picture in view: the color, Change color, Clear colors, Cancel
+function pcPaintBars() {
+  document.querySelectorAll(".pc-paint-slot").forEach(slot => {
+    slot.innerHTML = "";
+    if (!PC.paint) return;
+    const bar = document.createElement("div");
+    bar.className = "paint-bar";
+    const chip = document.createElement("span");
+    chip.className = "paint-chip"; chip.style.background = PC.paint.color;
+    const hint = document.createElement("span");
+    hint.textContent = PC.paint.sticky ? "Painting: click edges and markings to color them."
+                                       : "Painting: click an edge or marking to color it.";
+    const btn = (label, title, f) => {
+      const b = document.createElement("button");
+      b.className = "small"; b.textContent = label; if (title) b.title = title; b.onclick = f; return b;
+    };
+    const tools = document.createElement("span");
+    tools.className = "row"; tools.style.cssText = "gap:6px;margin-left:auto";
+    tools.append(
+      btn("Change color", null, () => openPaintDialog(pcStartPaint, true)),
+      btn("Clear colors", "Take every painted color off", () => {
+        if (!Object.keys(PC.colors).length || confirm("Take every painted color off?")) {
+          PC.colors = {}; pcRedraw(); pcSave();
+        }
+      }),
+      btn("Cancel", "Stop painting (Escape)", pcStopPaint));
+    bar.append(chip, hint, tools);
+    slot.appendChild(bar);
+  });
 }
 
 // --- step 1: the constraints -------------------------------------------------------
@@ -248,6 +318,7 @@ function pcDrawPlane(keepT) {
     pickMarking: () => mode === "points",
   });
   pcPlaneT = d.T;
+  if (PC.paint) { pcCheck(); return; }               // the picks are painting's
   if (PC.status && !PC.status.precise) {           // faded: not a curve through the constraints
     d.svg.querySelectorAll("line").forEach(l => { if (!l.getAttribute("stroke-dasharray")) l.setAttribute("opacity", "0.35"); });
   }
@@ -301,7 +372,7 @@ function pcWireHandles(svg) {
   }, true);
   svg.addEventListener("pointerdown", ev => {
     const h = ev.target.closest && ev.target.closest(".pc-handle");
-    if (!h || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    if (!h || PC.paint || (ev.pointerType === "mouse" && ev.button !== 0)) return;   // painting: the click paints
     ev.stopImmediatePropagation();
     ev.preventDefault();
     drag = { point: h.getAttribute("data-point"), line: h.getAttribute("data-line"), T: pcPlaneT,
@@ -397,6 +468,7 @@ function pcDrawCurve(v, keepT) {
   const status = document.getElementById("pc-lengths");
   const idle = "lengths: " + Object.entries(v.lengths).map(([n, l]) => `${n} ${pcShort(l)}`).join(", ");
   status.textContent = idle;
+  if (PC.paint) return;                               // the picks are painting's
   d.edgePicks.forEach(t => {
     t.hit.addEventListener("pick-enter", () => {
       const s = PC.delta[t.edge.id];
@@ -694,7 +766,7 @@ function pcDrawWall() {
     b.disabled = !r.enter;
     b.onclick = () => pcGuard(() => pcRegenerate(r.index));
     list.appendChild(b);
-    drawCurve({ curve: r.picture }, { svgId: id, labels: false });
+    drawCurve({ curve: pcColored(r.picture) }, { svgId: id, labels: false });
   });
 }
 

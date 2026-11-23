@@ -477,7 +477,11 @@ moves and its click ignored -- so only a new press goes on) or the
 direction panel with a slider (`poly_at` per frame, the curve's transform
 kept; letting go commits). After any move, a type with a vertex of valence
 >= 4 offers that vertex's regenerations (`poly_regenerations`, the type
-walked from marking the way back).
+walked from marking the way back). Painting reuses the main app's dialog and
+hover preview (`openPaintDialog(onStart, active)`, `wirePainting(drawn,
+{state, apply})`); the page keeps the colors by name (`PC.colors`) and lays
+them over every picture it draws, since names survive contraction and
+resolution while each type reached is a separate curve in the library.
 
 ### Stale cached pages
 
