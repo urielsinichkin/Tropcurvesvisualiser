@@ -676,8 +676,29 @@ class Session:
                                                     points, lines, Fraction(str(scale)))):
             regs.append({"index": i, "back": moduli.type_key(r["curve"]) == back,
                          "enter": r["z"] is not None, "why": r["why"],
+                         "new_edge": r["new_edge"], "side": r["side"],
                          "picture": self._render_curve(r["curve"])})
         return {"wall_id": node_id, "vertex": vertex, "z": [str(x) for x in z], "regenerations": regs}
+
+    def poly_export(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
+                    z: List[Any]) -> Dict[str, Any]:
+        """The current curve as data: its type, the constraints, and where it
+        is (coordinates, lengths, vertices and markings in the plane), exact."""
+        cell = self._poly(node_id, points, lines)
+        zf = self._zf(z)
+        pos = cell.positions(zf)
+        vals = cell.values(zf)
+        return {
+            "kind": "tropcurves.polyhedron.curve", "version": 1,
+            "type": {"name": self.ws.nodes[node_id].name, "curve": schema.curve_to_dict(cell.curve)},
+            "constraints": {"points": {k: [str(a), str(b)] for k, (a, b) in cell.points.items()},
+                            "lines": {k: str(c) for k, c in cell.lines.items()}},
+            "polyhedron_dimension": cell.dim,
+            "root": cell.root, "coordinates": self._zs(zf),
+            "lengths": {e.name: str(zf[cell.index[e.id]]) for e in cell.bounded},
+            "vertices": {v: [str(x), str(y)] for v, (x, y) in pos.items()},
+            "markings": {k: [str(a), str(b)] for k, (a, b) in vals["points"].items()},
+        }
 
     def poly_regenerate(self, wall_id: str, vertex: str, index: int, points: Dict[str, Any],
                         lines: Dict[str, Any], z: List[Any], scale: Any = 1) -> Dict[str, Any]:

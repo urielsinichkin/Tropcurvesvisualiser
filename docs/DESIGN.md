@@ -476,8 +476,15 @@ of its point ends when the type changes -- the held press is spent, its
 moves and its click ignored -- so only a new press goes on) or the
 direction panel with a slider (`poly_at` per frame, the curve's transform
 kept; letting go commits). After any move, a type with a vertex of valence
->= 4 offers that vertex's regenerations (`poly_regenerations`, the type
-walked from marking the way back). Painting reuses the main app's dialog and
+>= 4 says so, with Regenerate…: a dialog as the main app's Resolve a vertex
+(`pickFrame` + `mountPicker` on the current curve, the vertex picked first),
+listing that vertex's regenerations (`poly_regenerations`: the new edge and
+the flags moved to the new vertex, for the highlights; the type walked from
+marks the way back), those the curve can enter first and the others folded
+away with the reason. Export… saves the session (`pcState`, what is also
+kept in localStorage, re-read by Open…), the library (`save`, importable in
+the main app), the curve as exact data (`poly_export`) and the pictures
+(`standaloneSvg` / `svgToPngBlob`). Painting reuses the main app's dialog and
 hover preview (`openPaintDialog(onStart, active)`, `wirePainting(drawn,
 {state, apply})`); the page keeps the colors by name (`PC.colors`) and lays
 them over every picture it draws, since names survive contraction and

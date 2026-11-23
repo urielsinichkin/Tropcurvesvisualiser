@@ -132,6 +132,8 @@ th { background: var(--bg); font-weight: 600; }
         <li><a href="#poly-constraints">Constraints</a></li>
         <li><a href="#poly-curve">The curve</a></li>
         <li><a href="#poly-cell">The polyhedron and degenerations</a></li>
+        <li><a href="#poly-regen">Regenerate a vertex</a></li>
+        <li><a href="#poly-export">Export and open</a></li>
       </ol></li>
     <li><a href="#faq">Troubleshooting</a></li>
   </ol>
@@ -909,13 +911,35 @@ Everything is computed exactly.</p>
       nearest direction keeping the constraints); the line says how each length then changes. The slider moves
       the curve along it, all the way to the first edge reaching length 0; letting go keeps it there.</li>
   <li>When an edge reaches length 0 the walk <strong>snaps</strong> to that degeneration: the curve is now of
-      the type with the edge contracted, which has a vertex of higher valence. Its <strong>regenerations</strong>
-      — the ways of resolving that vertex by a new edge — show as pictures: <em>back</em> (dashed) is the
-      type you came from; <em>go on</em> enters another a short way, keeping the constraints; the ones you
-      cannot enter (the new edge cannot grow with the constraints kept) say why. You may also go on moving in
-      the degenerate type itself. Any type with a vertex of valence 4 or more offers its regenerations the same
-      way.</li>
+      the type with the edge contracted, which has a vertex of higher valence. A note under the picture says so,
+      with <span class="btn">Regenerate…</span> (<a href="#poly-regen">§19.4</a>); you may also go on moving in the
+      degenerate type itself. Any type with a vertex of valence 4 or more shows the same note.</li>
   <li>The page keeps its state in this browser, and every type it reaches in its own library.</li>
+</ul>
+
+<h3 id="poly-regen">19.4 Regenerate a vertex</h3>
+<p>As <a href="#resolve">Resolve a vertex</a> in the main app: <span class="btn">Regenerate…</span> opens a dialog
+with the curve; pick a ringed vertex (valence 4 or more) on it — or from the list — and its
+<strong>regenerations</strong> appear below, each as the curve it makes with the new edge highlighted (hovering one
+highlights, on the picture, the edges that go to the new vertex). Those the curve can enter with the constraints
+kept come first — <em>back</em> (dashed) is the type you came from — and a click goes a short way into it. The
+others are folded under “more the curve cannot enter”, each saying why (for instance the new edge cannot grow with
+the constraints kept).</p>
+
+<h3 id="poly-export">19.5 Export and open</h3>
+<ul>
+  <li><span class="btn">Export…</span> in the top bar saves:
+    <ul>
+      <li><strong>Session</strong> — everything on the page (the types, the constraints, where the curve is, the
+          colors), to open here again with <span class="btn">Open…</span>;</li>
+      <li><strong>Types reached</strong> — the type you started from and every type the walk reached, as a
+          library to <a href="#import">import</a> in the main app;</li>
+      <li><strong>This curve</strong> — its type, the constraints and where it is (coordinates, edge lengths,
+          vertices and markings in the plane), exactly, as JSON;</li>
+      <li>the <strong>curve picture</strong> and (in step 2) the <strong>polyhedron picture</strong>, as SVG or
+          PNG (Copy over each picture puts a PNG on the clipboard).</li>
+    </ul></li>
+  <li><span class="btn">Open…</span> reads a saved session back (after asking, if the page has a type).</li>
 </ul>
 </section>
 

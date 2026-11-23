@@ -68,6 +68,14 @@ function pcWire() {
     pcSetType(api("add_from_subdivision", cells, "drawn").id);
   })));
   on("pc-start", "click", () => pcGuard(pcStart));
+  on("pc-regen", "click", () => pcGuard(() => pcOpenRegenerate()));
+  on("pc-export", "click", () => pcGuard(pcOpenExport));
+  on("pc-open", "click", () => document.getElementById("pc-open-file").click());
+  on("pc-open-file", "change", ev => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (f) f.text().then(t => pcGuard(() => pcOpenSession(t)));
+  });
   on("pc-back", "click", () => pcGuard(() => {
     PC.step = "setup"; PC.base = PC.cur; PC.reg = null; pcShow(); pcSave();
   }));
@@ -108,13 +116,19 @@ function pcSave() {
   pcSaveTimer = setTimeout(() => {
     const el = document.getElementById("pc-saved");
     try {
-      localStorage.setItem(PC_KEY, JSON.stringify({
-        library: api("save"), base: PC.base, cur: PC.cur, z: PC.z, points: PC.points, lines: PC.lines,
-        mode: PC.mode, step: PC.step, box: PC.box, delta: PC.delta, colors: PC.colors,
-        reg: PC.reg && { vertex: PC.reg.vertex, from: PC.reg.from } }));
+      localStorage.setItem(PC_KEY, JSON.stringify(pcState()));
       el.textContent = "saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     } catch (e) { el.textContent = "not saved"; }
   }, 400);
+}
+// everything the page holds (also what Export saves as a session)
+function pcState() {
+  return {
+    kind: "tropcurves.polyhedron.session", version: 1,
+    library: api("save"), base: PC.base, cur: PC.cur, z: PC.z, points: PC.points, lines: PC.lines,
+    mode: PC.mode, step: PC.step, box: PC.box, delta: PC.delta, colors: PC.colors,
+    reg: PC.reg && { vertex: PC.reg.vertex, from: PC.reg.from },
+  };
 }
 function pcRestore(st) {
   if (!st || !st.library) return false;
@@ -437,9 +451,7 @@ function pcRender(keepCurveT) {
   // regenerations: at a degeneration, or wherever the type has a vertex of valence >= 4
   if (v.high.length) {
     const vx = PC.reg && v.high.includes(PC.reg.vertex) ? PC.reg.vertex : v.high[0];
-    const r = api("poly_regenerations", PC.cur, vx, PC.points, PC.lines, PC.z, pcScale(), PC.reg && PC.reg.from);
-    PC.reg = { vertex: vx, from: PC.reg && PC.reg.from, edge: PC.reg && PC.reg.vertex === vx ? PC.reg.edge : null,
-               list: r.regenerations };
+    PC.reg = { vertex: vx, from: PC.reg && PC.reg.from, edge: PC.reg && PC.reg.vertex === vx ? PC.reg.edge : null };
   } else PC.reg = null;
   if (v.dim > 2) pcDirection();
   pcDrawCurve(v, keepCurveT);
@@ -740,41 +752,188 @@ function pcWireSlider() {
   });
 }
 
-// --- regenerations -------------------------------------------------------------------
+// --- regenerations ----------------------------------------------------------------------
+// The panel says when the curve has a vertex of valence 4 or more (after a
+// degeneration, or in the type as it is); Regenerate… opens the dialog, as
+// Resolve a vertex in the main app: pick the vertex on the picture, then one
+// of its regenerations -- those the curve can enter with the constraints kept.
 function pcDrawWall() {
   const box = document.getElementById("pc-wall");
-  if (!PC.reg || !PC.reg.list) { box.hidden = true; document.getElementById("pc-regens").innerHTML = ""; return; }
+  if (!PC.reg) { box.hidden = true; return; }
   box.hidden = false;
-  const v = PC.view.picture.vertices.find(x => x.id === PC.reg.vertex);
+  const n = PC.view.high.length;
   document.getElementById("pc-wall-text").textContent = (PC.reg.edge
-    ? `${PC.reg.edge} reached length 0: the curve has a vertex of higher valence. `
-    : "The curve has a vertex of valence 4 or more. ") + "Choose how it regenerates (or move on in this type):";
-  const list = document.getElementById("pc-regens");
-  list.innerHTML = "";
-  PC.reg.list.forEach((r, i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "mw-regen" + (r.back ? " back" : "");
-    const id = "pc-regen-" + i;
-    const svg = document.createElementNS(SVGNS, "svg");
-    svg.id = id; svg.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);
-    b.appendChild(svg);
-    const cap = document.createElement("span");
-    cap.textContent = r.back ? "back" : r.enter ? "go on" : "cannot";
-    b.appendChild(cap);
-    b.title = r.back ? "Go back the way you came" : r.enter ? "Go on into this type" : r.why;
-    b.disabled = !r.enter;
-    b.onclick = () => pcGuard(() => pcRegenerate(r.index));
-    list.appendChild(b);
-    drawCurve({ curve: pcColored(r.picture) }, { svgId: id, labels: false });
-  });
+    ? `${PC.reg.edge} reached length 0: the curve has a vertex of higher valence.`
+    : `The curve has ${n === 1 ? "a vertex" : n + " vertices"} of valence 4 or more.`) +
+    " Regenerate one, or keep moving in this type.";
 }
 
-function pcRegenerate(index) {
-  const r = api("poly_regenerate", PC.cur, PC.reg.vertex, index, PC.points, PC.lines, PC.z, pcScale());
+const pcValence = (pic, id) => pic.edges.filter(e => e.tail === id || e.head === id).length +
+  (pic.markings || []).filter(m => m.tail === id).length;
+
+function pcOpenRegenerate(vertex) {
+  const v = PC.view, high = v.high || [];
+  const body = dialogHead("polyRegen", "Regenerate a vertex",
+    "A vertex of valence 4 or more splits in two, joined by a new edge whose direction balancing forces. " +
+    "The curve can go on into a regeneration when, with the constraints kept, the new edge can grow; " +
+    "<em>back</em> is the type you came from.");
+  if (!high.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This curve has no vertex of valence 4 or more.</p>`);
+    openModal(); return;
+  }
+  const pic = pcColored(v.picture);
+  const label = id => `where ${vertexLabel(pic, id)} meet (valence ${pcValence(pic, id)})`;
+  const frame = pickFrame(body, high.length > 1 ? "Pick a ringed vertex." : "The only vertex that can regenerate is ringed.", false);
+  const sel = selectOf(high.map(id => [id, label(id)]));
+  frame.listView.appendChild(labeled("vertex", sel));
+  const listWrap = document.createElement("div");
+  listWrap.style.marginTop = "10px";
+  body.appendChild(listWrap);
+  body.appendChild(errBox());
+  let picker = null, current = null;
+  // the edges going to the new vertex, in the accent colour, while hovering one
+  const showSplit = side => {
+    if (!picker) return;
+    Object.entries(picker.drawn.lines).forEach(([id, ln]) => {
+      if (!ln.dataset.origStroke) { ln.dataset.origStroke = ln.getAttribute("stroke"); ln.dataset.origWidth = ln.getAttribute("stroke-width"); }
+      const on = side.includes(id);
+      ln.setAttribute("stroke", on ? "var(--accent)" : ln.dataset.origStroke);
+      ln.setAttribute("stroke-width", on ? +ln.dataset.origWidth + 2 : ln.dataset.origWidth);
+    });
+  };
+  const thumb = (r, vx) => {
+    const b = document.createElement("button");
+    b.className = "res-thumb" + (r.back ? " back" : "");
+    b.disabled = !r.enter;
+    const svg = document.createElementNS(SVGNS, "svg");
+    svg.id = "pc-res-" + r.index;
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    b.appendChild(svg);
+    const cap = document.createElement("div");
+    cap.className = "res-thumb-cap";
+    cap.textContent = r.back ? "back" : r.enter ? "go on" : r.why;
+    b.appendChild(cap);
+    b.title = r.back ? "Go back the way you came" : r.enter ? "Go on into this type" : r.why;
+    b.onclick = () => pcGuard(() => { closeModal(); pcRegenerate(vx, r.index); });
+    b.addEventListener("pointerenter", () => showSplit(r.side || []));
+    b.addEventListener("pointerleave", () => showSplit([]));
+    return b;
+  };
+  const fill = vx => {
+    current = vx;
+    sel.value = vx || "";
+    listWrap.innerHTML = "";
+    showSplit([]);
+    if (!vx) return;
+    const list = api("poly_regenerations", PC.cur, vx, PC.points, PC.lines, PC.z, pcScale(),
+                     PC.reg && PC.reg.from).regenerations;
+    const can = list.filter(r => r.enter), cannot = list.filter(r => !r.enter);
+    can.sort((a, b) => a.back - b.back);                 // going on first, back last
+    listWrap.insertAdjacentHTML("beforeend", `<p class="muted" style="margin:0 0 6px">${can.length
+      ? "Each regeneration the curve can enter, as the curve it makes (the new edge highlighted). Pick one."
+      : "The curve cannot enter any regeneration of this vertex with the constraints kept."}</p>`);
+    const box = document.createElement("div");
+    box.className = "res-thumbs";
+    can.forEach(r => box.appendChild(thumb(r, vx)));
+    listWrap.appendChild(box);
+    const toDraw = [...can];
+    if (cannot.length) {
+      const det = document.createElement("details");
+      det.className = "pc-cannot";
+      det.innerHTML = `<summary>${cannot.length} more the curve cannot enter</summary>`;
+      const box2 = document.createElement("div");
+      box2.className = "res-thumbs";
+      cannot.forEach(r => box2.appendChild(thumb(r, vx)));
+      det.appendChild(box2);
+      listWrap.appendChild(det);
+      toDraw.push(...cannot);
+    }
+    toDraw.forEach(r => {
+      try { drawPreview("pc-res-" + r.index, { curve: pcColored(r.picture), new_edge: r.new_edge }, { labels: false }); }
+      catch (e) { /* leave that one blank rather than break the dialog */ }
+    });
+  };
+  sel.onchange = () => { fill(sel.value); if (picker) picker.select(sel.value); };
+  openModal();
+  picker = mountPicker({ curve: pic }, "pick-svg", {
+    pickVertex: x => high.includes(x.id),
+    clickCommits: false,
+    status: frame.status, idle: "",
+    describe: t => label(t.id),
+    onSelect: t => { if (!t || t.id !== current) fill(t ? t.id : null); },
+  });
+  const start = vertex || (PC.reg && high.includes(PC.reg.vertex) ? PC.reg.vertex : high.length === 1 ? high[0] : null);
+  if (start) picker.select(start);
+  frame.onSwitch(picture => { if (!picture && !current) fill(sel.value); });
+}
+
+function pcRegenerate(vertex, index) {
+  const r = api("poly_regenerate", PC.cur, vertex, index, PC.points, PC.lines, PC.z, pcScale());
   if (!r.id) { alert("Cannot go on into it: " + r.why); return; }
   Object.assign(PC, { cur: r.id, z: r.z, box: null, delta: {}, dir: null, reg: null });
   pcRender();
+  pcSave();
+}
+
+// --- export and open ----------------------------------------------------------------------
+function pcOpenExport() {
+  if (PC.paint) pcStopPaint();                  // the pictures without painting's rings
+  const body = dialogHead("polyExport", "Export",
+    "Save this page's session (to open here again), the types the walk reached (to import in the main app), " +
+    "the current curve as data, or the pictures.");
+  if (!PC.base) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">Nothing to export yet: open or draw a type first.</p>`);
+    openModal(); return;
+  }
+  const walk = PC.step === "walk";
+  const curveSvg = walk ? "pc-curve" : "pc-plane";
+  const bg = () => resolvedVar("--panel", "#ffffff");
+  const item = (title, note, buttons) => {
+    const d = document.createElement("div");
+    d.className = "pc-export-item";
+    d.innerHTML = `<div><b>${escapeHtml(title)}</b><div class="muted">${note}</div></div>`;
+    const r = row(buttons.map(([label, f]) => {
+      const b = document.createElement("button");
+      b.className = "small"; b.textContent = label;
+      b.onclick = () => pcGuard(() => f(b));
+      return b;
+    }));
+    d.appendChild(r);
+    body.appendChild(d);
+  };
+  const svgFile = (id, back, name) => {
+    const text = new XMLSerializer().serializeToString(standaloneSvg(id, back));
+    downloadBlob(new Blob([text], { type: "image/svg+xml" }), name);
+  };
+  const pngFile = async (id, back, name, btn) => {
+    try { downloadBlob(await svgToPngBlob(id, back), name); flashButton(btn, "Saved ↓"); }
+    catch (e) { flashButton(btn, "Failed"); }
+  };
+  item("Session", "Everything on this page — the types, the constraints, where the curve is, the colors. Open it here again with <b>Open…</b>.",
+       [["Save .json", () => downloadJSON(JSON.stringify(pcState(), null, 1), "polyhedron-session.json")]]);
+  item("Types reached", "The type you started from and every type the walk reached, as a library: <b>Import…</b> it in the main app.",
+       [["Save .json", () => downloadJSON(api("save"), "polyhedron-types.json")]]);
+  item("This curve", "Its type, the constraints, and where it is — coordinates, edge lengths, vertices and markings in the plane — exactly.",
+       [["Save .json", () => downloadJSON(JSON.stringify(api("poly_export", walk ? PC.cur : PC.base, PC.points, PC.lines, PC.z), null, 1), "curve.json")]]);
+  item("Curve picture", "The whole figure, with the points and lines.",
+       [["SVG", () => svgFile(curveSvg, null, "curve.svg")], ["PNG", b => pngFile(curveSvg, null, "curve.png", b)]]);
+  if (walk && PC.view && (PC.view.chart || PC.view.dim === 0)) {
+    item("Polyhedron picture", "The region (or segment) and its walls, with the point.",
+         [["SVG", () => svgFile("pc-chart", bg(), "polyhedron.svg")], ["PNG", b => pngFile("pc-chart", bg(), "polyhedron.png", b)]]);
+  }
+  openModal();
+}
+
+function pcOpenSession(text) {
+  let st;
+  try { st = JSON.parse(text); } catch (e) { alert("That is not a session file (not JSON)."); return; }
+  if (!st || st.kind !== "tropcurves.polyhedron.session" || !st.library) {
+    alert("That is not a session saved from this page. (A library from the main app opens there, or send a type with ⬠.)");
+    return;
+  }
+  if (PC.base && !confirm("Replace what is on this page with the saved session?")) return;
+  PC.paint = null; pcPaintBars();
+  pcRestore(st);
   pcSave();
 }
 
