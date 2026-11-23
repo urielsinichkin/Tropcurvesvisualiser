@@ -35,9 +35,10 @@ def test_every_help_entry_points_at_a_guide_section():
 
 def test_every_dialog_and_panel_has_help():
     """Dialogs go through dialogHead(helpKey, ...) or attachDialogHelp(key),
-    panels through add/panelHelp (the moduli page); each key must exist in
-    help-tips.js."""
-    app = (ROOT / "web" / "app.js").read_text() + (ROOT / "moduli" / "moduli.js").read_text()
+    panels through add/panelHelp (the moduli and polyhedron pages); each key
+    must exist in help-tips.js."""
+    app = (ROOT / "web" / "app.js").read_text() + (ROOT / "moduli" / "moduli.js").read_text() \
+        + (ROOT / "polyhedron" / "poly.js").read_text()
     tips = (ROOT / "web" / "help-tips.js").read_text()
     keys = set(re.findall(r"^  (\w+): \{", tips, re.M))
     used = set(re.findall(r'dialogHead\("(\w+)"', app))
@@ -64,11 +65,12 @@ def test_styles_version_matches_index():
 
 
 def test_moduli_page_shares_the_stylesheet_version():
-    """The moduli page links the main app's stylesheet, at the same version."""
+    """The moduli and polyhedron pages link the main app's stylesheet, at the
+    same version."""
     index = (ROOT / "web" / "index.html").read_text()
-    moduli = (ROOT / "moduli" / "index.html").read_text()
     v = re.search(r'styles\.css\?v=(\d+)', index).group(1)
-    assert f"../web/styles.css?v={v}" in moduli
+    for page in ("moduli/index.html", "polyhedron/index.html"):
+        assert f"../web/styles.css?v={v}" in (ROOT / page).read_text(), page
 
 
 def test_scripts_and_package_are_revalidated_not_refetched():
@@ -79,8 +81,10 @@ def test_scripts_and_package_are_revalidated_not_refetched():
     app = (ROOT / "web" / "app.js").read_text()
     assert 'cache: "no-cache"' in app and "no-store" not in app
     for page, names in [("web/index.html", ['"help-tips.js"', '"app.js"']),
-                        ("moduli/index.html", ['"../web/help-tips.js"', '"../web/app.js"', '"moduli.js"'])]:
+                        ("moduli/index.html", ['"../web/help-tips.js"', '"../web/app.js"', '"moduli.js"']),
+                        ("polyhedron/index.html", ['"../web/help-tips.js"', '"../web/app.js"', '"poly.js"'])]:
         html = (ROOT / page).read_text()
+        assert html.rstrip().endswith("</script>\n</body>\n</html>"), f"{page}: the loader is not complete"
         loader = html[html.rindex("<script>"):]
         assert 'fetch(name, { cache: "no-cache" })' in loader, page
         assert "[" + ", ".join(names) + "]" in loader, page

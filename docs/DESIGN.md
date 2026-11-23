@@ -436,6 +436,47 @@ edge. State (library text, choices, current type, points, point, wall) is
 kept under `tropcurves.walk.v1`. web/app.js is loaded in library mode
 (`TROP_LIBRARY_MODE`) for Python, drawing, the editor, zoom, export and help.
 
+### 3.2b The polyhedron page (`polyhedron/`)
+
+A third page for the curves of one type satisfying constraints in the plane
+(⬠ on a type's row: `openInTool`, as for the moduli page, under
+`tropcurves.poly.handoff`).
+
+**Core (`polyhedron.py`, exact).** `Cell(curve, points, lines)`: the cell's
+coordinates `z = (x_0, y_0, l_e)` (the root vertex; lengths as in 3.2); a
+marking's point gives its vertex's two position rows (`vertex_row`), an end's
+line one row `det(v, P)` for its vertex `P`; `C z = b`. The polyhedron is
+`{C z = b, l >= 0}`; its dimension `n - rank C` when consistent. `lp_min` is a
+small two-phase simplex (Bland's rule) on `Fraction`s: `interior` maximizes
+the smallest length (capped at 1) -- > 0 means curves of the precise type
+exist; `fit` then finds the curve nearest (L1) the previous one with every
+length at least half that margin, so the curve follows a dragged constraint
+smoothly. Up to dimension 2 the chart uses the free columns of `rref(C)`
+(columns `x_0, y_0, l_e` in order, so the free ones are lengths when they can
+be), each length an affine form in them; the region is the box (`[0, R]` along
+a length, around the point otherwise) clipped by `l_e >= 0` as in the moduli
+page, a side where a charted length is 0 a wall of that edge. `move` and `go`
+stop at the first length reaching 0. Above dimension 2, `project` projects a
+direction of lengths orthogonally onto `ker C` (`N (N^T N)^{-1} N^T d`, `N` a
+basis) and reports how far it goes. At a degeneration `contract` uses
+`contract_edge` (which keeps the tail vertex and every other id) and carries
+`z` over by vertex positions; `regenerate` lists every resolution of the
+merged vertex (`apply_resolution` keeps the vertex and adds one vertex and
+edge, so positions carry over again, the new edge at length 0) and, by a
+small LP, whether some direction of the new polyhedron lengthens the new edge
+without shortening one already at 0 -- if so the point steps a little way in.
+Types reached are kept in the page's library, an existing one reused only
+when its curve is identical (ids included), since `z` is indexed by ids.
+
+**Page.** Step 1 draws the curve in the plane with a fixed transform while
+a handle is dragged (`drawCurve(..., {transform})`, inverted through
+`T.params`); a tap on a handle frees it. Step 2: the curve (direction edges
+recoloured), and the chart (keepSize marks, as in the moduli cell) or the
+direction panel with a slider (`poly_at` per frame, the curve's transform
+kept; letting go commits). After any move, a type with a vertex of valence
+>= 4 offers that vertex's regenerations (`poly_regenerations`, the type
+walked from marking the way back).
+
 ### Stale cached pages
 
 Phones restore old tabs from cache, so `index.html` can be an old copy naming

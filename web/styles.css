@@ -455,16 +455,20 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .moduli-page .btn-link:hover { border-color: var(--accent); }
 .moduli-page .view-head { flex-wrap: wrap; }
 /* step 1 alone, centred; step 2: the curve and the cell side by side */
-#mw { display: grid; gap: 12px; padding: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-#mw-setup { grid-column: 1 / -1; max-width: 900px; width: 100%; justify-self: center; }
-@media (max-width: 900px) { #mw { grid-template-columns: minmax(0, 1fr); } }
+#mw, #pc { display: grid; gap: 12px; padding: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+#mw-setup, #pc-setup { grid-column: 1 / -1; max-width: 900px; width: 100%; justify-self: center; }
+@media (max-width: 900px) { #mw, #pc { grid-template-columns: minmax(0, 1fr); } }
 /* the main app's columns scroll by themselves; this page scrolls as a page */
 @media (min-width: 901px) { html:has(body.moduli-page), body.moduli-page { height: auto; overflow: auto; } }
 .moduli-page #mw-type-svg { height: clamp(260px, 50vh, 560px); }
 .moduli-page #mw-curve { height: clamp(300px, 62vh, 760px); }
 .moduli-page #mw-cell { height: clamp(260px, 46vh, 560px); }
+.poly-page #pc-plane { height: clamp(280px, 55vh, 620px); }
+.poly-page #pc-curve { height: clamp(300px, 62vh, 760px); }
+.poly-page #pc-chart { height: clamp(260px, 46vh, 560px); }
 @media (max-width: 700px) {
-  .moduli-page #mw-type-svg, .moduli-page #mw-curve, .moduli-page #mw-cell { height: auto; aspect-ratio: 3 / 2; }
+  .moduli-page #mw-type-svg, .moduli-page #mw-curve, .moduli-page #mw-cell,
+  .poly-page #pc-plane, .poly-page #pc-curve, .poly-page #pc-chart { height: auto; aspect-ratio: 3 / 2; }
 }
 .mw-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .mw-small { font-size: 12px; margin: 6px 0; }
@@ -484,6 +488,21 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .mw-regen { display: grid; gap: 4px; padding: 6px; font-size: 13px; }
 .mw-regen svg { height: 80px; pointer-events: none; }
 .mw-regen.back { border-style: dashed; }
+/* the polyhedron page */
+#pc-type .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
+#pc-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-handle { cursor: grab; touch-action: none; }
+.pc-key-line { border-top: 3px dashed #8e5bd8; height: 0; width: 18px; vertical-align: middle; }
+.pc-plus { color: #2ca02c; }
+.pc-minus { color: #d62728; }
+.pc-slider { position: relative; height: 32px; margin: 6px 0; touch-action: none; cursor: pointer; }
+.pc-slider.off { opacity: .4; cursor: default; }
+.pc-slider-track, .pc-slider-fill { position: absolute; left: 10px; right: 10px; top: 14px; height: 4px; border-radius: 2px; background: var(--line); }
+.pc-slider-fill { right: auto; width: 0; background: var(--accent); }
+.pc-slider-thumb { position: absolute; top: 6px; left: 0; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--panel); box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.pc-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+#pc-dir-text b { font-weight: 600; }
 /* the slope dialog: what is being changed */
 .slope-what { margin: 8px 0 2px; font-size: 13px; }
 .slope-dep { color: var(--warn); text-decoration: underline dashed; text-underline-offset: 3px; }
