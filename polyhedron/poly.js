@@ -18,6 +18,8 @@
 // in library mode, for Python, drawing, the subdivision editor, zoom and help.
 // ---------------------------------------------------------------------------
 const PC_KEY = "tropcurves.poly.v1";
+const PC_SNAP_PX = 12;              // a dragged point this close (on screen) to another snaps onto it
+const PC_SHARED = "#2ca02c";
 const PC_PLUS = "#2ca02c", PC_MINUS = "#d62728", PC_LINE = "#8e5bd8";
 
 const PC = {
@@ -36,6 +38,8 @@ const PC = {
   status: null,       // the last poly_fit in step 1
   colors: {},         // edge / end / marking name -> color painted (kept across types)
   paint: null,        // { color, sticky } while painting
+  tool: "markings",   // step 1, Type: the editing tool
+  moveFrom: null,     // Type / Move a marking: the marking picked
 };
 
 // --- boot ----------------------------------------------------------------------
@@ -79,8 +83,11 @@ function pcWire() {
   on("pc-back", "click", () => pcGuard(() => {
     PC.step = "setup"; PC.base = PC.cur; PC.reg = null; pcShow(); pcSave();
   }));
-  document.querySelectorAll("#pc-type .mw-tabs button").forEach(b => {
-    b.onclick = () => { PC.mode = b.dataset.mode; pcDrawPlane(); pcSave(); };
+  document.querySelectorAll("#pc-type .mw-tabs button[data-mode]").forEach(b => {
+    b.onclick = () => { PC.mode = b.dataset.mode; PC.moveFrom = null; pcDrawPlane(pcPlaneT); pcSave(); };
+  });
+  document.querySelectorAll("#pc-tools button[data-tool]").forEach(b => {
+    b.onclick = () => { PC.tool = b.dataset.tool; PC.moveFrom = null; pcDrawPlane(pcPlaneT); pcSave(); };
   });
   const bg = () => resolvedVar("--panel", "#ffffff");
   on("pc-copy-curve", "click", ev => copyPanelPng("pc-curve", null, ev.target, "curve.png"));
@@ -195,6 +202,12 @@ function pcLineGeom(vec, c, near) {
   const s = (near[0] - p0[0]) * u[0] + (near[1] - p0[1]) * u[1];
   return { p0, u, handle: [p0[0] + s * u[0], p0[1] + s * u[1]] };
 }
+// the fixed points shared by two markings or more: [[x1, x3], ...]
+function pcShared() {
+  const by = {};
+  Object.entries(PC.points).forEach(([n, p]) => { const k = p.map(x => pcNum(x)).join(","); (by[k] = by[k] || []).push(n); });
+  return Object.values(by).filter(g => g.length > 1);
+}
 const pcInverse = T => q => [(q[0] - T.params.ox) / T.params.s + T.params.minx,
                              (VBH - q[1] - T.params.oy) / T.params.s + T.params.miny];
 
@@ -212,7 +225,8 @@ function pcDraw(svgId, picture, opts = {}) {
   // while painting every edge and marking is a target, and nothing else is
   const paint = !!PC.paint;
   const drawn = drawCurve({ curve: pcColored(picture) }, { svgId, transform: T,
-    pickEdge: paint ? (() => true) : opts.pickEdge, pickMarking: paint ? (() => true) : opts.pickMarking });
+    pickEdge: paint ? (() => true) : opts.pickEdge, pickMarking: paint ? (() => true) : opts.pickMarking,
+    pickVertex: paint ? null : opts.pickVertex });
   if (paint) wirePainting(drawn, { state: () => PC.paint, apply: pcPaintOne });
   const svg = drawn.svg, first = svg.querySelector(".pick-hit");
   const put = el => (first && !opts.handles ? svg.insertBefore(el, first) : svg.appendChild(el));
@@ -231,6 +245,11 @@ function pcDraw(svgId, picture, opts = {}) {
         stroke: "var(--panel)", transform: `rotate(45 ${h[0]} ${h[1]})`, class: "pc-handle",
         "data-line": name }), {}));
     }
+  });
+  pcShared().forEach(names => {                     // points shared by several markings
+    const q = T(PC.points[names[0]].map(pcNum));
+    put(keepSize(svgEl("circle", { cx: q[0], cy: q[1], r: 16, fill: "none", stroke: PC_SHARED,
+      "stroke-width": 2.5, "pointer-events": "none" }), { r: 16, sw: 2.5 }));
   });
   Object.entries(PC.points).forEach(([name, p]) => {
     const q = T(p.map(pcNum));
@@ -322,14 +341,29 @@ function pcDrawPlane(keepT) {
     if (b.dataset.mode === "points") b.textContent = `Points (${Object.keys(PC.points).length})`;
     if (b.dataset.mode === "lines") b.textContent = `Lines (${Object.keys(PC.lines).length})`;
   });
-  document.getElementById("pc-hint").textContent = mode === "points"
-    ? "Click a marking to fix its image at a point (orange square), again to free it. Drag a square to move the point."
-    : "Click an end to fix the line it lies on (dashed violet), again to free it. Drag the diamond to move the line.";
+  const tools = document.getElementById("pc-tools");
+  tools.hidden = mode !== "type";
+  tools.querySelectorAll("button[data-tool]").forEach(b => {
+    const on = b.dataset.tool === PC.tool;
+    b.classList.toggle("primary", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  const tool = mode === "type" ? PC.tool : null, from = PC.moveFrom;
+  document.getElementById("pc-hint").textContent = {
+    points: "Click a marking to fix its image at a point (orange square), again to free it. Drag a square to move the point; near another point it snaps onto it.",
+    lines: "Click an end to fix the line it lies on (dashed violet), again to free it. Drag the diamond to move the line.",
+    type: tool === "move"
+      ? (from ? `Click another marking or a vertex to put ${from} on that vertex, or an edge or end to put it inside it; ${from} again to cancel.`
+              : "Click the marking to move.")
+      : "Click an edge or end to put a marking inside it, a ringed vertex to put one on it, a marking to take it off. (A vertex keeps more other edges than markings.)",
+  }[mode];
   const pic = (PC.status && PC.status.picture) || api("poly_view", PC.base, {}, {}, PC.z).picture;
   const d = pcDraw("pc-plane", pic, {
     keepT, handles: true,
-    pickEdge: e => mode === "lines" && e.kind === "end",
-    pickMarking: () => mode === "points",
+    pickEdge: e => (mode === "lines" && e.kind === "end") ||
+      ((tool === "markings" || (tool === "move" && from)) && e.kind !== "marking"),
+    pickMarking: () => mode === "points" || !!tool,
+    pickVertex: tool === "markings" || (tool === "move" && from) ? (() => true) : null,
   });
   pcPlaneT = d.T;
   if (PC.paint) { pcCheck(); return; }               // the picks are painting's
@@ -337,6 +371,7 @@ function pcDrawPlane(keepT) {
     d.svg.querySelectorAll("line").forEach(l => { if (!l.getAttribute("stroke-dasharray")) l.setAttribute("opacity", "0.35"); });
   }
   const status = document.getElementById("pc-pick-status");
+  if (tool) { pcWireTypeEdits(d, pic, status); pcCheck(); return; }
   const idle = mode === "points" ? `Points: ${Object.keys(PC.points).join(", ") || "none"}`
     : `Lines: ${Object.keys(PC.lines).join(", ") || "none"}`;
   status.textContent = idle;
@@ -360,6 +395,59 @@ function pcDrawPlane(keepT) {
   pcCheck();
 }
 
+// Type: the picture's targets edit the type (markings for now)
+function pcWireTypeEdits(d, pic, status) {
+  const from = PC.moveFrom;
+  if (from) {                                      // the marking being moved, ringed
+    const m = (pic.markings || []).find(x => x.name === from);
+    const p = m && (d.markAt && d.markAt[m.id] || d.T(m.at));
+    if (p) d.svg.appendChild(keepSize(svgEl("circle", { cx: p[0], cy: p[1], r: 17, fill: "none", stroke: SLOPE_COLOR,
+      "stroke-width": 3, "stroke-dasharray": "5 4", "pointer-events": "none" }), { r: 17, sw: 3 }));
+  }
+  const marks = (pic.markings || []).map(m => m.name);
+  const idle = PC.tool === "move" ? (from ? `Moving ${from}` : `${marks.length} markings: ${marks.join(", ") || "none"}`)
+    : `${(pic.edges || []).filter(e => e.kind === "end").length} ends, ${marks.length} markings`;
+  status.textContent = idle;
+  const describe = t => {
+    const where = t.kind === "edge" ? `${t.edge.kind === "end" ? "end" : "edge"} ${t.edge.name}` : t.kind === "vertex" ? "this vertex" : `marking ${t.marking.name}`;
+    if (PC.tool === "move") {
+      if (t.kind === "mark") return t.marking.name === from ? `${from}: click to cancel`
+        : from ? `${where}: click to put ${from} on its vertex` : `${where}: click to move it`;
+      return `${where}: click to put ${from} ${t.kind === "edge" ? "inside it" : "on it"}`;
+    }
+    return `${where}: click to ` + (t.kind === "mark" ? "take it off" : t.kind === "edge" ? "put a marking inside it" : "put a marking on it");
+  };
+  [...d.edgePicks, ...d.markPicks, ...d.vertexPicks].forEach(t => {
+    t.hit.addEventListener("pick-enter", () => { status.textContent = describe(t); });
+    t.hit.addEventListener("pick-leave", () => { status.textContent = idle; });
+    t.hit.addEventListener("pick-click", () => pcGuard(() => {
+      if (PC.tool === "move") {
+        if (!from) { if (t.kind === "mark") { PC.moveFrom = t.marking.name; pcDrawPlane(pcPlaneT); } return; }
+        PC.moveFrom = null;
+        if (t.kind === "mark" && t.marking.name === from) { pcDrawPlane(pcPlaneT); return; }
+        pcEdit("move", t.kind === "edge" ? { marking: from, edge: t.edge.id }
+          : { marking: from, vertex: t.kind === "mark" ? t.marking.tail : t.vertex.id });
+      } else if (t.kind === "mark") pcEdit("remove", t.marking.name);
+      else if (t.kind === "edge") pcEdit("add_on_edge", t.edge.id);
+      else pcEdit("add_at_vertex", t.vertex.id);
+    }));
+  });
+}
+
+// edit the type, keeping the curve where it was; a marking gone takes its
+// point (and color) along, and the curve is fitted to the constraints again
+function pcEdit(op, arg) {
+  let r;
+  try { r = api("poly_edit", PC.base, PC.z, op, arg); }
+  catch (e) { alert("Cannot: " + e.message); pcDrawPlane(pcPlaneT); return; }
+  PC.z = r.z;
+  r.gone.forEach(n => { delete PC.points[n]; delete PC.colors[n]; });
+  PC.status = null;
+  pcFit();
+  pcDrawPlane(pcPlaneT);
+  pcSave();
+}
+
 function pcCheck() {
   const el = document.getElementById("pc-check"), go = document.getElementById("pc-start");
   const r = PC.status || pcFit();
@@ -370,6 +458,8 @@ function pcCheck() {
   if (!r.feasible) el.textContent = `${what}: no curve of this type satisfies them. Move them, or free some.`;
   else if (!r.precise) el.textContent = `${what}: only degenerate curves (some edge of length 0) satisfy them. Move them, or free some.`;
   else el.textContent = `${what}: the curves of this type through them form a polyhedron of dimension ${r.dim}.`;
+  const shared = pcShared();
+  if (shared.length) el.textContent += ` One point for ${shared.map(g => g.join(" = ")).join(", ")}.`;
 }
 
 // dragging a point or a line (the plane picture's handles)
@@ -386,7 +476,8 @@ function pcWireHandles(svg) {
   }, true);
   svg.addEventListener("pointerdown", ev => {
     const h = ev.target.closest && ev.target.closest(".pc-handle");
-    if (!h || PC.paint || (ev.pointerType === "mouse" && ev.button !== 0)) return;   // painting: the click paints
+    // painting, or editing the type: the click goes to what is under the handle
+    if (!h || PC.paint || PC.mode === "type" || (ev.pointerType === "mouse" && ev.button !== 0)) return;
     ev.stopImmediatePropagation();
     ev.preventDefault();
     drag = { point: h.getAttribute("data-point"), line: h.getAttribute("data-line"), T: pcPlaneT,
@@ -398,14 +489,27 @@ function pcWireHandles(svg) {
     ev.stopImmediatePropagation();
     if (!drag.moved && Math.hypot(ev.clientX - drag.at[0], ev.clientY - drag.at[1]) < 4) return;
     drag.moved = true;
-    pending = pcInverse(drag.T)(toSvg(ev));
+    // a point dragged near another fixed point snaps onto it: the two
+    // markings then have exactly one point
+    let snap = null;
+    if (drag.point) {
+      const m = svg.getScreenCTM();
+      for (const [name, p] of Object.entries(PC.points)) {
+        if (name === drag.point) continue;
+        const q = drag.T(p.map(pcNum));
+        if (Math.hypot(ev.clientX - (m.a * q[0] + m.e), ev.clientY - (m.d * q[1] + m.f)) < PC_SNAP_PX) { snap = name; break; }
+      }
+    }
+    pending = { q: pcInverse(drag.T)(toSvg(ev)), snap };
     if (pcRaf) return;
     pcRaf = requestAnimationFrame(() => {
       pcRaf = 0;
-      const q = pending; pending = null;
-      if (!q || !drag) return;
+      const pd = pending; pending = null;
+      if (!pd || !drag) return;
+      const q = pd.q;
       pcGuard(() => {
-        if (drag.point) PC.points[drag.point] = [pcStr(q[0]), pcStr(q[1])];
+        if (drag.point && pd.snap) PC.points[drag.point] = PC.points[pd.snap].slice();
+        else if (drag.point) PC.points[drag.point] = [pcStr(q[0]), pcStr(q[1])];
         else {
           const e = api("render", PC.base).curve.edges.find(x => x.name === drag.line);
           PC.lines[drag.line] = pcStr(e.vec[0] * q[1] - e.vec[1] * q[0]);

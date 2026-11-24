@@ -224,6 +224,11 @@ built, so the refined multiplicity is only computed while its part is open.
   from. Beyond that the count grows fast -- 10 splits at `d = 5`, 25 at `d = 6`
   -- so the UI has you tick one side instead, showing the forced edge as you go;
   the pieces may need resolving in turn.
+- **Remove a marking** (`Workspace.remove_marking`; Remove marking… picks it with
+  `mountPicker`, which now also takes markings, or ✕ in the list): from the type
+  and its derived types (taken off them first, since a rebuild keeps a derived
+  type's own markings); its point inside an edge merged back (`smooth_vertex`)
+  unless that breaks a derived type, which then keeps the point.
 - **Edit slopes**: the two-ends mechanism (2.2). Both ends are picked on the
   picture (`pickFrame` + `mountPicker` with `clickCommits: false` and a
   `decorate` hook that draws the two roles: the end violet, the dependent end
@@ -468,6 +473,18 @@ small LP, whether some direction of the new polyhedron lengthens the new edge
 without shortening one already at 0 -- if so the point steps a little way in.
 Types reached are kept in the page's library, an existing one reused only
 when its curve is identical (ids included), since `z` is indexed by ids.
+
+**Editing the type.** Step 1's Type tab holds editing tools (markings for
+now: add on an edge / at a vertex, remove, move -- `poly_edit(node, z, op,
+arg)`, one entry point for more operations later). The edit goes through the
+workspace (`add_marking_on_edge`, `moduli_add_marking`,
+`moduli_remove_marking`, `moduli_move_marking`, with the rule that a vertex
+keeps more other edges than markings), then `polyhedron.carry` places the new
+curve from the old one's vertex positions: kept vertices stay, a new point
+goes half way along the edge it cut (half a typical length along an end), and
+the lengths are read off the positions -- so the curve does not jump; the fit
+then restores the constraints. A dragged point within 12 px of another fixed
+point snaps onto it (its exact coordinates), giving markings with one point.
 
 **Page.** Step 1 draws the curve in the plane with a fixed transform while
 a handle is dragged (`drawCurve(..., {transform})`, inverted through

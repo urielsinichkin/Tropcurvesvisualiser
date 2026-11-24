@@ -14,9 +14,9 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "79";
+const APP_VERSION = "81";
 // Must match the styles.css?v= in index.html (a test checks).
-const STYLES_VERSION = "61";
+const STYLES_VERSION = "62";
 
 // index.html can be a stale cached copy -- phones restore old tabs from cache
 // -- naming an old styles.css?v= and predating newer scripts and buttons.
@@ -2750,14 +2750,15 @@ function drawPreview(svgId, preview, opts = {}) {
 // any kind, just selects.
 function mountPicker(data, svgId, o) {
   const drawn = drawCurve(data, { svgId: svgId, pickEdge: o.pickEdge,
-                                  pickVertex: o.pickVertex, dim: o.dim });
-  const targets = [...drawn.edgePicks, ...drawn.vertexPicks];
+                                  pickVertex: o.pickVertex, pickMarking: o.pickMarking, dim: o.dim });
+  const targets = [...drawn.edgePicks, ...drawn.vertexPicks, ...drawn.markPicks];
   const clickCommits = o.clickCommits !== false;
   let hovered = null, selected = null, lastPointer = "mouse";
   const labelOf = t => t.kind === "edge"
     ? drawn.svg.querySelector(`text[data-label-key="e:${CSS.escape(t.id)}"]`) : null;
   targets.forEach(t => {
     if (t.line) t.orig = { stroke: t.line.getAttribute("stroke"), w: t.line.getAttribute("stroke-width") };
+    if (t.kind === "mark") t.orig = { stroke: t.disc.getAttribute("stroke"), w: t.disc.getAttribute("stroke-width") };
   });
   const paint = () => {
     targets.forEach(t => {
@@ -2767,6 +2768,9 @@ function mountPicker(data, svgId, o) {
         t.line.setAttribute("stroke-width", on ? +t.orig.w + 3 : t.orig.w);
         const lab = labelOf(t);
         if (lab && lab.hasAttribute("data-label-hidden")) lab.setAttribute("visibility", on ? "visible" : "hidden");
+      } else if (t.kind === "mark") {
+        t.disc.setAttribute("stroke", on ? "var(--accent)" : t.orig.stroke);
+        t.disc.setAttribute("stroke-width", on ? 4 : t.orig.w);
       } else {
         t.ring.setAttribute("r", on ? 8 : 6);
         t.ring.setAttribute("fill", on ? "var(--accent)" : "var(--panel)");
@@ -3242,6 +3246,8 @@ function renderControls() {
          openSlopeDialog),
       mk("Add marking…", c.vertices.length >= 1,
          "this type has no vertices", openMarkingDialog),
+      mk("Remove marking…", c.markings.length >= 1,
+         "this type has no markings", openRemoveMarkingDialog),
       mk("Contract edge…", bounded.length >= 1,
          "this type has no bounded edges to contract", openContractDialog),
       mk("Resolve vertex…", v4.length >= 1,
@@ -4566,6 +4572,49 @@ function openMarkingDialog() {
     buttonText: t => t.kind === "vertex" ? "Add marking at this vertex" : `Add marking on ${t.edge.name}`,
     buttonIdle: "Add marking",
     commit: t => t.kind === "vertex" ? run("add_marking", t.id) : run("add_marking_on_edge", t.id),
+  });
+}
+
+// Removing picks a marking on the picture (or from the list). The point it
+// leaves inside an edge merges back into the edge, unless a derived type's
+// steps need it; derived types lose the marking too.
+function openRemoveMarkingDialog() {
+  const data = api("render", selectedId);
+  const marks = data.curve.markings;
+  const body = dialogHead("removeMarking", "Remove a marking",
+    "The marking goes from this type and from the types derived from it. A marking " +
+    "inside an edge leaves a point there, which merges back into the edge (unless a " +
+    "derived type's steps depend on it, then it stays as a plain point).");
+  if (!marks.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">This type has no markings.</p>`);
+    openModal(); return;
+  }
+  const run = id => {
+    try { api("remove_marking", selectedId, id); closeModal(); refreshAll(); autosave(); }
+    catch (e) { showModalError(e.message); }
+  };
+  const where = m => `${m.name || m.id}, at the vertex where ${vertexLabel(data.curve, m.tail)} meet`;
+  const frame = pickFrame(body, wantPresetSwatches()
+    ? "Click the marking to remove."
+    : "Tap a marking, then tap it again or press Remove.", true);
+  const list = document.createElement("div");
+  list.className = "reslist";
+  marks.forEach(m => {
+    const b = document.createElement("button");
+    b.textContent = where(m);
+    b.onclick = () => run(m.id);
+    list.appendChild(b);
+  });
+  frame.listView.appendChild(list);
+  body.appendChild(errBox());
+  openModal();
+  mountPicker(data, "pick-svg", {
+    pickMarking: () => true,
+    status: frame.status, button: frame.button,
+    describe: t => where(t.marking),
+    buttonText: t => `Remove ${t.marking.name || t.marking.id}`,
+    buttonIdle: "Remove",
+    commit: t => run(t.id),
   });
 }
 

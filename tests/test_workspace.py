@@ -510,3 +510,43 @@ def test_normalize_keeps_a_consistent_tree_unchanged():
     s = _load(data)
     assert s.ws.normalize() == []
     assert s.node_summary(ids["B"])["children"] == [ids["C"], ids["D"]]
+
+
+def _conic_with_marking():
+    from tropcurves.api import Session
+    cells = [[[0, 0], [1, 0], [0, 1]], [[1, 0], [2, 0], [1, 1]], [[0, 1], [1, 1], [0, 2]],
+             [[1, 0], [1, 1], [0, 1]]]
+    s = Session()
+    nid = s.add_from_subdivision(cells, "c")["id"]
+    e1 = next(e for e in s.ws.nodes[nid].curve.bounded if e.name == "e1").id
+    res = s.add_marking_on_edge(nid, e1, "", "")
+    return s, nid, e1
+
+
+def test_removing_a_marking_merges_its_point_back_and_reaches_derived_types():
+    s, nid, e1 = _conic_with_marking()
+    c = s.ws.nodes[nid].curve
+    n_bounded = len(c.bounded)
+    other = next(e for e in c.bounded if e.name == "e2").id
+    child = s.contract(nid, other)["id"]
+    assert [m.name for m in s.ws.nodes[child].curve.markings] == ["x1"]
+    s.remove_marking(nid, c.markings[0].id)
+    assert len(s.ws.nodes[nid].curve.bounded) == n_bounded - 1      # e1 whole again
+    assert all(s.ws.nodes[nid].curve.valence(v) >= 3 for v in s.ws.nodes[nid].curve.vertices)
+    kid = s.ws.nodes[child]
+    assert kid.curve.markings == [] and kid.status == "ok"           # gone there too
+    s.ws.nodes[nid].curve.validate()
+
+
+def test_removing_a_marking_keeps_its_point_when_merging_would_break_a_derived_type():
+    s, nid, e1 = _conic_with_marking()
+    c = s.ws.nodes[nid].curve
+    m = c.markings[0]
+    # a derived type contracting the piece of e1 that merging back would remove
+    piece = next(e.id for e in c.incident(m.tail) if e.kind.value == "bounded" and e.id != e1)
+    child = s.contract(nid, piece)["id"]
+    n_bounded = len(c.bounded)
+    s.remove_marking(nid, m.id)
+    assert len(s.ws.nodes[nid].curve.bounded) == n_bounded              # the point stays
+    assert s.ws.nodes[nid].curve.markings == []
+    assert s.ws.nodes[child].status == "ok" and s.ws.nodes[child].curve.markings == []
