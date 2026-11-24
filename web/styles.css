@@ -491,6 +491,8 @@ body.sort-dragging, body.sort-dragging * { cursor: grabbing !important; user-sel
 .mw-regen svg { width: 100%; height: auto; aspect-ratio: 3 / 2; pointer-events: none; }
 .mw-regen.back { border-style: dashed; }
 /* the polyhedron page */
+.pc-tools { margin-top: 6px; }
+.pc-tools button[aria-pressed="true"] { font-weight: 600; }
 #pc-type .pick-status { font-size: 13px; min-height: 18px; margin-top: 4px; }
 #pc-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-handle { cursor: grab; touch-action: none; }

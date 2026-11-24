@@ -313,7 +313,8 @@ const HELP = {
     title: "Constraints",
     anchor: "poly-constraints",
     html: `<ul>
-        <li><b>Points</b> — click a marking to fix its image (orange square); drag the square; tap it to free it.</li>
+        <li><b>Type</b> — edit the type: <b>Add / remove markings</b> (click an edge, end or ringed vertex; a marking to take it off) or <b>Move a marking</b> (click it, then where it goes).</li>
+        <li><b>Points</b> — click a marking to fix its image (orange square); drag the square (near another point it snaps onto it: one point, green ring); tap it to free it.</li>
         <li><b>Lines</b> — click an end to fix the line it lies on (dashed violet); drag the diamond; tap it to free it.</li>
         <li><b>🖌 Paint</b> — color edges, ends and markings by clicking them; the colors stay as the walk changes type.</li>
         <li>The curve follows while there is one of this type; the line under the picture gives the polyhedron's dimension (each point −2, each line −1). Then <b>Start →</b>.</li>

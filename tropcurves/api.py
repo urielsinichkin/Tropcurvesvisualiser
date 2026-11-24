@@ -685,6 +685,38 @@ class Session:
                          "picture": self._render_curve(r["curve"])})
         return {"wall_id": node_id, "vertex": vertex, "z": [str(x) for x in z], "regenerations": regs}
 
+    def poly_edit(self, node_id: str, z: List[Any], op: str, arg: Any = None) -> Dict[str, Any]:
+        """Edit the type on the polyhedron page, keeping the curve where it
+        was (see ``polyhedron.carry``). Operations (more can join):
+
+        * ``add_on_edge`` (edge id): a marking inside an edge or end;
+        * ``add_at_vertex`` (vertex id): a marking on a vertex, while it keeps
+          more other edges than markings;
+        * ``remove`` (marking name): the point it leaves inside an edge is
+          merged back;
+        * ``move`` ({marking, vertex | edge}): onto a vertex (e.g. another
+          marking's) or into an edge.
+
+        Returns the new coordinates and the markings gone (by name)."""
+        pos = polyhedron.Cell(self.ws.nodes[node_id].curve).positions(self._zf(z))
+        before = {e.name for e in self.ws.nodes[node_id].curve.markings}
+        if op == "add_on_edge":
+            self.add_marking_on_edge(node_id, arg, "", "")
+        elif op == "add_at_vertex":
+            self.moduli_add_marking(node_id, arg)
+        elif op == "remove":
+            m = next((e for e in self.ws.nodes[node_id].curve.markings if e.name == arg), None)
+            if m is None:
+                raise ValueError(f"no marking named {arg!r}")
+            self.moduli_remove_marking(node_id, m.id)
+        elif op == "move":
+            self.moduli_move_marking(node_id, arg["marking"], arg.get("vertex"), arg.get("edge"))
+        else:
+            raise ValueError(f"unknown edit {op!r}")
+        curve = self.ws.nodes[node_id].curve
+        return {"z": self._zs(polyhedron.carry(curve, pos)),
+                "gone": sorted(before - {e.name for e in curve.markings})}
+
     def poly_export(self, node_id: str, points: Dict[str, Any], lines: Dict[str, Any],
                     z: List[Any]) -> Dict[str, Any]:
         """The current curve as data: its type, the constraints, and where it

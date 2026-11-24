@@ -166,3 +166,31 @@ def test_the_chart_box_stays_put_near_a_wall_at_length_zero():
         near = cell.at_chart(zf, [w[0], w[1] * frac])          # the second length nearly 0
         b2 = s.poly_view(nid, pts, lines, [str(x) for x in near], box)["chart"]["box"]
         assert b2 == box, (frac, b2)
+
+
+def test_editing_markings_keeps_the_curve_where_it_was():
+    s, nid, z, vals = _conic()
+    curve = lambda: s.ws.nodes[nid].curve
+    where = lambda z: polyhedron.Cell(curve()).values([Fraction(x) for x in z])["points"]
+    before = where(z)
+    e1 = next(e for e in curve().bounded if e.name == "e1")
+    r = s.poly_edit(nid, z, "add_on_edge", e1.id)
+    after = where(r["z"])
+    assert {k: after[k] for k in before} == before and r["gone"] == []
+    new = (set(after) - set(before)).pop()
+    lengths = polyhedron.Cell(curve()).lengths([Fraction(x) for x in r["z"]])
+    assert all(l > 0 for l in lengths.values())                   # a curve of the new type
+    r2 = s.poly_edit(nid, r["z"], "remove", new)
+    assert r2["gone"] == [new] and where(r2["z"]) == before
+    assert r2["z"] == z                                            # back where it started
+    # a marking moved onto a vertex lands on that vertex's point
+    c = curve()
+    v = next(v for v in c.vertices if c.valence(v) == 3
+             and not any(e.kind.value == "marking" for e in c.incident(v)))
+    pos = polyhedron.Cell(c).positions([Fraction(x) for x in z])[v]
+    r3 = s.poly_edit(nid, z, "move", {"marking": "x1", "vertex": v})
+    assert where(r3["z"])["x1"] == pos
+    r4 = s.poly_edit(nid, r3["z"], "move", {"marking": "x2", "vertex": v})   # a second fits (3 other edges)
+    assert where(r4["z"])["x2"] == pos
+    with pytest.raises(ValueError, match="can carry no more"):
+        s.poly_edit(nid, r4["z"], "move", {"marking": "x3", "vertex": v})    # a third does not

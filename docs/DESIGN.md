@@ -469,6 +469,18 @@ without shortening one already at 0 -- if so the point steps a little way in.
 Types reached are kept in the page's library, an existing one reused only
 when its curve is identical (ids included), since `z` is indexed by ids.
 
+**Editing the type.** Step 1's Type tab holds editing tools (markings for
+now: add on an edge / at a vertex, remove, move -- `poly_edit(node, z, op,
+arg)`, one entry point for more operations later). The edit goes through the
+workspace (`add_marking_on_edge`, `moduli_add_marking`,
+`moduli_remove_marking`, `moduli_move_marking`, with the rule that a vertex
+keeps more other edges than markings), then `polyhedron.carry` places the new
+curve from the old one's vertex positions: kept vertices stay, a new point
+goes half way along the edge it cut (half a typical length along an end), and
+the lengths are read off the positions -- so the curve does not jump; the fit
+then restores the constraints. A dragged point within 12 px of another fixed
+point snaps onto it (its exact coordinates), giving markings with one point.
+
 **Page.** Step 1 draws the curve in the plane with a fixed transform while
 a handle is dragged (`drawCurve(..., {transform})`, inverted through
 `T.params`); a tap on a handle frees it. Step 2: the curve (direction edges

@@ -873,8 +873,21 @@ Everything is computed exactly.</p>
 
 <h3 id="poly-constraints">19.1 Constraints</h3>
 <ul>
+  <li><span class="btn">Type</span> edits the type itself, one tool at a time (more, as in the main app, can join
+      later):
+    <ul>
+      <li><span class="btn">Add / remove markings</span>: click an edge or end to put a marking inside it, a ringed
+          vertex to put one on it, a marking to take it off (the point it leaves inside an edge is merged back);</li>
+      <li><span class="btn">Move a marking</span>: click a marking (violet dashed ring), then another marking or a
+          vertex to put it on that vertex — two markings on one vertex — or an edge or end to put it inside it.</li>
+    </ul>
+    A vertex takes markings only while it keeps more other edges than markings. The curve stays where it was: a
+    new marking's point goes half way along the edge it cuts. A marking taken off takes its fixed point with it;
+    a fixed marking moved is fitted back to its point.</li>
   <li>The type is drawn in the plane. <span class="btn">Points</span>: click a marking to fix its image (an orange
-      square, where it is now); drag the square to move the point; tap it (or the marking) to free it.
+      square, where it is now); drag the square to move the point; tap it (or the marking) to free it. A point
+      dragged near another fixed point <strong>snaps</strong> onto it: the two markings then have exactly one
+      point (a green ring), which the curve must pass through twice (on edges that cross, or on one vertex).
       <span class="btn">Lines</span>: click an end to fix the line it lies on (dashed violet, through it now);
       drag the violet diamond to move the line sideways; tap the diamond (or the end) to free it.</li>
   <li>While you drag, the curve follows: it is the curve of the type through the constraints nearest the last

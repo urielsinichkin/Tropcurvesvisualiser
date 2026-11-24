@@ -218,17 +218,24 @@ class Cell:
         return x[t], z_of(x)
 
     def fit(self, z_prev: Sequence[F]) -> Tuple[Optional[F], Optional[List[F]]]:
-        """A curve satisfying the constraints near z_prev (L1), with every
-        length at least half the largest margin (so of the precise type when
-        there is one): (margin, z), or (None, None) when there is none."""
+        """A curve satisfying the constraints near z_prev (L1): z_prev itself
+        when it already is one of the precise type; else one with every length
+        at least half the smaller of the largest margin and the shortest
+        length z_prev has (so of the precise type when there is one).
+        (margin, z), or (None, None) when there is none."""
         t, zi = self.interior()
         if t is None:
             return None, None
         if t == 0:
             return t, zi
-        mu = t / 2
         n, m = self.n, len(self.bounded)
         zp = [F(x) for x in z_prev]
+        lengths = [zp[2 + i] for i in range(m)]
+        if self.satisfies(zp) and all(l > 0 for l in lengths):
+            return t, zp                        # already a curve of the type through them: stay
+        # no length forced up beyond what the curve has (an edit's short new
+        # edge must not stretch the curve), and none below half the margin
+        mu = min([t / 2] + [l / 2 for l in lengths if l > 0])
         # z = zp + d+ - d-; lengths: (zp + d+ - d-)_e - s_e = mu
         nv = 2 * n + m
         A, b = [], []
@@ -382,6 +389,48 @@ def coords_from(cell: Cell, pos: Dict[str, Tuple[F, F]], lengths: Dict[str, F],
     an edge it lacks has length 0)."""
     r = pos.get(cell.root) or pos[merged]
     return [r[0], r[1]] + [lengths.get(e.id, F(0)) for e in cell.bounded]
+
+
+def carry(curve: Curve, pos: Dict[str, Tuple[F, F]]) -> List[F]:
+    """Coordinates for ``curve`` (an edited type) from the vertex positions of
+    the curve it was edited from: a vertex it kept stays where it was; a new
+    one (a marking's point cutting an edge) goes half way along the edge it
+    cut, or half a typical length along an end; every length is then read off
+    the positions. So the edited curve looks like the one before."""
+    pos = dict(pos)
+    cell = Cell(curve)
+    known_lengths = []
+    for e in cell.bounded:
+        if e.tail in pos and e.head in pos:
+            d = (pos[e.head][0] - pos[e.tail][0], pos[e.head][1] - pos[e.tail][1])
+            l = d[0] / e.vec.x if e.vec.x else d[1] / e.vec.y
+            if l > 0:
+                known_lengths.append(l)
+    step = (sum(known_lengths) / len(known_lengths) if known_lengths else F(1)) / 2
+    missing = [v for v in curve.vertices if v not in pos]
+    while missing:
+        placed = False
+        for v in list(missing):
+            nb = [(e, e.other(v)) for e in curve.incident(v)
+                  if e.kind is EdgeKind.BOUNDED and e.other(v) in pos]
+            if len(nb) >= 2:
+                (_, a), (_, b) = nb[:2]
+                pos[v] = ((pos[a][0] + pos[b][0]) / 2, (pos[a][1] + pos[b][1]) / 2)
+            elif len(nb) == 1:
+                e, u = nb[0]
+                d = e.outgoing(u)
+                pos[v] = (pos[u][0] + step * d.x, pos[u][1] + step * d.y)
+            else:
+                continue
+            missing.remove(v)
+            placed = True
+        if not placed:
+            raise ValueError("cannot place the edited curve's new vertices")
+    out = [pos[cell.root][0], pos[cell.root][1]]
+    for e in cell.bounded:
+        d = (pos[e.head][0] - pos[e.tail][0], pos[e.head][1] - pos[e.tail][1])
+        out.append(d[0] / e.vec.x if e.vec.x else d[1] / e.vec.y)
+    return out
 
 
 def contract(cell: Cell, z: Sequence[F], edge_id: str):

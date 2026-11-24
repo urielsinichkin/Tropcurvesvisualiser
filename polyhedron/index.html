@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Polyhedron of curves — Tropical Curves</title>
 <!-- the main app's stylesheet: keep ?v= equal to web/index.html's -->
-<link rel="stylesheet" href="../web/styles.css?v=61" />
+<link rel="stylesheet" href="../web/styles.css?v=62" />
 </head>
 <body class="moduli-page poly-page">
 <header id="topbar">
@@ -39,9 +39,15 @@
     </div>
     <div id="pc-type" hidden>
       <div class="mw-tabs" role="tablist">
+        <button data-mode="type" class="small">Type</button>
         <button data-mode="points" class="small">Points</button>
         <button data-mode="lines" class="small">Lines</button>
         <button class="small pc-paint-btn" title="Color edges, ends and markings by clicking them">🖌 Paint</button>
+      </div>
+      <!-- editing the type: one tool at a time (more can join: contract, resolve, slopes...) -->
+      <div id="pc-tools" class="mw-tabs pc-tools" hidden>
+        <button data-tool="markings" class="small">Add / remove markings</button>
+        <button data-tool="move" class="small">Move a marking</button>
       </div>
       <p id="pc-hint" class="muted mw-small"></p>
       <div class="pc-paint-slot"></div>
