@@ -14,7 +14,7 @@ const LIBRARY_MODE = !!window.TROP_LIBRARY_MODE;
 // Bump on each deploy. Shown in the top bar, so the loaded build is verifiable
 // at a glance. (index.html revalidates this file on every load, so no ?v=
 // bump is needed for it -- only styles.css still uses a manual one.)
-const APP_VERSION = "81";
+const APP_VERSION = "82";
 // Must match the styles.css?v= in index.html (a test checks).
 const STYLES_VERSION = "62";
 
@@ -56,6 +56,16 @@ function ensureFreshPage() {
       b.title = "Open the moduli map explorer in a new tab";
       b.textContent = "Moduli map…";
       mult.after(b);
+    }
+  }
+  if (!document.getElementById("btn-pdf")) {
+    const save = document.getElementById("btn-save");
+    if (save) {
+      const b = document.createElement("button");
+      b.id = "btn-pdf";
+      b.title = "Chosen types, drawn, in a PDF";
+      b.textContent = "PDF…";
+      save.after(b);
     }
   }
   if (!document.getElementById("btn-help")) {
@@ -507,6 +517,7 @@ function wireGlobalButtons() {
   bind("paint-change", "onclick", () => openPaintDialog());
   bind("paint-cancel", "onclick", stopPainting);
   bind("btn-save", "onclick", openExportDialog);
+  bind("btn-pdf", "onclick", openPdfDialog);
   bind("btn-load", "onclick", () => document.getElementById("file-input").click());
   bind("btn-drive", "onclick", openDriveDialog);
   bind("btn-github", "onclick", openGitHubDialog);
@@ -639,10 +650,36 @@ function openExportDialog() {
     openModal(); return;
   }
 
-  // nothing ticked to begin with; a row with derived types can tick (or
-  // untick) itself together with all of them in one go
   const card = document.querySelector("#modal .modal-card");
   if (card) card.classList.add("wide");
+  const byId = {}; nodes.forEach(n => byId[n.id] = n);
+  const go = document.createElement("button");
+  go.className = "primary";
+  const list = typeChecklist(nodes, n => {
+    go.textContent = n === 0 ? "Export" : n === nodes.length ? `Export all ${n}` : `Export ${n} of ${nodes.length}`;
+    go.disabled = n === 0;
+  });
+  body.appendChild(row([list.foldAll]));
+  body.appendChild(list.el);
+  const picked = list.picked;
+  go.onclick = () => {
+    const ids = picked();
+    let text;
+    try { text = ids.length === nodes.length ? api("save") : api("export_subset", ids); }
+    catch (e) { showModalError(e.message); return; }
+    downloadJSON(text, exportFilename(ids, nodes, byId));
+    closeModal();
+  };
+  body.appendChild(row([go, list.all, list.none]));
+  body.appendChild(errBox());
+  openModal();
+}
+
+// The types as a foldable tree of checkboxes (Export, Export as PDF): nothing
+// ticked to begin with; a row with derived types can tick (or untick) itself
+// together with all of them in one go. onCount(n) hears every change.
+// Returns { el, foldAll, all, none, picked() }.
+function typeChecklist(nodes, onCount) {
   const byId = {}; nodes.forEach(n => byId[n.id] = n);
   const list = document.createElement("div");
   list.className = "export-list";
@@ -682,38 +719,393 @@ function openExportDialog() {
     boxes.push(cb);
     return { line: line, box: cb };
   });
-  body.appendChild(row([fold.foldAll]));
-  body.appendChild(list);
-
-  const go = document.createElement("button");
-  go.className = "primary";
-  const all = document.createElement("button"); all.className = "small"; all.textContent = "Select all";
-  const none = document.createElement("button"); none.className = "small"; none.textContent = "Select none";
   const picked = () => boxes.filter(b => b.checked).map(b => b.value);
   const sync = () => {
-    const n = picked().length;
-    go.textContent = n === 0 ? "Export" : n === nodes.length ? `Export all ${n}` : `Export ${n} of ${nodes.length}`;
-    go.disabled = n === 0;
     subtreeBtns.forEach(({ b, ids, count }) => {
       const allOn = ids.every(id => boxOf(id).checked);
       b.textContent = (allOn ? "Unselect" : "Select") + ` with ${count} derived`;
       b.title = (allOn ? "Untick" : "Tick") + " this type and every type derived from it";
     });
     fold.refold();                 // folded rows count their ticked types
+    onCount(picked().length);
   };
   boxes.forEach(b => { b.onchange = sync; });
+  const all = document.createElement("button"); all.className = "small"; all.textContent = "Select all";
+  const none = document.createElement("button"); none.className = "small"; none.textContent = "Select none";
   all.onclick = () => { boxes.forEach(b => { b.checked = true; }); sync(); };
   none.onclick = () => { boxes.forEach(b => { b.checked = false; }); sync(); };
-  go.onclick = () => {
-    const ids = picked();
-    let text;
-    try { text = ids.length === nodes.length ? api("save") : api("export_subset", ids); }
-    catch (e) { showModalError(e.message); return; }
-    downloadJSON(text, exportFilename(ids, nodes, byId));
-    closeModal();
-  };
   sync();
-  body.appendChild(row([go, all, none]));
+  return { el: list, foldAll: fold.foldAll, all, none, picked };
+}
+
+// ---------------------------------------------------------------------------
+// Export as PDF
+//
+// The chosen types, each drawn as on screen (the curve, and its subdivision),
+// with its name, a line of counts, its description and its ends and markings,
+// one, two or four to a page. The PDF is written here, as vectors: each
+// picture is drawn off screen with the app's own drawing code, and every
+// line, polygon, circle and label of it becomes the same PDF drawing
+// operation -- so the PDF matches the screen and stays sharp at any zoom. Text
+// is Helvetica (a standard PDF font, nothing embedded), in Windows-1252, other
+// characters spelled out or replaced.
+// ---------------------------------------------------------------------------
+const PDF_PAPER = { a4: [595.28, 841.89], letter: [612, 792] };
+
+// Helvetica and Helvetica-Bold advance widths (1/1000 em) for codes 32..126
+const PDF_W = {
+  F1: [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584],
+  F2: [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584],
+};
+const PDF_SPELL = { "Δ": "Delta", "→": "->", "←": "<-", "≥": ">=", "≤": "<=", "−": "-", "₀": "0", "₁": "1", "₂": "2",
+  "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9", "²": "2", "ℝ": "R", "≠": "!=", "∞": "inf", "⋯": "..." };
+const PDF_1252 = { "€": 128, "‚": 130, "„": 132, "…": 133, "‘": 145, "’": 146, "“": 147, "”": 148, "•": 149, "–": 150, "—": 151, "™": 153 };
+
+// text as Windows-1252 bytes (a JS string of char codes 0..255)
+function pdfBytes(text) {
+  let out = "";
+  for (const ch of String(text)) {
+    if (PDF_SPELL[ch]) { out += PDF_SPELL[ch]; continue; }
+    const c = ch.codePointAt(0);
+    if (PDF_1252[ch]) out += String.fromCharCode(PDF_1252[ch]);
+    else if ((c >= 32 && c <= 126) || (c >= 160 && c <= 255)) out += ch;
+    else if (c === 9 || c === 10) out += " ";
+    else out += "?";
+  }
+  return out;
+}
+function pdfTextWidth(bytes, font, size) {
+  const w = PDF_W[font] || PDF_W.F1;
+  let t = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const c = bytes.charCodeAt(i);
+    t += c >= 32 && c <= 126 ? w[c - 32] : 556;
+  }
+  return t * size / 1000;
+}
+const pdfNum = x => (Math.round(x * 100) / 100).toString();
+const pdfStr = bytes => "(" + bytes.replace(/[\\()]/g, m => "\\" + m)
+  .replace(/[\x80-\xff]/g, m => "\\" + m.charCodeAt(0).toString(8).padStart(3, "0")) + ")";
+
+// A page being written: drawing operations in PDF units (origin bottom left).
+class PdfPage {
+  constructor(w, h, doc) { this.w = w; this.h = h; this.doc = doc; this.ops = []; }
+  // three components (an alpha that comes along is the caller's: see alpha())
+  color(rgb, stroke) { this.ops.push(rgb.slice(0, 3).map(c => pdfNum(c / 255)).join(" ") + (stroke ? " RG" : " rg")); }
+  alpha(a) { this.ops.push(`/${this.doc.gs(a)} gs`); }
+  text(x, y, text, o = {}) {
+    const font = o.bold ? "F2" : "F1", size = o.size || 10;
+    const b = pdfBytes(text);
+    let tx = x;
+    if (o.anchor === "middle") tx -= pdfTextWidth(b, font, size) / 2;
+    else if (o.anchor === "end") tx -= pdfTextWidth(b, font, size);
+    this.ops.push("q");
+    if (o.alpha != null && o.alpha < 1) this.alpha(o.alpha);
+    this.color(o.rgb || [0, 0, 0], false);
+    this.ops.push(`BT /${font} ${pdfNum(size)} Tf ${pdfNum(tx)} ${pdfNum(y)} Td ${pdfStr(b)} Tj ET Q`);
+  }
+  // wrapped lines of at most `width`, at most `max` lines (the last cut with "...")
+  wrap(text, width, o = {}) {
+    const font = o.bold ? "F2" : "F1", size = o.size || 10, max = o.max || 99;
+    const lines = [];
+    String(text).split(/\n/).forEach(par => {
+      let cur = "";
+      par.split(/\s+/).filter(Boolean).forEach(word => {
+        const next = cur ? cur + " " + word : word;
+        if (!cur || pdfTextWidth(pdfBytes(next), font, size) <= width) cur = next;
+        else { lines.push(cur); cur = word; }
+      });
+      lines.push(cur);
+    });
+    if (lines.length > max) {
+      const keep = lines.slice(0, max);
+      let last = keep[max - 1] + " ...";
+      while (pdfTextWidth(pdfBytes(last), font, size) > width && last.length > 4) last = last.slice(0, -5) + " ...";
+      keep[max - 1] = last;
+      return keep;
+    }
+    return lines;
+  }
+}
+
+class PdfDoc {
+  constructor(paper) { this.size = PDF_PAPER[paper] || PDF_PAPER.a4; this.pages = []; this.alphas = new Map(); }
+  page() { const p = new PdfPage(this.size[0], this.size[1], this); this.pages.push(p); return p; }
+  gs(a) {
+    const k = (Math.round(a * 1000) / 1000).toString();
+    if (!this.alphas.has(k)) this.alphas.set(k, "GS" + this.alphas.size);
+    return this.alphas.get(k);
+  }
+  // the file, as a Blob
+  blob(title) {
+    const objs = [];                       // object bodies, numbered from 1
+    const add = body => { objs.push(body); return objs.length; };
+    const catalog = add(null), pages = add(null);
+    const f1 = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    const f2 = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    const gsDict = [...this.alphas].map(([a, n]) => `/${n} << /ca ${a} /CA ${a} >>`).join(" ");
+    const kids = this.pages.map(p => {
+      const content = p.ops.join("\n");
+      const c = add(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+      return add(`<< /Type /Page /Parent ${pages} 0 R /MediaBox [0 0 ${pdfNum(p.w)} ${pdfNum(p.h)}] ` +
+                 `/Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> /ExtGState << ${gsDict} >> >> /Contents ${c} 0 R >>`);
+    });
+    objs[catalog - 1] = `<< /Type /Catalog /Pages ${pages} 0 R >>`;
+    objs[pages - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + " 0 R").join(" ")}] /Count ${kids.length} >>`;
+    const info = add(`<< /Title ${pdfStr(pdfBytes(title || "Tropical curves"))} /Producer (Tropical Curves) >>`);
+    let out = "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n";
+    const offsets = [];
+    objs.forEach((body, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${body}\nendobj\n`; });
+    const xref = out.length;
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` +
+      offsets.map(o => String(o).padStart(10, "0") + " 00000 n \n").join("");
+    out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalog} 0 R /Info ${info} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    const bytes = new Uint8Array(out.length);
+    for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 255;
+    return new Blob([bytes], { type: "application/pdf" });
+  }
+}
+
+// a computed CSS color as [r, g, b, alpha], or null for none / transparent
+function pdfColor(css) {
+  if (!css || css === "none" || css === "transparent") return null;
+  let m = /^rgba?\(([^)]+)\)/.exec(css);
+  if (m) {
+    const p = m[1].split(/[\s,\/]+/).filter(Boolean).map(parseFloat);
+    const a = p.length > 3 ? p[3] : 1;
+    return a > 0 ? [p[0], p[1], p[2], a] : null;
+  }
+  m = /^color\(srgb\s+([^)]+)\)/.exec(css);
+  if (m) {
+    const p = m[1].split(/[\s\/]+/).filter(Boolean).map(parseFloat);
+    const a = p.length > 3 ? p[3] : 1;
+    return a > 0 ? [p[0] * 255, p[1] * 255, p[2] * 255, a] : null;
+  }
+  return null;
+}
+
+// Draw an on-screen-styled SVG into the box (PDF units, x, y the bottom left)
+// of a page: its lines, polygons, polylines, circles and labels -- centred
+// across, at the top of the box.
+function pdfDrawSvg(page, svg, box) {
+  // what is drawn, with a little room (not the picture's empty margins)
+  let vb = svg.viewBox.baseVal;
+  try {
+    const bb = svg.getBBox(), pad = 8;
+    if (bb.width > 1 && bb.height > 1) {
+      const x0 = Math.max(vb.x, bb.x - pad), y0 = Math.max(vb.y, bb.y - pad);
+      const x1 = Math.min(vb.x + vb.width, bb.x + bb.width + pad), y1 = Math.min(vb.y + vb.height, bb.y + bb.height + pad);
+      vb = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+    }
+  } catch (e) { /* not laid out: the whole picture */ }
+  const s = Math.min(box.w / vb.width, box.h / vb.height);
+  const ox = box.x + (box.w - vb.width * s) / 2, top = box.y + box.h;
+  const X = x => ox + (x - vb.x) * s, Y = y => top - (y - vb.y) * s;
+  const ops = page.ops;
+  ops.push(`q ${pdfNum(box.x)} ${pdfNum(box.y)} ${pdfNum(box.w)} ${pdfNum(box.h)} re W n`);
+  svg.querySelectorAll("line, polyline, polygon, circle, text").forEach(el => {
+    const cls = el.getAttribute("class") || "";
+    if (/pick-hit|label-hit/.test(cls)) return;
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden") return;
+    const op = parseFloat(cs.opacity || "1");
+    if (el.tagName === "text") {
+      const fill = pdfColor(cs.fill);
+      if (!fill || !el.textContent.trim()) return;
+      page.text(X(el.x.baseVal.length ? el.x.baseVal[0].value : 0), Y(el.y.baseVal.length ? el.y.baseVal[0].value : 0),
+        el.textContent, { size: parseFloat(cs.fontSize) * s, rgb: fill, alpha: fill[3] * op,
+                          anchor: cs.textAnchor, bold: parseInt(cs.fontWeight, 10) >= 600 });
+      return;
+    }
+    const fill = el.tagName === "line" || el.tagName === "polyline" ? null : pdfColor(cs.fill);
+    const stroke = pdfColor(cs.stroke);
+    const sw = parseFloat(cs.strokeWidth) * s;
+    if (!fill && !(stroke && sw > 0)) return;
+    let path;
+    if (el.tagName === "line") {
+      path = `${pdfNum(X(el.x1.baseVal.value))} ${pdfNum(Y(el.y1.baseVal.value))} m ${pdfNum(X(el.x2.baseVal.value))} ${pdfNum(Y(el.y2.baseVal.value))} l`;
+    } else if (el.tagName === "circle") {
+      const cx = X(el.cx.baseVal.value), cy = Y(el.cy.baseVal.value), r = el.r.baseVal.value * s, k = 0.5523 * r;
+      path = `${pdfNum(cx + r)} ${pdfNum(cy)} m ` +
+        `${pdfNum(cx + r)} ${pdfNum(cy + k)} ${pdfNum(cx + k)} ${pdfNum(cy + r)} ${pdfNum(cx)} ${pdfNum(cy + r)} c ` +
+        `${pdfNum(cx - k)} ${pdfNum(cy + r)} ${pdfNum(cx - r)} ${pdfNum(cy + k)} ${pdfNum(cx - r)} ${pdfNum(cy)} c ` +
+        `${pdfNum(cx - r)} ${pdfNum(cy - k)} ${pdfNum(cx - k)} ${pdfNum(cy - r)} ${pdfNum(cx)} ${pdfNum(cy - r)} c ` +
+        `${pdfNum(cx + k)} ${pdfNum(cy - r)} ${pdfNum(cx + r)} ${pdfNum(cy - k)} ${pdfNum(cx + r)} ${pdfNum(cy)} c h`;
+    } else {
+      const pts = [...el.points];
+      if (!pts.length) return;
+      path = pts.map((p, i) => `${pdfNum(X(p.x))} ${pdfNum(Y(p.y))} ${i ? "l" : "m"}`).join(" ") + (el.tagName === "polygon" ? " h" : "");
+    }
+    const parts = ["q"];
+    const fa = fill ? fill[3] * op * parseFloat(cs.fillOpacity || "1") : 1;
+    const sa = stroke ? stroke[3] * op * parseFloat(cs.strokeOpacity || "1") : 1;
+    ops.push(parts.join(" "));
+    if (fill) {
+      if (fa < 1) page.alpha(fa);
+      page.color(fill, false);
+      ops.push(path + " f");
+    }
+    if (stroke && sw > 0) {
+      if (sa < 1) page.alpha(sa);
+      page.color(stroke, true);
+      const dash = cs.strokeDasharray && cs.strokeDasharray !== "none"
+        ? cs.strokeDasharray.split(/[\s,]+/).map(parseFloat).filter(x => x >= 0).map(x => pdfNum(x * s)).join(" ") : "";
+      ops.push(`${pdfNum(sw)} w ${cs.strokeLinecap === "round" ? 1 : cs.strokeLinecap === "square" ? 2 : 0} J ` +
+               `${cs.strokeLinejoin === "round" ? 1 : 0} j [${dash}] 0 d ${path} S`);
+    }
+    ops.push("Q");
+  });
+  ops.push("Q");
+}
+
+// the off-screen pictures the PDF is drawn from (laid out, so styles apply)
+function pdfStage() {
+  let st = document.getElementById("pdf-stage");
+  if (!st) {
+    st = document.createElement("div");
+    st.id = "pdf-stage";
+    st.setAttribute("aria-hidden", "true");
+    st.style.cssText = "position:fixed;left:-20000px;top:0;width:600px;pointer-events:none";
+    ["pdf-curve", "pdf-sub"].forEach(id => {
+      const svg = document.createElementNS(SVGNS, "svg");
+      svg.id = id;
+      svg.setAttribute("viewBox", `0 0 ${VBW} ${VBH}`);
+      svg.setAttribute("width", VBW); svg.setAttribute("height", VBH);
+      st.appendChild(svg);
+    });
+    document.body.appendChild(st);
+  }
+  // paper is white: the pictures in the colors the app uses on a white
+  // background, whatever the screen's theme (custom properties set here win
+  // for everything inside)
+  const t = deriveTheme("#ffffff");
+  [["--bg", t.bg], ["--panel", t.panel], ["--ink", t.ink], ["--muted", t.muted], ["--line", t.line],
+   ["--accent", t.accent], ["--danger", t.danger], ["--warn", t.warn]].forEach(([k, v]) => st.style.setProperty(k, v));
+  return st;
+}
+
+// The document: o = { ids, perPage (1, 2, 4), paper, subdivision, description, details }
+function buildTypesPdf(o) {
+  const stage = pdfStage();
+  const nodes = api("list_nodes"), byId = {};
+  nodes.forEach(n => { byId[n.id] = n; });
+  const doc = new PdfDoc(o.paper);
+  const [W, H] = doc.size, M = 40;
+  const ink = rgbOf(stage.style.getPropertyValue("--ink")), muted = rgbOf(stage.style.getPropertyValue("--muted"));
+  const per = o.perPage === 4 ? 4 : o.perPage === 2 ? 2 : 1;
+  const cols = per === 4 ? 2 : 1, rows = per === 1 ? 1 : 2, gap = 18;
+  const cellW = (W - 2 * M - (cols - 1) * gap) / cols, cellH = (H - 2 * M - 16 - (rows - 1) * gap) / rows;
+  const big = per === 1;
+  let page = null;
+  o.ids.forEach((id, k) => {
+    if (k % per === 0) page = doc.page();
+    const slot = k % per, cx = M + (slot % cols) * (cellW + gap);
+    const ctop = H - M - Math.floor(slot / cols) * (cellH + gap);
+    const n = byId[id], data = api("render", id);
+    let y = ctop - (big ? 16 : 13);
+    page.text(cx, y, n.name, { bold: true, size: big ? 16 : 12, rgb: ink });
+    const parent = n.parent_id && byId[n.parent_id] ? ` · derived from ${byId[n.parent_id].name}` : "";
+    y -= big ? 16 : 13;
+    page.text(cx, y, `${n.num_ends} ends · ${n.num_bounded} bounded edges · ${n.num_markings} markings${parent}`,
+              { size: big ? 9.5 : 8, rgb: muted });
+    const textLines = (str, max, size) => {
+      page.wrap(str, cellW, { size, max }).forEach(line => { y -= size * 1.3; page.text(cx, y, line, { size, rgb: ink }); });
+    };
+    if (o.description && n.description) { y -= 4; textLines(n.description, big ? 8 : per === 2 ? 3 : 2, big ? 10 : 8.5); }
+    if (o.details) {
+      const ends = data.curve.edges.filter(e => e.kind === "end").map(e => `${e.name} (${e.vec.join(", ")})`);
+      const marks = data.curve.markings.map(m => m.name);
+      y -= 4;
+      textLines(`Ends: ${ends.join(", ")}` + (marks.length ? `.  Markings: ${marks.join(", ")}.` : "."), big ? 4 : 2, big ? 9 : 7.5);
+    }
+    y -= 8;
+    // the pictures: below the text, the curve and (if asked, and there is one) the subdivision
+    drawCurve(data, { svgId: "pdf-curve" });
+    const hasSub = o.subdivision && drawSubdivision(data, "pdf-sub");
+    const bottom = ctop - cellH, room = y - bottom;
+    if (room < 40) return;
+    if (!hasSub) pdfDrawSvg(page, document.getElementById("pdf-curve"), { x: cx, y: bottom, w: cellW, h: room });
+    else if (per === 2) {                       // side by side
+      const wc = cellW * 0.6;
+      pdfDrawSvg(page, document.getElementById("pdf-curve"), { x: cx, y: bottom, w: wc - 6, h: room });
+      pdfDrawSvg(page, document.getElementById("pdf-sub"), { x: cx + wc + 6, y: bottom, w: cellW - wc - 6, h: room });
+    } else {                                    // one above the other
+      const hc = room * 0.6;
+      pdfDrawSvg(page, document.getElementById("pdf-curve"), { x: cx, y: bottom + room - hc, w: cellW, h: hc });
+      pdfDrawSvg(page, document.getElementById("pdf-sub"), { x: cx, y: bottom, w: cellW, h: room - hc - 8 });
+    }
+  });
+  const when = new Date().toLocaleDateString();
+  doc.pages.forEach((p, i) => {
+    p.text(M, M - 22, `Tropical curves · ${when}`, { size: 8, rgb: muted });
+    p.text(W - M, M - 22, `page ${i + 1} of ${doc.pages.length}`, { size: 8, rgb: muted, anchor: "end" });
+  });
+  return doc;
+}
+function rgbOf(css) {
+  const probe = document.createElement("span");
+  probe.style.color = css;
+  document.body.appendChild(probe);
+  const c = pdfColor(getComputedStyle(probe).color);
+  probe.remove();
+  return c ? c.slice(0, 3) : [0, 0, 0];
+}
+
+function openPdfDialog() {
+  const nodes = api("list_nodes");
+  const body = dialogHead("pdf", "Export as PDF",
+    "Choose the types; each is drawn as on screen — the curve and, if you like, its " +
+    "subdivision — with its name, its description and its ends and markings.");
+  if (!nodes.length) {
+    body.insertAdjacentHTML("beforeend", `<p class="muted">No types to export.</p>`);
+    openModal(); return;
+  }
+  const card = document.querySelector("#modal .modal-card");
+  if (card) card.classList.add("wide");
+  const st = loadSettings().pdf || {};
+  const go = document.createElement("button");
+  go.className = "primary";
+  const list = typeChecklist(nodes, n => {
+    go.textContent = n === 0 ? "Save PDF" : `Save PDF (${n} type${n === 1 ? "" : "s"})`;
+    go.disabled = n === 0;
+  });
+  const per = selectOf([["1", "one type a page"], ["2", "two types a page"], ["4", "four types a page"]]);
+  per.value = String(st.perPage || 2);
+  const paper = selectOf([["a4", "A4"], ["letter", "Letter"]]);
+  paper.value = st.paper || "a4";
+  const check = (label, on) => {
+    const l = document.createElement("label");
+    l.className = "check";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = on;
+    l.append(cb, document.createTextNode(" " + label));
+    return { l, cb };
+  };
+  const sub = check("the subdivision", st.subdivision !== false);
+  const desc = check("the description", st.description !== false);
+  const det = check("ends and markings", st.details !== false);
+  body.appendChild(row([list.foldAll]));
+  body.appendChild(list.el);
+  body.appendChild(row([labeled("layout", per), labeled("paper", paper)]));
+  body.appendChild(row([sub.l, desc.l, det.l]));
+  go.onclick = () => {
+    const o = { ids: list.picked(), perPage: +per.value, paper: paper.value,
+                subdivision: sub.cb.checked, description: desc.cb.checked, details: det.cb.checked };
+    const s2 = loadSettings(); s2.pdf = { perPage: o.perPage, paper: o.paper, subdivision: o.subdivision,
+                                         description: o.description, details: o.details };
+    saveSettings(s2);
+    go.disabled = true; go.textContent = "Making the PDF…";
+    setTimeout(() => {                         // let the button say so first
+      try {
+        const doc = buildTypesPdf(o);
+        const one = o.ids.length === 1 ? (nodes.find(n => n.id === o.ids[0]).name || "curve") : null;
+        const name = one ? one.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "curve" : `tropical-types-${o.ids.length}`;
+        downloadBlob(doc.blob(one || "Tropical curves"), name + ".pdf");
+        closeModal();
+      } catch (e) { showModalError(e.message); go.disabled = false; go.textContent = "Save PDF"; }
+    }, 30);
+  };
+  body.appendChild(row([go, list.all, list.none]));
   body.appendChild(errBox());
   openModal();
 }
@@ -3028,17 +3420,24 @@ function segsCross(p1, p2, q1, q2) {
   return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
 }
 
-function drawSubdivision(data) {
-  const svg = clearSvg("sub-svg");
-  const note = document.getElementById("sub-note");
+// svgId: another picture to draw into (the PDF export), without touching the
+// panel's note, legend and debug text.
+function drawSubdivision(data, svgId) {
+  const own = !svgId;
+  const svg = clearSvg(svgId || "sub-svg");
+  const note = own ? document.getElementById("sub-note") : null;
   if (!data.subdivision) {
-    note.textContent = data.subdivision_error || "no subdivision";
-    setSubDebug(null);
-    setSubLegend(null);
-    return;
+    if (own) {
+      note.textContent = data.subdivision_error || "no subdivision";
+      setSubDebug(null);
+      setSubLegend(null);
+    }
+    return false;
   }
-  note.textContent = "";
-  setSubDebug(data.subdivision.cells);
+  if (own) {
+    note.textContent = "";
+    setSubDebug(data.subdivision.cells);
+  }
   const cells = data.subdivision.cells;
   const pts = [];
   cells.forEach(cell => cell.forEach(v => pts.push(v)));
@@ -3063,7 +3462,7 @@ function drawSubdivision(data) {
     });
     svg.appendChild(poly);
   });
-  setSubLegend(kinds);
+  if (own) setSubLegend(kinds);
   // each side in the color of the curve edge it is dual to, over the cells'
   // own outline (which shows only where a side has no edge, e.g. older data)
   const colorOf = {};
@@ -3085,6 +3484,7 @@ function drawSubdivision(data) {
     const p = T(v);
     svg.appendChild(svgEl("circle", { cx: p[0], cy: p[1], r: 3, fill: "var(--ink)" }));
   }));
+  return true;
 }
 
 const SUB_FILL = {
