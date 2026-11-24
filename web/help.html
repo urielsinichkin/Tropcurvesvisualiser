@@ -472,7 +472,18 @@ the change. The bounded edges are then solved again, and all other ends stay fix
   <li><strong>Name (optional)</strong>: leave empty for an automatic name.</li>
   <li>The marking is added to this type itself, not to a new derived type. It is passed on to derived
       types, and kept when they are rebuilt.</li>
-  <li>Remove a marking with <span class="btn">✕</span> in the Markings list.</li>
+  <li>Remove a marking with <span class="btn">Remove marking…</span> or <span class="btn">✕</span> in the Markings list
+      (<a href="#remove-marking">below</a>).</li>
+</ul>
+
+<h4 id="remove-marking">Removing a marking</h4>
+<ul>
+  <li><span class="btn">Remove marking…</span> (Actions) shows the curve with its markings enlarged and ringed: click
+      the one to remove (touch: tap it, then tap it again or press <span class="btn">Remove</span>), or choose it from
+      the list. <span class="btn">✕</span> beside a marking in the Markings list does the same.</li>
+  <li>The marking goes from this type <em>and</em> from the types derived from it.</li>
+  <li>A marking inside an edge leaves a point there, which merges back into the edge — unless a derived type's
+      steps depend on that piece of the edge; then the point stays, as a plain point inside the edge.</li>
 </ul>
 
 <h3 id="contract">9.4 Contract an edge</h3>

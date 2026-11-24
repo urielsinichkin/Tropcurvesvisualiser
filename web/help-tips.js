@@ -228,6 +228,15 @@ const HELP = {
         <li><b>Choose from a list instead</b> — pick from lists of vertices and edges. The picture zooms (wheel / pinch).</li>
       </ul>`,
   },
+  removeMarking: {
+    title: "Remove a marking",
+    anchor: "remove-marking",
+    html: `<p>Take a marking off this type and the types derived from it.</p>
+      <ul>
+        <li>Pick the marking on the picture (mouse: click; touch: tap, then tap again or <b>Remove</b>), or from the list.</li>
+        <li>A point it leaves inside an edge merges back into the edge, unless a derived type's steps depend on it.</li>
+      </ul>`,
+  },
   contract: {
     title: "Contract an edge",
     anchor: "contract",

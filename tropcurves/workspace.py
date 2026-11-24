@@ -449,11 +449,37 @@ class Workspace:
         self._propagate(node_id)
 
     def remove_marking(self, node_id: str, marking_id: str) -> None:
+        """Take a marking off a type and its derived types.
+
+        The point it leaves inside an edge is merged back into the edge
+        (``smooth_vertex``) -- unless that would break a derived type (one whose
+        recorded steps name the piece that goes): then the point stays, a plain
+        vertex inside the edge. The derived types lose the marking too: they
+        keep markings of their own across a rebuild, so it is taken off them
+        first (an inherited marking has the same id there)."""
         node = self._get(node_id)
         e = node.curve.edges.get(marking_id)
         if e is None or e.kind is not EdgeKind.MARKING:
             raise ValueError(f"{marking_id!r} is not a marking")
+        at = e.tail
+        desc = self.descendants(node_id)
+        for d in desc:
+            c = self.nodes[d].curve
+            m = c.edges.get(marking_id)
+            if m is not None and m.kind is EdgeKind.MARKING:
+                del c.edges[marking_id]
         del node.curve.edges[marking_id]
+        saved = {d: (copy.deepcopy(self.nodes[d].curve), self.nodes[d].status) for d in desc}
+        plain = node.curve.copy()
+        smoothed = node.curve.copy()
+        if smooth_vertex(smoothed, at) is not None:
+            node.curve = smoothed
+            self._propagate(node_id)
+            if all(self.nodes[d].status == STATUS_OK or saved[d][1] != STATUS_OK for d in desc):
+                return
+            for d, (c, st) in saved.items():           # it broke a derived type: keep the point
+                self.nodes[d].curve, self.nodes[d].status = c, st
+            node.curve = plain
         self._propagate(node_id)
 
     def rename_edge(self, node_id: str, edge_id: str, new_name: str) -> None:

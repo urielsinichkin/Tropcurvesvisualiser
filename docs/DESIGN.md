@@ -224,6 +224,11 @@ built, so the refined multiplicity is only computed while its part is open.
   from. Beyond that the count grows fast -- 10 splits at `d = 5`, 25 at `d = 6`
   -- so the UI has you tick one side instead, showing the forced edge as you go;
   the pieces may need resolving in turn.
+- **Remove a marking** (`Workspace.remove_marking`; Remove marking… picks it with
+  `mountPicker`, which now also takes markings, or ✕ in the list): from the type
+  and its derived types (taken off them first, since a rebuild keeps a derived
+  type's own markings); its point inside an edge merged back (`smooth_vertex`)
+  unless that breaks a derived type, which then keeps the point.
 - **Edit slopes**: the two-ends mechanism (2.2). Both ends are picked on the
   picture (`pickFrame` + `mountPicker` with `clickCommits: false` and a
   `decorate` hook that draws the two roles: the end violet, the dependent end
