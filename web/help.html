@@ -206,6 +206,7 @@ panel (right). A top bar runs across.</p>
   <tr><td><span class="btn">Multiplicity</span></td><td>Refined multiplicities of all types, and a search for balanced splits (<a href="#multiplicity">§11</a>).</td></tr>
   <tr><td><span class="btn">Moduli map…</span></td><td>Opens the moduli map in a new tab: draw a type and walk its curve across walls (<a href="#moduli">§18</a>).</td></tr>
   <tr><td><span class="btn">Export…</span></td><td>Save the whole library, or a chosen part of it, as a JSON file (<a href="#export">§13.2</a>).</td></tr>
+  <tr><td><span class="btn">PDF…</span></td><td>Chosen types, drawn, in a PDF (<a href="#pdf">below §13.2</a>).</td></tr>
   <tr><td><span class="btn">Import</span></td><td>Load a JSON file, adding its types to the library or replacing the library (<a href="#import">§13.3</a>).</td></tr>
   <tr><td><span class="btn">☁ Drive…</span></td><td>Save the library to, and open it from, your Google Drive (<a href="#drive">§13.4</a>).</td></tr>
   <tr><td><span class="btn">⑂ GitHub…</span></td><td>Open a file from a GitHub repository and commit the library back to it, with branches, history and pull requests (<a href="#github">§13.5</a>).</td></tr>
@@ -636,6 +637,20 @@ Edit-panel layout) are also kept per browser, but are not part of the library.</
       the type's name for one type, <code>tropical-subset-N.json</code> otherwise.</li>
   <li>A subset is exported consistently. A type whose parent is left out is re-attached to its nearest
       included ancestor, carrying the steps in between, or becomes a root if there is none.</li>
+</ul>
+
+<h4 id="pdf">Export as PDF — <span class="btn">PDF…</span></h4>
+<ul>
+  <li>Tick the types as in Export (nothing ticked at first; <strong>Select with N derived</strong>, folding).</li>
+  <li>Each type is drawn as on screen — the curve and, if ticked, its <strong>subdivision</strong> — under its name and
+      a line of counts (ends, bounded edges, markings, and the type it is derived from). Ticked too, if you like:
+      its <strong>description</strong> and its <strong>ends and markings</strong> (each end with its direction).</li>
+  <li><strong>Layout</strong>: one, two or four types a page; <strong>paper</strong>: A4 or Letter. Pages are numbered.
+      The choices are remembered.</li>
+  <li><span class="btn">Save PDF</span> downloads it (the type's name for one type, <code>tropical-types-N.pdf</code>
+      otherwise). The pictures are vector drawings, sharp at any zoom, in the colors the app uses on a white
+      background whatever the screen's theme. Text is Helvetica: characters it lacks (Δ, →, subscripts) are
+      spelled out.</li>
 </ul>
 
 <h3 id="import">13.3 Import — <span class="btn">Import</span></h3>

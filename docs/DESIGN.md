@@ -508,6 +508,19 @@ hover preview (`openPaintDialog(onStart, active)`, `wirePainting(drawn,
 them over every picture it draws, since names survive contraction and
 resolution while each type reached is a separate curve in the library.
 
+### PDF export (main app)
+
+PDF… writes the chosen types to a PDF in the browser, with no library: a
+small writer (`PdfDoc` / `PdfPage`: objects, an xref table, uncompressed
+content streams, the standard Helvetica fonts in WinAnsi with their width
+tables for centring and wrapping, ExtGState for transparency). Each type is
+drawn off screen (`#pdf-stage`, given the light theme's custom properties,
+since paper is white) by the app's own `drawCurve` and `drawSubdivision(data,
+svgId)`, and `pdfDrawSvg` turns every line, polyline, polygon, circle and
+label into the same PDF operation from the elements' computed styles
+(skipping pick targets and hidden labels), clipped to its box. The type list
+is `typeChecklist`, shared with Export.
+
 ### Stale cached pages
 
 Phones restore old tabs from cache, so `index.html` can be an old copy naming

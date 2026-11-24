@@ -13,6 +13,7 @@ const HELP = {
         <li><b>Multiplicity</b> — refined multiplicities of all types; search for balanced splits.</li>
         <li><b>Moduli map…</b> — a second page: draw a type, then walk its curve through the moduli space, across walls.</li>
         <li><b>Export…</b> — save the library, or a chosen part, as a JSON file.</li>
+        <li><b>PDF…</b> — chosen types, drawn (curve and subdivision), in a PDF.</li>
         <li><b>Import</b> — load a JSON file: add to the library or replace it.</li>
         <li><b>☁ Drive…</b> — save to / open from your Google Drive.</li>
         <li><b>⑂ GitHub…</b> — open a file from a GitHub repository and commit the library back (branches, history, pull requests).</li>
@@ -116,6 +117,15 @@ const HELP = {
         <li><b>▾ / ▸</b>, <b>Collapse all</b> — fold subtrees; ticked types are saved even when folded.</li>
         <li><b>Select all</b> / <b>Select none</b>.</li>
         <li><b>Export</b> — download the file. A type whose parent is left out re-attaches to its nearest included ancestor (or becomes a root), so the file reads back as the same curves.</li>
+      </ul>`,
+  },
+  pdf: {
+    title: "Export as PDF",
+    anchor: "pdf",
+    html: `<ul>
+        <li>Tick the types (as in Export).</li>
+        <li>Each is drawn as on screen — the curve and, if ticked, the subdivision — with its name and counts, and if ticked its description and its ends and markings.</li>
+        <li><b>Layout</b> one, two or four a page; <b>paper</b> A4 or Letter. <b>Save PDF</b> downloads it (vector pictures).</li>
       </ul>`,
   },
   import: {
